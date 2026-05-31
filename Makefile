@@ -2,6 +2,7 @@ NAME		=	webserv
 SRC			=	$(addprefix src/, $(SRC_FILES))
 SRC_FILES	=	main.cpp \
 				Logger.cpp \
+				Socket.cpp \
 
 OBJ_DIR		=	obj
 OBJ			=	$(SRC:%.cpp=$(OBJ_DIR)/%.o)

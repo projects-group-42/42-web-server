@@ -1,24 +1,30 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   logger.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/05/31 19:00:43 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/05/31 18:42:10 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/05/31 18:48:19 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <iostream>
-#include "Colors.hpp"
-#include "Logger.hpp"
+#ifndef LOGGER_HPP
+#define LOGGER_HPP
 
-int main(void)
+#include <string>
+
+class Logger
 {
-	std::cout << GREEN << "Webserv foundation is ready!" << RESET << std::endl;
-	Logger::info("O servidor arrancou na porta 8080.");
-	Logger::warning("A configuração de uploads está ausente, usando padrão.");
-	Logger::error("Não foi possível carregar o ficheiro de configuração (conf/default.conf).");
-	return 0;
-}
+	private:
+		Logger();
+		Logger(const Logger &copy);
+		Logger& operator=(const Logger &other);
+		~Logger();
+	public:
+		static void info(const std::string &message);
+		static void warning(const std::string &message);
+		static void error(const std::string &message);
+};
+#endif

@@ -1,13 +1,14 @@
-NAME		= webserv
-SRC			= $(addprefix src/, $(SRC_FILES))
-SRC_FILES	= main.cpp \
+NAME		=	webserv
+SRC			=	$(addprefix src/, $(SRC_FILES))
+SRC_FILES	=	main.cpp \
+				Logger.cpp \
 
-OBJ_DIR		= obj
-OBJ			= $(SRC:%.cpp=$(OBJ_DIR)/%.o)
+OBJ_DIR		=	obj
+OBJ			=	$(SRC:%.cpp=$(OBJ_DIR)/%.o)
 
-CXX			= c++
-CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
-VFLAGS		= --leak-check=full --show-leak-kinds=all --track-origins=yes
+CXX			=	c++
+CXXFLAGS	=	-std=c++98 -Wall -Wextra -Werror -I include
+VFLAGS		=	--leak-check=full --show-leak-kinds=all --track-origins=yes
 
 all: $(NAME)
 

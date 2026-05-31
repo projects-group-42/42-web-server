@@ -1,24 +1,30 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   Logger.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/05/31 19:00:43 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/05/31 18:48:33 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/05/31 18:58:14 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <iostream>
-#include "Colors.hpp"
 #include "Logger.hpp"
+#include "Colors.hpp"
 
-int main(void)
+void Logger::info(const std::string &message)
 {
-	std::cout << GREEN << "Webserv foundation is ready!" << RESET << std::endl;
-	Logger::info("O servidor arrancou na porta 8080.");
-	Logger::warning("A configuração de uploads está ausente, usando padrão.");
-	Logger::error("Não foi possível carregar o ficheiro de configuração (conf/default.conf).");
-	return 0;
+	std::cout << BLUE << "[Info] " << message << RESET << std::endl;
+}
+
+void Logger::warning(const std::string &message)
+{
+	std::cout << YELLOW << "[Warning] " << message << RESET << std::endl;
+}
+
+void Logger::error(const std::string &message)
+{
+	std::cerr << RED << "[Error] " << message << RESET << std::endl;
 }

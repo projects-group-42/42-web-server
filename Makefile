@@ -3,6 +3,7 @@ SRC			=	$(addprefix src/, $(SRC_FILES))
 SRC_FILES	=	main.cpp \
 				Logger.cpp \
 				Socket.cpp \
+				Utils.cpp \
 
 OBJ_DIR		=	obj
 OBJ			=	$(SRC:%.cpp=$(OBJ_DIR)/%.o)

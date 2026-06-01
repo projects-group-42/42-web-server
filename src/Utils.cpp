@@ -1,24 +1,24 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   Utils.cpp                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/01 17:18:32 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/06/01 17:05:24 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/06/01 17:08:43 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <iostream>
-#include "Colors.hpp"
-#include "Logger.hpp"
+#include "Utils.hpp"
+#include <stdexcept>
+#include <fcntl.h>
 
-int main(void)
+void FdUtils::setNonBlocking(int fd)
 {
-	std::cout << GREEN << "Webserv foundation is ready!" << RESET << std::endl;
-	Logger::info("Server started on port 8080.");
-	Logger::warning("Upload configuration missing, using default.");
-	Logger::error("Failed to load configuration file (conf/default.conf).");
-	return 0;
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+		throw std::runtime_error("fcntl(F_GETFL) fail");
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+		throw std::runtime_error("fcntl(F_SETFL, O_NONBLOCK) fail");
 }

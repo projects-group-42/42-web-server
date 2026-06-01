@@ -1,24 +1,21 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   Utils.hpp                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/01 17:18:32 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/06/01 17:03:24 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/06/01 17:04:54 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <iostream>
-#include "Colors.hpp"
-#include "Logger.hpp"
+#ifndef UTILS_HPP
+#define UTILS_HPP
 
-int main(void)
+namespace FdUtils
 {
-	std::cout << GREEN << "Webserv foundation is ready!" << RESET << std::endl;
-	Logger::info("Server started on port 8080.");
-	Logger::warning("Upload configuration missing, using default.");
-	Logger::error("Failed to load configuration file (conf/default.conf).");
-	return 0;
+	void setNonBlocking(int fd);
 }
+
+#endif

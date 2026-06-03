@@ -1,6 +1,7 @@
 NAME		= webserv
 
-SRC_FILES	= main.cpp
+SRC_FILES	= main.cpp \
+			  utils/Logger.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj

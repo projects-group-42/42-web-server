@@ -1,6 +1,7 @@
 # binário
 webserv
 # build artifacts
+obj/
 *.o
 *.d
 *.dSYM/

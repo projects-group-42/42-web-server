@@ -1,0 +1,16 @@
+# binário
+webserv
+# build artifacts
+*.o
+*.d
+*.dSYM/
+# editor
+.vscode/
+.idea/
+*.swp
+# OS
+.DS_Store
+Thumbs.db
+# uploads em runtime
+uploads/*
+!uploads/.gitkeep

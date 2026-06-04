@@ -6,13 +6,12 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 19:18:36 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 17:27:55 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/04 20:08:15 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "Socket.hpp"
-#include "Utils.hpp"
-#include "Logger.hpp"
+#include "network/Socket.hpp"
+#include "webserver.hpp"
 
 #include <stdexcept>
 #include <cstring>
@@ -47,7 +46,7 @@ void Socket::create(void)
 		_fd = -1;
 		throw std::runtime_error("setsockopt(SO_REUSEADDR) fail");
 	}
-	FdUtils::setNonBlocking(_fd);
+	setNonBlocking(_fd);
 	Logger::info("Socket created with SO_REUSEADDR e O_NONBLOCK.");
 }
 

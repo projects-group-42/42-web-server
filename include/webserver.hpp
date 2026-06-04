@@ -1,21 +1,26 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Utils.hpp                                          :+:      :+:    :+:   */
+/*   00_webserver.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/06/01 17:03:24 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/01 17:04:54 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/06/04 19:29:30 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/06/04 19:34:03 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef UTILS_HPP
-#define UTILS_HPP
+#ifndef WEBSERVER_HPP
+# define WEBSERVER_HPP
 
-namespace FdUtils
-{
-	void setNonBlocking(int fd);
-}
+//# include "config/XXXX.hpp"
+//# include "02_http.hpp"
+# include "network/Socket.hpp"
+# include "server/EventLoop.hpp"
+//# include "05_cgi.hpp"
+//# include "06_handlers.hpp"
+# include "utils/Colors.hpp"
+# include "utils/Logger.hpp"
+# include "utils/Utils.hpp"
 
 #endif

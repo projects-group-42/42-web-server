@@ -1,34 +1,25 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Socket.hpp                                         :+:      :+:    :+:   */
+/*   Utils.cpp                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/31 19:15:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 17:26:56 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/06/01 17:05:24 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/06/04 20:07:34 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef SOCKET_HPP
-#define SOCKET_HPP
+#include "utils/Utils.hpp"
+#include <stdexcept>
+#include <fcntl.h>
 
-#include <string>
-
-class Socket
+//F_SETFL = Set file(FD) flags | GET -> get flags
+void setNonBlocking(int fd)
 {
-	private:
-		int	_fd;
-		Socket(const Socket &copy);
-		Socket& operator=(const Socket &other);
-
-	public:
-		Socket();
-		~Socket();
-
-		void	create(void);
-		void	bind(const std::string &host, int port);
-		void	listen(int backlog);
-		int		getFd(void) const;
-};
-#endif
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+		throw std::runtime_error("fcntl(F_GETFL) fail");
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+		throw std::runtime_error("fcntl(F_SETFL, O_NONBLOCK) fail");
+}

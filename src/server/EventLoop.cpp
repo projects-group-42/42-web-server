@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   EventLoop.cpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 19:47:32 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/06/04 20:06:38 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "webserver.hpp"
-#include "network/Socket.hpp"
+#include "server/EventLoop.hpp"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -23,22 +23,24 @@
 #include <vector>
 #include <poll.h>
 
-int main(void)
-{
-	try
-	{
-		Socket sckt;
-		sckt.create();
-		sckt.bind("0.0.0.0", 8080);
-		sckt.listen(128);
-		Logger::info("Listening on 0.0.0.0:8080 — connect with: nc localhost 8080");
-		event_loop(sckt);
 
-	}
-	catch (const std::exception &e)
+void event_loop(Socket &sckt)
+{
+	std::vector<struct pollfd> fds;
+	struct pollfd s_listening;
+	s_listening.fd = sckt.getFd();
+	s_listening.events = POLLIN;
+	s_listening.revents = 0;
+
+	fds.push_back(s_listening);
+	while (true)
 	{
-		Logger::error(e.what());
-		return 1;
+		poll(fds.data(), fds.size(), -1);
+		std::vector<struct pollfd>::iterator it;
+		for (it = fds.begin(); it != fds.end(); it++)
+		{
+			if (it->revents != 0)
+				Logger::info("Read to connect");	
+		}
 	}
-	return 0;
 }

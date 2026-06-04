@@ -1,9 +1,10 @@
 NAME		=	webserv
 SRC			=	$(addprefix src/, $(SRC_FILES))
 SRC_FILES	=	main.cpp \
-				Logger.cpp \
-				Socket.cpp \
-				Utils.cpp \
+				network/Socket.cpp \
+				server/EventLoop.cpp \
+				utils/Logger.cpp \
+				utils/Utils.cpp \
 
 OBJ_DIR		=	obj
 OBJ			=	$(SRC:%.cpp=$(OBJ_DIR)/%.o)

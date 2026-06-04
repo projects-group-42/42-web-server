@@ -6,13 +6,13 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 18:48:33 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/05/31 18:58:14 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/04 19:54:26 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <iostream>
-#include "Logger.hpp"
-#include "Colors.hpp"
+#include "utils/Logger.hpp"
+#include "utils/Colors.hpp"
 
 void Logger::info(const std::string &message)
 {

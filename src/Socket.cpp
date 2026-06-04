@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 19:18:36 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/01 17:18:49 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/04 17:27:55 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -55,6 +56,7 @@ void Socket::bind(const std::string &host, int port)
 	struct	sockaddr_in addr;
 
 	std::memset(&addr, 0, sizeof(addr));
+
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1)
@@ -84,7 +86,6 @@ void Socket::listen(int backlog)
 		_fd = -1;
 		throw std::runtime_error("listen() fail");
 	}
-
 	Logger::info("Socket in mode listen.");
 }
 

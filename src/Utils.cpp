@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/01 17:05:24 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/01 17:08:43 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/04 17:26:17 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <fcntl.h>
 
+//F_SETFL = Set file(FD) flags | GET -> get flags
 void FdUtils::setNonBlocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);

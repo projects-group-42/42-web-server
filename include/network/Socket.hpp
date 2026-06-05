@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 19:15:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 20:08:06 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 10:59:41 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,17 +17,19 @@
 #include <string>
 #include <vector>
 #include <poll.h>
+#include <netinet/in.h>
 
 class Socket
 {
 	private:
-		int	_fd;
-		Socket(const Socket &copy);
-		Socket& operator=(const Socket &other);
-		std::vector<struct pollfd> fds;
+		struct	sockaddr_in addr;
+		int		_fd;
 
+		
 	public:
 		Socket();
+		Socket(const Socket &copy);
+		Socket& operator=(const Socket &other);
 		~Socket();
 
 		void	create(void);

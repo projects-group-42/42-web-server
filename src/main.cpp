@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 19:47:32 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 11:03:36 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include "webserver.hpp"
 #include "network/Socket.hpp"
-
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/fcntl.h>
@@ -32,8 +32,8 @@ int main(void)
 		sckt.bind("0.0.0.0", 8080);
 		sckt.listen(128);
 		Logger::info("Listening on 0.0.0.0:8080 — connect with: nc localhost 8080");
-		event_loop(sckt);
-
+		EventLoop run(&sckt);
+		run.run();
 	}
 	catch (const std::exception &e)
 	{

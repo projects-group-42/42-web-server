@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 19:18:36 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 20:08:15 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 11:02:28 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,6 +34,18 @@ Socket::~Socket(void)
 		close(_fd);
 }
 
+Socket::Socket(const Socket &copy) : _fd(-1)
+{
+	*this = copy;
+}
+
+Socket &Socket::operator=(const Socket &other)
+{
+	if (this != &other)
+		addr = other.addr;
+	return (*this);
+}
+
 void Socket::create(void)
 {
 	_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -52,8 +64,6 @@ void Socket::create(void)
 
 void Socket::bind(const std::string &host, int port)
 {
-	struct	sockaddr_in addr;
-
 	std::memset(&addr, 0, sizeof(addr));
 
 	addr.sin_family = AF_INET;

@@ -6,41 +6,89 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 20:06:38 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 11:08:56 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <iostream>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include "webserver.hpp"
 #include "server/EventLoop.hpp"
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/fcntl.h>
-#include <vector>
-#include <poll.h>
+#include "utils/Logger.hpp"
+#include <netinet/in.h>
+#include <stdexcept>
 
 
-void event_loop(Socket &sckt)
+EventLoop::EventLoop(void) : _sckt(NULL)
 {
-	std::vector<struct pollfd> fds;
-	struct pollfd s_listening;
-	s_listening.fd = sckt.getFd();
+}
+
+EventLoop::EventLoop(Socket *sckt): _sckt(sckt)
+{
+}
+
+EventLoop::~EventLoop(void)
+{
+}
+
+EventLoop::EventLoop(const EventLoop &copy): _sckt(copy._sckt), _fds(copy._fds)
+{
+}
+
+EventLoop &EventLoop::operator=(const EventLoop &other)
+{
+	if (this != &other)
+	{
+		this->_sckt = other._sckt;
+		this->_fds = other._fds;
+	}
+	return (*this);
+}
+
+void EventLoop::acceptClient(void)
+{
+	struct sockaddr_in	c_addr;
+	socklen_t			c_len;
+	int				client_fd;
+	struct pollfd	poll_fd;
+
+	c_len = sizeof(c_addr);
+	client_fd = accept(_fds[0].fd, (struct sockaddr *)&c_addr, &c_len);
+	if (client_fd < 0)
+		throw std::runtime_error("accept() fail");
+
+	poll_fd.fd = client_fd;
+	poll_fd.events = POLLIN;
+	poll_fd.revents = 0;
+	_fds.push_back(poll_fd);
+	Logger::info("New client connected");
+}
+
+void EventLoop::run(void)
+{
+	struct pollfd				s_listening;
+
+	if (!_sckt)
+		throw std::runtime_error("EventLoop: no socket set");
+	s_listening.fd = _sckt->getFd();
 	s_listening.events = POLLIN;
 	s_listening.revents = 0;
+	_fds.push_back(s_listening);
 
-	fds.push_back(s_listening);
 	while (true)
 	{
-		poll(fds.data(), fds.size(), -1);
-		std::vector<struct pollfd>::iterator it;
-		for (it = fds.begin(); it != fds.end(); it++)
+		int n_poll = poll(&_fds[0], _fds.size(), -1);
+		if(n_poll < 0)
 		{
-			if (it->revents != 0)
-				Logger::info("Read to connect");	
+			throw std::runtime_error("poll() fail");
+		}
+		int new_fds = _fds.size();
+		for (int i = 0; i < new_fds; i++)
+		{
+			if (_fds[i].revents & POLLIN)
+			{
+				if (_fds[i].fd == _sckt->getFd())
+					acceptClient();
+				else
+					Logger::info("Future issue");
+			}
 		}
 	}
 }

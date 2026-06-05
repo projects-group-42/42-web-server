@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/05 11:08:43 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 13:19:26 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,6 +22,8 @@ class EventLoop
 	private:
 		Socket						*_sckt;
 		std::vector<struct pollfd>	_fds;
+		std::map<int, Connection >	_map_client;
+		
 	public:
 		EventLoop(void);
 		EventLoop(Socket *sckt);

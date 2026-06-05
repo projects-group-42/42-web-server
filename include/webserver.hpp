@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   00_webserver.hpp                                   :+:      :+:    :+:   */
+/*   webserver.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:29:30 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 19:34:03 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 13:04:41 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 //# include "config/XXXX.hpp"
 //# include "02_http.hpp"
 # include "network/Socket.hpp"
+# include "network/Connection.hpp"
 # include "server/EventLoop.hpp"
 //# include "05_cgi.hpp"
 //# include "06_handlers.hpp"

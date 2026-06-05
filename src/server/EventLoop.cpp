@@ -6,12 +6,13 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/05 11:08:56 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/05 13:40:39 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "server/EventLoop.hpp"
-#include "utils/Logger.hpp"
+//#include "utils/Logger.hpp"
+#include "webserver.hpp"
 #include <netinet/in.h>
 #include <stdexcept>
 
@@ -42,6 +43,10 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 	return (*this);
 }
 
+void EventLoop::receiveData(void)
+{
+	recv(new_client._client_fd, buffer, size, 0);
+}
 void EventLoop::acceptClient(void)
 {
 	struct sockaddr_in	c_addr;
@@ -58,6 +63,9 @@ void EventLoop::acceptClient(void)
 	poll_fd.events = POLLIN;
 	poll_fd.revents = 0;
 	_fds.push_back(poll_fd);
+
+	Connection client(client_fd);
+	_map_client[client_fd] = client;
 	Logger::info("New client connected");
 }
 
@@ -86,6 +94,8 @@ void EventLoop::run(void)
 			{
 				if (_fds[i].fd == _sckt->getFd())
 					acceptClient();
+				if (POLLIN)
+					receive_data();
 				else
 					Logger::info("Future issue");
 			}

@@ -6,7 +6,7 @@ SRC_FILES	=	main.cpp \
 				server/EventLoop.cpp \
 				utils/Logger.cpp \
 				utils/Utils.cpp \
-				utils/Colors.cpp
+
 
 
 OBJ_DIR		=	obj

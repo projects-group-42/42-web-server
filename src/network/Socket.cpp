@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 19:18:36 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/05 11:02:28 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/06 18:13:34 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,6 +46,14 @@ Socket &Socket::operator=(const Socket &other)
 	return (*this);
 }
 
+/**
+ * @brief Creates a TCP socket and configures it for server use.
+ *
+ * Calls socket(), sets SO_REUSEADDR to avoid TIME_WAIT on restart,
+ * and sets the fd to non-blocking mode with O_NONBLOCK.
+ *
+ * @throws std::runtime_error if socket(), setsockopt() or fcntl() fail.
+ */
 void Socket::create(void)
 {
 	_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -61,7 +69,16 @@ void Socket::create(void)
 	setNonBlocking(_fd);
 	Logger::info("Socket created with SO_REUSEADDR e O_NONBLOCK.");
 }
-
+/**
+ * @brief Binds the socket to a host address and port.
+ *
+ * Converts the host string to a binary address with inet_pton()
+ * and associates the socket with that (host:port) endpoint.
+ *
+ * @param host IPv4 address string (e.g. "127.0.0.1" or "0.0.0.0").
+ * @param port Port number to listen on.
+ * @throws std::runtime_error if inet_pton() or bind() fail.
+ */
 void Socket::bind(const std::string &host, int port)
 {
 	std::memset(&addr, 0, sizeof(addr));
@@ -86,7 +103,15 @@ void Socket::bind(const std::string &host, int port)
 	oss << "Socket bound in " << host << ":" << port;
 	Logger::info(oss.str());
 }
-
+/**
+ * @brief Puts the socket in passive listening mode.
+ *
+ * After this call, the socket is ready to accept incoming TCP connections.
+ * The backlog defines the maximum number of pending connections in the queue.
+ *
+ * @param backlog Maximum length of the pending connection queue.
+ * @throws std::runtime_error if listen() fails.
+ */
 void Socket::listen(int backlog)
 {
 	if (::listen(_fd, backlog) == -1)
@@ -97,7 +122,14 @@ void Socket::listen(int backlog)
 	}
 	Logger::info("Socket in mode listen.");
 }
-
+/**
+ * @brief Returns the socket file descriptor.
+ *
+ * Used by the EventLoop to register this socket in poll()
+ * and to detect incoming connections via POLLIN.
+ *
+ * @return The socket fd, or -1 if the socket has not been created yet.
+ */
 int Socket::getFd(void) const
 {
 	return _fd;

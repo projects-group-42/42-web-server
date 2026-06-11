@@ -10,30 +10,29 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <iostream>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <fcntl.h>
 #include "webserver.hpp"
-#include "network/Socket.hpp"
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/fcntl.h>
-#include <vector>
-#include <poll.h>
 
 int main(void)
 {
+	const std::string	host = "0.0.0.0";
+	const int			port = 8080;
+	const int			backlog = 128;
+
 	try
 	{
 		Socket sckt;
+
 		sckt.create();
-		sckt.bind("0.0.0.0", 8080);
-		sckt.listen(128);
+		sckt.bind(host, port);
+		sckt.listen(backlog);
+		int flags = fcntl(sckt.getFd(), F_GETFL, 0);
+		if (flags != -1 && (flags & O_NONBLOCK))
+			Logger::info("Socket is non-blocking.");
+		else
+			Logger::warning("Socket is blocking.");
 		Logger::info("Listening on 0.0.0.0:8080 — connect with: nc localhost 8080");
 		event_loop(sckt);
-
 	}
 	catch (const std::exception &e)
 	{

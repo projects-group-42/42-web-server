@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   colors.hpp                                         :+:      :+:    :+:   */
+/*   Colors.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
@@ -10,10 +10,9 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef COLOURS_HPP
-# define COLOURS_HPP
+#ifndef COLORS_HPP
+# define COLORS_HPP
 
-//	Basic colours
 # define BLACK "\033[0;30m"
 # define RED "\033[0;31m"
 # define GREEN "\033[0;32m"
@@ -24,7 +23,6 @@
 # define ORANGE "\033[38;5;208m"
 # define WHITE "\033[0;37m"
 
-//	Bright colours
 # define BRIGHT_BLACK "\033[1;30m"
 # define BRIGHT_RED "\033[1;31m"
 # define BRIGHT_GREEN "\033[1;32m"
@@ -34,7 +32,6 @@
 # define BRIGHT_CYAN "\033[1;36m"
 # define BRIGHT_WHITE "\033[1;37m"
 
-//	256 colours
 # define GREY "\033[38;5;8m"
 # define DARK_GREY "\033[38;5;235m"
 # define LIGHT_GREY "\033[38;5;250m"
@@ -45,7 +42,6 @@
 # define LIGHT_MAGENTA "\033[38;5;201m"
 # define LIGHT_CYAN "\033[38;5;14m"
 
-//	Background colours
 # define BG_BLACK "\033[48;5;0m"
 # define BG_RED "\033[48;5;1m"
 # define BG_GREEN "\033[48;5;2m"
@@ -55,7 +51,6 @@
 # define BG_CYAN "\033[48;5;6m"
 # define BG_WHITE "\033[48;5;7m"
 
-//	Reset
 # define RESET "\033[0m"
 
 #endif

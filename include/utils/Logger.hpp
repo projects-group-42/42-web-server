@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   logger.cpp                                         :+:      :+:    :+:   */
+/*   Logger.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
@@ -11,9 +11,9 @@
 /* ************************************************************************** */
 
 #ifndef LOGGER_HPP
-#define LOGGER_HPP
+# define LOGGER_HPP
 
-#include <string>
+# include <string>
 
 class Logger
 {
@@ -27,4 +27,5 @@ class Logger
 		static void warning(const std::string &message);
 		static void error(const std::string &message);
 };
+
 #endif

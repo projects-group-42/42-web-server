@@ -12,7 +12,7 @@
 
 #include "Socket.hpp"
 #include "Utils.hpp"
-#include "Logger.hpp"
+#include "utils/Logger.hpp"
 
 #include <stdexcept>
 #include <cstring>

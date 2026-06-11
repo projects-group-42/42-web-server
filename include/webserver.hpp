@@ -15,6 +15,7 @@
 
 //# include "config/XXXX.hpp"
 //# include "02_http.hpp"
+# include "network/Connection.hpp"
 # include "network/Socket.hpp"
 # include "server/EventLoop.hpp"
 //# include "05_cgi.hpp"

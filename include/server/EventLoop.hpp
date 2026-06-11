@@ -14,7 +14,9 @@
 #define EVENTLOOP_HPP
 
 #include "network/Socket.hpp"
+#include "network/Connection.hpp"
 #include <vector>
+#include <map>
 #include <poll.h>
 
 class EventLoop
@@ -22,6 +24,7 @@ class EventLoop
 	private:
 		Socket						*_sckt;
 		std::vector<struct pollfd>	_fds;
+		std::map<int, Connection>	_clients;
 
 		void	acceptClients(void);
 		bool	handleClient(int fd);

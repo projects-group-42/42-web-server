@@ -28,7 +28,7 @@ EventLoop::EventLoop(Socket *sckt) : _sckt(sckt)
 {
 }
 
-EventLoop::EventLoop(const EventLoop &copy) : _sckt(copy._sckt), _fds(copy._fds)
+EventLoop::EventLoop(const EventLoop &copy) : _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients)
 {
 }
 
@@ -42,6 +42,7 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 	{
 		_sckt = other._sckt;
 		_fds = other._fds;
+		_clients = other._clients;
 	}
 	return (*this);
 }
@@ -59,16 +60,19 @@ void EventLoop::acceptClients(void)
 		pfd.events = POLLIN;
 		pfd.revents = 0;
 		_fds.push_back(pfd);
+		_clients[client] = Connection(client);
 		Logger::info("New client connected.");
 	}
 }
 
 bool EventLoop::handleClient(int fd)
 {
-	char buffer[4096];
-	ssize_t n = recv(fd, buffer, sizeof(buffer), 0);
+	ssize_t n = _clients[fd].receive_data();
 	if (n > 0)
+	{
+		Logger::info("Data received from client.");
 		return true;
+	}
 	if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return true;
 	return false;
@@ -102,7 +106,9 @@ void EventLoop::run(void)
 				acceptClients();
 			else if (handleClient(_fds[i].fd) == false)
 			{
-				close(_fds[i].fd);
+				int fd = _fds[i].fd;
+				close(fd);
+				_clients.erase(fd);
 				_fds.erase(_fds.begin() + i);
 				i--;
 			}

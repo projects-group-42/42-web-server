@@ -2,6 +2,7 @@ NAME		= webserv
 
 SRC_FILES	= main.cpp \
 			  network/Socket.cpp \
+			  network/Connection.cpp \
 			  server/EventLoop.cpp \
 			  utils/Logger.cpp \
 			  utils/Utils.cpp

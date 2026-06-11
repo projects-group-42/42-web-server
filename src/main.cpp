@@ -32,7 +32,8 @@ int main(void)
 		else
 			Logger::warning("Socket is blocking.");
 		Logger::info("Listening on 0.0.0.0:8080 — connect with: nc localhost 8080");
-		event_loop(sckt);
+		EventLoop loop(&sckt);
+		loop.run();
 	}
 	catch (const std::exception &e)
 	{

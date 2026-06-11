@@ -10,12 +10,30 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef 	EVENTLOOP_HPP
-#define 	EVENTLOOP_HPP
+#ifndef EVENTLOOP_HPP
+#define EVENTLOOP_HPP
 
 #include "network/Socket.hpp"
-#include <string>
+#include <vector>
+#include <poll.h>
 
-void event_loop(Socket &sckt);
+class EventLoop
+{
+	private:
+		Socket						*_sckt;
+		std::vector<struct pollfd>	_fds;
 
+		void	acceptClients(void);
+		bool	handleClient(int fd);
+
+	public:
+		EventLoop(void);
+		EventLoop(Socket *sckt);
+		EventLoop(const EventLoop &copy);
+		~EventLoop(void);
+
+		EventLoop&	operator=(const EventLoop &other);
+
+		void	run(void);
+};
 #endif

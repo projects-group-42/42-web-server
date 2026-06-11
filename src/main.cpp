@@ -13,6 +13,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <unistd.h>
+#include <fcntl.h>
 #include "utils/Colors.hpp"
 #include "utils/Logger.hpp"
 #include "Socket.hpp"
@@ -31,6 +32,11 @@ int main(void)
 		server.create();
 		server.bind(host, port);
 		server.listen(backlog);
+		int flags = fcntl(server.getFd(), F_GETFL, 0);
+		if (flags != -1 && (flags & O_NONBLOCK))
+			Logger::info("Socket is non-blocking.");
+		else
+			Logger::warning("Socket is blocking.");
 		while (true)
 			pause();
 	}

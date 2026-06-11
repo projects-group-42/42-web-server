@@ -12,6 +12,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <unistd.h>
 #include "utils/Colors.hpp"
 #include "utils/Logger.hpp"
 #include "Socket.hpp"
@@ -30,6 +31,8 @@ int main(void)
 		server.create();
 		server.bind(host, port);
 		server.listen(backlog);
+		while (true)
+			pause();
 	}
 	catch (const std::exception &e)
 	{

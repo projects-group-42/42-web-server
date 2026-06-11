@@ -1,6 +1,8 @@
 NAME		= webserv
 
 SRC_FILES	= main.cpp \
+			  Socket.cpp \
+			  Utils.cpp \
 			  utils/Logger.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 

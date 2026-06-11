@@ -11,14 +11,30 @@
 /* ************************************************************************** */
 
 #include <iostream>
+#include <stdexcept>
 #include "utils/Colors.hpp"
 #include "utils/Logger.hpp"
+#include "Socket.hpp"
 
 int main(void)
 {
+	const std::string	host = "0.0.0.0";
+	const int			port = 8080;
+	const int			backlog = 128;
+
 	std::cout << GREEN << "Webserv foundation is ready!" << RESET << std::endl;
-	Logger::info("O servidor arrancou na porta 8080.");
-	Logger::warning("A configuração de uploads está ausente, usando padrão.");
-	Logger::error("Não foi possível carregar o ficheiro de configuração (conf/default.conf).");
+	try
+	{
+		Socket server;
+
+		server.create();
+		server.bind(host, port);
+		server.listen(backlog);
+	}
+	catch (const std::exception &e)
+	{
+		Logger::error(e.what());
+		return 1;
+	}
 	return 0;
 }

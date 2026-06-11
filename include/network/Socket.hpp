@@ -24,7 +24,6 @@ class Socket
 		int	_fd;
 		Socket(const Socket &copy);
 		Socket& operator=(const Socket &other);
-		std::vector<struct pollfd> fds;
 
 	public:
 		Socket();

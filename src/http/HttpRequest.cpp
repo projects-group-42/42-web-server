@@ -3,14 +3,15 @@
 /*                                                        :::      ::::::::   */
 /*   HttpRequest.cpp                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/12 02:55:06 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/12 13:13:25 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "http/HttpRequest.hpp"
+# include "utils/Utils.hpp"
 
 HttpRequest::HttpRequest(void)
 {
@@ -91,7 +92,7 @@ void	HttpRequest::setVersion(const std::string &version)
 
 void	HttpRequest::addHeader(const std::string &key, const std::string &value)
 {
-	_headers[key] = value;
+	_headers[toLower(key)] = value;
 }
 
 void	HttpRequest::setBody(const std::string &body)
@@ -101,12 +102,12 @@ void	HttpRequest::setBody(const std::string &body)
 
 bool	HttpRequest::hasHeader(const std::string &key) const
 {
-	return (_headers.find(key) != _headers.end());
+	return (_headers.find(toLower(key)) != _headers.end());
 }
 
 std::string HttpRequest::getHeader(const std::string &key) const
 {
-	std::map<std::string, std::string>::const_iterator it = _headers.find(key);
+	std::map<std::string, std::string>::const_iterator it = _headers.find(toLower(key));
 	if (it != _headers.end())
 		return (it->second);
 	return ("");

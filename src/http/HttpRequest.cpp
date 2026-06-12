@@ -1,27 +1,41 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   webserver.hpp                                      :+:      :+:    :+:   */
+/*   HttpRequest.cpp                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/06/04 19:29:30 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/11 22:43:44 by dajesus-         ###   ########.fr       */
+/*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
+/*   Updated: 2026/06/11 22:43:40 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef WEBSERVER_HPP
-# define WEBSERVER_HPP
-
 # include "http/HttpRequest.hpp"
-//# include "02_http.hpp"
-# include "network/Connection.hpp"
-# include "network/Socket.hpp"
-# include "server/EventLoop.hpp"
-//# include "05_cgi.hpp"
-//# include "06_handlers.hpp"
-# include "utils/Colors.hpp"
-# include "utils/Logger.hpp"
-# include "utils/Utils.hpp"
 
-#endif
+HttpRequest::HttpRequest(void)
+{
+}
+
+HttpRequest::HttpRequest(const HttpRequest &copy)
+{
+	*this = copy;
+}
+
+HttpRequest& HttpRequest::operator=(const HttpRequest &other)
+{
+	if (this != &other)
+	{
+		_method = other._method;
+		_uri = other._uri;
+		_query = other._query;
+		_version = other._version;
+		_headers = other._headers;
+		_body = other._body;
+	}
+	return (*this);
+}
+
+HttpRequest::~HttpRequest(void)
+{
+}
+

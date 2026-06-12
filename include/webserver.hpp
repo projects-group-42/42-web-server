@@ -1,19 +1,19 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   00_webserver.hpp                                   :+:      :+:    :+:   */
+/*   webserver.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:29:30 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 19:34:03 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/11 22:43:44 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef WEBSERVER_HPP
 # define WEBSERVER_HPP
 
-//# include "config/XXXX.hpp"
+# include "http/HttpRequest.hpp"
 //# include "02_http.hpp"
 # include "network/Connection.hpp"
 # include "network/Socket.hpp"

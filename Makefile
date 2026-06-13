@@ -6,7 +6,8 @@ SRC_FILES	= main.cpp \
 			  server/EventLoop.cpp \
 			  utils/Logger.cpp \
 			  utils/Utils.cpp \
-			  http/HttpRequest.cpp
+			  http/HttpRequest.cpp \
+			  http/MimeType.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj

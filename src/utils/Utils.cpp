@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Utils.cpp                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/01 17:05:24 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/12 13:15:59 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/12 22:30:25 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,6 @@
 # include <fcntl.h>
 # include <cctype>
 # include <iostream>
-
 
 //F_SETFL = Set file(FD) flags | GET -> get flags
 void setNonBlocking(int fd)
@@ -31,6 +30,6 @@ std::string toLower(const std::string &str)
 {
 	std::string result = str;
 	for (size_t i = 0; i < result.size(); i++)
-		result[i] = std::tolower(result[i]);
+		result[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(result[i])));
 	return result;
 }

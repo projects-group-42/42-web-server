@@ -1,53 +1,47 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   HttpRequest.hpp                                    :+:      :+:    :+:   */
+/*   HttpResponse.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/06/11 22:20:40 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/12 14:41:47 by jucoelho         ###   ########.fr       */
+/*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/06/12 15:53:08 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef HTTP_REQUEST_HPP
-# define HTTP_REQUEST_HPP
+#ifndef HTTP_RESPONSE_HPP
+# define HTTP_RESPONSE_HPP
 
 # include <string>
 # include <map>
 
-class HttpRequest
+class HttpResponse
 {
 	private:
-		std::string							_method;
-		std::string							_uri;
-		std::string							_query;
-		std::string							_version;
+		std::string							_version;//protocol + version
 		std::map<std::string, std::string>	_headers;
 		std::string							_body;
+		int									_status;
 
 	public:
-		HttpRequest(void);
-		HttpRequest(const HttpRequest &copy);
-		HttpRequest& operator=(const HttpRequest &other);
-		~HttpRequest(void);
+		HttpResponse(void);
+		HttpResponse(const HttpResponse &copy);
+		HttpResponse& operator=(const HttpResponse &other);
+		~HttpResponse(void);
 
-		const std::string&	getMethod(void) const;
-		const std::string&	getUri(void) const;
-		const std::string&	getQuery(void) const;
 		const std::string&	getVersion(void) const;
 		const std::map<std::string, std::string>& getHeaders(void) const;
 		const std::string&	getBody(void) const;
+		int					getStatus(void) const;
 
-		void	setMethod(const std::string &method);
-		void	setUri(const std::string &uri);
-		void	setQuery(const std::string &query);
 		void	setVersion(const std::string &version);
 		void	addHeader(const std::string &key, const std::string &value);
 		void	setBody(const std::string &body);
+		void	setStatus(int status);		
 
-		bool	hasHeader(const std::string &key) const;
 		std::string getHeader(const std::string &key) const;
+		std::string getStatusMessage(void) const;
 };
 
 #endif

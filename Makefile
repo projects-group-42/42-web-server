@@ -6,12 +6,18 @@ SRC_FILES	= main.cpp \
 			  server/EventLoop.cpp \
 			  utils/Logger.cpp \
 			  utils/Utils.cpp \
-			  http/HttpRequest.cpp
+			  http/HttpRequest.cpp \
+			  http/MimeType.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj
 OBJ			= $(SRC:%.cpp=$(OBJ_DIR)/%.o)
 DEP			= $(OBJ:.o=.d)
+
+TEST_SRC	= tests/mime_types_test.cpp \
+			  src/http/MimeType.cpp \
+			  src/utils/Utils.cpp
+TEST_BIN	= test_mime
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -32,12 +38,19 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
+test: $(TEST_BIN)
+	./$(TEST_BIN)
+
+$(TEST_BIN): $(TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
 fclean: clean
 	rm -f $(NAME)
+	rm -f $(TEST_BIN)
 
 re: fclean all
 
-.PHONY: all clean fclean re val
+.PHONY: all clean fclean re val test

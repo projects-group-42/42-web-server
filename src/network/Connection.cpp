@@ -6,19 +6,19 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/06 18:10:48 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/22 17:02:59 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "network/Connection.hpp"
-
 #include <sys/socket.h>
 
-Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _psr_state(REQUEST_LINE)
+Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser()
+
 {
 }
 
-Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _psr_state(REQUEST_LINE)
+Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _parser()
 {
 }
 
@@ -35,7 +35,6 @@ Connection &Connection::operator=(const Connection &other)
 		_read_buffer = other._read_buffer;
 		_write_buffer = other._write_buffer;
 		_time = other._time;
-		_psr_state = other._psr_state;
 	}
 	return (*this);
 }
@@ -52,7 +51,7 @@ ssize_t Connection::receive_data(void)
 	bytes_read = recv(_client_fd, buffer, sizeof(buffer), 0);
 	if (bytes_read > 0)
 	{
-		_read_buffer += std::string(buffer, bytes_read);
+		_parser.feed(buffer, bytes_read);
 		_time = time(NULL);
 	}
 	return (bytes_read);
@@ -61,11 +60,6 @@ ssize_t Connection::receive_data(void)
 double Connection::last_activity(void) const
 {
 	return (difftime(time(NULL), _time));
-}
-
-t_psr_state Connection::get_psr_state(void) const
-{
-	return (_psr_state);
 }
 
 const std::string &Connection::get_read_buffer(void) const

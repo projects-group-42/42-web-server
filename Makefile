@@ -7,6 +7,8 @@ SRC_FILES	= main.cpp \
 			  utils/Logger.cpp \
 			  utils/Utils.cpp \
 			  http/HttpRequest.cpp \
+			  http/HttpResponse.cpp \
+			  http/RequestParser.cpp \
 			  http/MimeType.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 

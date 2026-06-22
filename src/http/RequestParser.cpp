@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/22 17:50:59 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/22 18:14:56 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,10 +14,14 @@
 
 RequestParser::RequestParser(void)
 	: _buffer(""), _len(0), _psr_state(REQUEST_LINE)
-{}
+{
+	
+}
 RequestParser::RequestParser(std::string buffer, ssize_t len)
 	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE)
-{}
+{
+	
+}
 
 RequestParser::RequestParser(const RequestParser &copy)
 {
@@ -42,6 +46,11 @@ RequestParser::~RequestParser(void)
 t_psr_state RequestParser::get_psr_state(void) const
 {
 	return (_psr_state);
+}
+
+const HttpRequest& RequestParser::getRequest(void) const
+{
+	return (_request);
 }
 
 std::string RequestParser::str_extract(std::string str_find, int nbr)
@@ -78,9 +87,12 @@ bool RequestParser::prs_headers(void)
 	while (_buffer.find(":") != std::string::npos)
 	{
 		std::string str_key = str_extract(":", 1);
+		if (_buffer[0] == ' ')
+			_buffer.erase(0, 1);
 		std::string str_value = str_extract("\r\n", 2);
 		_request.addHeader(str_key, str_value);
 	}
+	std::string str_value = str_extract("\r\n", 2);
 	return true;
 }
 
@@ -121,30 +133,33 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 	_buffer.append(buffer, bytes_read);
 	while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
 		_buffer.erase(0, 1);
-
-	size_t pos = _buffer.find("\r\n\r\n");
-	if (pos == std::string::npos)
+	if (_psr_state == REQUEST_LINE || _psr_state == HEADERS)
 	{
-		_psr_state = ERROR;
-		return;
+		size_t pos = _buffer.find("\r\n\r\n");
+		if (pos == std::string::npos)
+		{
+			return;
+		}
+		if(!prs_method())
+		{
+			_psr_state = ERROR;
+			return;
+		}
+		_psr_state = HEADERS;
+		if(!prs_headers())
+		{
+			_psr_state = ERROR;
+			return;
+		}
+		_psr_state = BODY;
 	}
-	_psr_state = REQUEST_LINE;
-	if(!prs_method())
+	if (_psr_state == BODY)
 	{
-		_psr_state = ERROR;
-		return;
+		if(!prs_body())
+		{
+			return;
+		}
+		_psr_state = COMPLETE;
 	}
-	_psr_state = HEADERS;
-	if(!prs_headers())
-	{
-		_psr_state = ERROR;
-		return;
-	}
-	_psr_state = BODY;
-	if(!prs_body())
-	{
-		_psr_state = ERROR;
-		return;
-	}
-	_psr_state = COMPLETE;
 }
+

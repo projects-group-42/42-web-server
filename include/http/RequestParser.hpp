@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/22 17:46:25 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/22 18:10:03 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,8 @@
 #define REQUESTPARSER_HPP
 
 #include <string>
+#include <unistd.h>
+#include <cstdlib>
 # include "http/HttpRequest.hpp"
 
 typedef enum e_psr_state
@@ -29,8 +31,8 @@ class RequestParser
 {
 	private:
 		std::string	_buffer;
-		t_psr_state	_psr_state;
 		ssize_t		_len;
+		t_psr_state	_psr_state;
 		HttpRequest	_request;
 
 	public:
@@ -46,6 +48,7 @@ class RequestParser
 		bool prs_method(void);
 		bool prs_headers(void);
 		bool prs_body(void);
+		const HttpRequest& getRequest(void) const;
 };
 
 #endif

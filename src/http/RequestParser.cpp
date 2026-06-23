@@ -6,11 +6,12 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/22 18:14:56 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/23 19:12:04 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "http/RequestParser.hpp"
+# include <iostream>
 
 RequestParser::RequestParser(void)
 	: _buffer(""), _len(0), _psr_state(REQUEST_LINE)
@@ -93,6 +94,12 @@ bool RequestParser::prs_headers(void)
 		_request.addHeader(str_key, str_value);
 	}
 	std::string str_value = str_extract("\r\n", 2);
+	if (!_request.hasHeader("Host"))
+	{
+		std::cout << "Error" << std::endl;
+		_psr_state = ERROR;
+		return false;
+	}
 	return true;
 }
 
@@ -103,24 +110,20 @@ bool RequestParser::prs_method(void)
 		return false;
 	_request.setMethod(str_method);
 
-	std::string str_uri = str_extract("?", 1);
-	_request.setUri(str_uri);
+	std::string str_uri = str_extract(" ", 1);
 	if (str_uri == "")
-	{
-		std::string str_uri = str_extract(" ", 1);
-		if (str_uri == "")
-			return false;
-		_request.setUri(str_uri);
+		return false;
+	size_t pos = str_uri.find("?");
+	if (pos == std::string::npos)
 		_request.setQuery("");
-	}
 	else
 	{
-		std::string str_query = str_extract(" ", 1);
-		if (str_query == "" && _buffer[0] != 'H') 
-			return false;
+		std::string str_query = str_uri.substr(pos + 1);
+		str_uri.erase(pos);
 		_request.setQuery(str_query);
 	}
-
+	_request.setUri(str_uri);
+	
 	std::string str_version = str_extract("\r\n", 2);
 	if (str_version == "") 
 		return false;
@@ -142,12 +145,14 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		}
 		if(!prs_method())
 		{
+			std::cout << "Error" << std::endl;
 			_psr_state = ERROR;
 			return;
 		}
 		_psr_state = HEADERS;
 		if(!prs_headers())
 		{
+			std::cout << "Error" << std::endl;
 			_psr_state = ERROR;
 			return;
 		}

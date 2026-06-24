@@ -6,12 +6,14 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:36:33 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/12 17:27:33 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/24 20:38:56 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "http/HttpResponse.hpp"
 # include "utils/Utils.hpp"
+# include <iostream>
+#include <sstream>
 
 HttpResponse::HttpResponse(void)
 	: _version("HTTP/1.1"), _status(200)
@@ -87,6 +89,13 @@ std::string HttpResponse::getHeader(const std::string &key) const
 	return ("");
 }
 
+void HttpResponse::setDefaultHeaders(void)
+{
+	
+	
+	gera e adiciona Date, Server, Content-Length, Connection
+}
+
 std::string HttpResponse::getStatusMessage(void) const
 {
 	switch(_status)
@@ -114,3 +123,38 @@ std::string HttpResponse::getStatusMessage(void) const
 		default:  return "Unknown Status";
 	}
 }
+
+std::string HttpResponse::getStatusLine(void) const
+{
+	std::string status_line;
+	std::ostringstream oss;
+	oss << _status;
+
+	status_line.append(oss.str());
+	status_line.append(" ");
+	status_line.append(getStatusMessage());
+	status_line.append("\r\n");
+	return (status_line);
+}
+
+std::string HttpResponse::responseBuilder(void) const
+{
+	std::string response;
+	std::map <std::string, std::string>::const_iterator it;
+	
+	response.append(_version);
+	response.append(" ");
+	response.append(getStatusLine());
+	
+	for (it = _headers.begin(); it != _headers.end(); ++it)
+	{
+		response.append(it->first);
+		response.append(": ");
+		response.append(it->second);
+		response.append("\r\n");
+	}
+	response.append("\r\n");
+	response.append(_body);
+	return (response);
+}
+

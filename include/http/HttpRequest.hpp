@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:20:40 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/12 14:41:47 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/21 14:29:31 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,10 +19,10 @@
 class HttpRequest
 {
 	private:
-		std::string							_method;
-		std::string							_uri;
-		std::string							_query;
-		std::string							_version;
+		std::string							_method; //request line 
+		std::string							_uri; //request target
+		std::string							_query; 
+		std::string							_version;//protocol version
 		std::map<std::string, std::string>	_headers;
 		std::string							_body;
 

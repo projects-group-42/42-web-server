@@ -9,7 +9,8 @@ SRC_FILES	= main.cpp \
 			  http/HttpRequest.cpp \
 			  http/HttpResponse.cpp \
 			  http/MimeType.cpp \
-			  http/StaticFileHandler.cpp
+			  http/StaticFileHandler.cpp \
+			  http/Router.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj

@@ -15,7 +15,7 @@
 
 #include "network/Socket.hpp"
 #include "network/Connection.hpp"
-#include "http/StaticFileHandler.hpp"
+#include "http/Router.hpp"
 #include <vector>
 #include <map>
 #include <poll.h>
@@ -26,7 +26,7 @@ class EventLoop
 		Socket						*_sckt;
 		std::vector<struct pollfd>	_fds;
 		std::map<int, Connection>	_clients;
-		StaticFileHandler			_handler;
+		Router						_router;
 
 		void	acceptClients(void);
 		bool	handleClient(int fd);

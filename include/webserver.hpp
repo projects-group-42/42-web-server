@@ -16,6 +16,7 @@
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/MimeType.hpp"
+# include "http/Router.hpp"
 # include "http/StaticFileHandler.hpp"
 # include "network/Connection.hpp"
 # include "network/Socket.hpp"

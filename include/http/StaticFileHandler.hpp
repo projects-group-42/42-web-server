@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/22 21:38:04 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/24 20:16:44 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,9 +28,6 @@ class StaticFileHandler
 		std::string	_index;
 
 		std::string	getDate(void) const;
-		std::string	buildResponse(int status, const std::string &contentType,
-						const std::string &body, bool keepAlive) const;
-		std::string	buildErrorBody(int status, const std::string &statusMsg) const;
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
@@ -51,6 +48,9 @@ class StaticFileHandler
 		// Returns true if request was well-formed enough to produce *some* response.
 		bool				handleGet(const std::string &requestBuffer,
 								std::string &response);
+		std::string	buildResponse(int status, const std::string &contentType,
+		const std::string &body, bool keepAlive) const;
+		std::string	buildErrorBody(int status, const std::string &statusMsg) const;
 };
 
 #endif

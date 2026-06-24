@@ -21,16 +21,16 @@
 #include <sys/socket.h>
 #include <cstdlib>
 
-EventLoop::EventLoop(void) : _sckt(NULL), _handler("www")
+EventLoop::EventLoop(void) : _sckt(NULL), _router("www")
 {
 }
 
-EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _handler("www")
+EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _router("www")
 {
 }
 
 EventLoop::EventLoop(const EventLoop &copy)
-	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients), _handler(copy._handler)
+	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients), _router(copy._router)
 {
 }
 
@@ -45,7 +45,7 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 		_sckt = other._sckt;
 		_fds = other._fds;
 		_clients = other._clients;
-		_handler = other._handler;
+		_router = other._router;
 	}
 	return (*this);
 }
@@ -90,7 +90,7 @@ void EventLoop::handleRequest(int fd)
 	Connection	&conn = _clients[fd];
 	std::string	response;
 
-	_handler.handleGet(conn.get_read_buffer(), response);
+	_router.route(conn.get_read_buffer(), response);
 	conn.set_write_buffer(response);
 
 	// Switch this fd to POLLOUT so we can send the response

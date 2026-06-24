@@ -58,6 +58,33 @@ ssize_t Connection::receive_data(void)
 	return (bytes_read);
 }
 
+ssize_t Connection::send_data(void)
+{
+	ssize_t	sent = send(_client_fd, _write_buffer.data(),
+						_write_buffer.size(), 0);
+	if (sent > 0)
+	{
+		_write_buffer.erase(0, sent);
+		_time = time(NULL);
+	}
+	return (sent);
+}
+
+bool	Connection::has_data_to_send(void) const
+{
+	return (!_write_buffer.empty());
+}
+
+void	Connection::set_write_buffer(const std::string &data)
+{
+	_write_buffer = data;
+}
+
+void	Connection::reset_write_buffer(void)
+{
+	_write_buffer.clear();
+}
+
 double Connection::last_activity(void) const
 {
 	return (difftime(time(NULL), _time));

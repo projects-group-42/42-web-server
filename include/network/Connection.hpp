@@ -42,6 +42,10 @@ class Connection
 		~Connection(void);
 
 		ssize_t				receive_data(void);
+		ssize_t				send_data(void);
+		bool				has_data_to_send(void) const;
+		void				set_write_buffer(const std::string &data);
+		void				reset_write_buffer(void);
 		double				last_activity(void) const;
 		t_psr_state			get_psr_state(void) const;
 		const std::string&	get_read_buffer(void) const;

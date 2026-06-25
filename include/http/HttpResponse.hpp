@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/12 15:53:08 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/24 20:34:04 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,9 +39,13 @@ class HttpResponse
 		void	addHeader(const std::string &key, const std::string &value);
 		void	setBody(const std::string &body);
 		void	setStatus(int status);		
+		void HttpResponse::setDefaultHeaders(void);
 
 		std::string getHeader(const std::string &key) const;
 		std::string getStatusMessage(void) const;
+		std::string responseBuilder(void) const;
+		std::string HttpResponse::getStatusLine(void) const;
+
 };
 
 #endif

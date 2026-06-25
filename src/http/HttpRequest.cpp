@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/12 14:40:56 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/24 20:35:50 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -112,3 +112,4 @@ std::string HttpRequest::getHeader(const std::string &key) const
 		return (it->second);
 	return ("");
 }
+

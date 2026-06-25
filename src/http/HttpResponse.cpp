@@ -6,14 +6,15 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:36:33 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/24 20:38:56 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/24 21:14:45 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "http/HttpResponse.hpp"
 # include "utils/Utils.hpp"
 # include <iostream>
-#include <sstream>
+# include <sstream>
+# include <ctime>
 
 HttpResponse::HttpResponse(void)
 	: _version("HTTP/1.1"), _status(200)
@@ -89,13 +90,6 @@ std::string HttpResponse::getHeader(const std::string &key) const
 	return ("");
 }
 
-void HttpResponse::setDefaultHeaders(void)
-{
-	
-	
-	gera e adiciona Date, Server, Content-Length, Connection
-}
-
 std::string HttpResponse::getStatusMessage(void) const
 {
 	switch(_status)
@@ -124,6 +118,28 @@ std::string HttpResponse::getStatusMessage(void) const
 	}
 }
 
+std::string HttpResponse::whatTimeIsIt(void)
+{
+	time_t now = time(NULL);
+	struct tm* timeinfo = gmtime(&now);
+	char buffer[100];
+	strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", timeinfo);
+	return (buffer);
+}
+void HttpResponse::setDefaultHeaders(void)
+{
+	std::string date = whatTimeIsIt();
+	_headers["date"] = date;
+
+	_headers["server"] = "Webserv/1.0: Por favor funcione";
+	
+	std::ostringstream oss;
+	oss << _body.size();
+	_headers["content-length"] = oss.str();
+
+	_headers["connection"] = "close";
+}
+
 std::string HttpResponse::getStatusLine(void) const
 {
 	std::string status_line;
@@ -139,6 +155,9 @@ std::string HttpResponse::getStatusLine(void) const
 
 std::string HttpResponse::responseBuilder(void) const
 {
+	//tá aqui só para o SetDefauçtHeaders não se sentir sozinho,
+	//quando tiver um handle a gente muda para lá kkkkk
+	const_cast<HttpResponse*>(this)->setDefaultHeaders();
 	std::string response;
 	std::map <std::string, std::string>::const_iterator it;
 	

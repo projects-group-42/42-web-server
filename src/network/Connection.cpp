@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/22 17:02:59 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:42:28 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,6 +35,7 @@ Connection &Connection::operator=(const Connection &other)
 		_read_buffer = other._read_buffer;
 		_write_buffer = other._write_buffer;
 		_time = other._time;
+		_parser = other._parser;
 	}
 	return (*this);
 }
@@ -57,6 +58,33 @@ ssize_t Connection::receive_data(void)
 	return (bytes_read);
 }
 
+ssize_t Connection::send_data(void)
+{
+	ssize_t	sent = send(_client_fd, _write_buffer.data(),
+						_write_buffer.size(), 0);
+	if (sent > 0)
+	{
+		_write_buffer.erase(0, sent);
+		_time = time(NULL);
+	}
+	return (sent);
+}
+
+bool	Connection::has_data_to_send(void) const
+{
+	return (!_write_buffer.empty());
+}
+
+void	Connection::set_write_buffer(const std::string &data)
+{
+	_write_buffer = data;
+}
+
+void	Connection::reset_write_buffer(void)
+{
+	_write_buffer.clear();
+}
+
 double Connection::last_activity(void) const
 {
 	return (difftime(time(NULL), _time));
@@ -65,4 +93,14 @@ double Connection::last_activity(void) const
 const std::string &Connection::get_read_buffer(void) const
 {
 	return (_read_buffer);
+}
+
+t_psr_state Connection::get_psr_state(void) const
+{
+	return _parser.get_psr_state();
+}
+
+const HttpRequest& Connection::getRequest(void) const
+{
+	return _parser.getRequest();
 }

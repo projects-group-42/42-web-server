@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:29:30 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/11 22:43:44 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/22 21:37:46 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,12 +14,13 @@
 # define WEBSERVER_HPP
 
 # include "http/HttpRequest.hpp"
-//# include "02_http.hpp"
+# include "http/HttpResponse.hpp"
+# include "http/MimeType.hpp"
+# include "http/Router.hpp"
+# include "http/StaticFileHandler.hpp"
 # include "network/Connection.hpp"
 # include "network/Socket.hpp"
 # include "server/EventLoop.hpp"
-//# include "05_cgi.hpp"
-//# include "06_handlers.hpp"
 # include "utils/Colors.hpp"
 # include "utils/Logger.hpp"
 # include "utils/Utils.hpp"

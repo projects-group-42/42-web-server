@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/22 18:10:03 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 17:39:35 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -49,6 +49,7 @@ class RequestParser
 		bool prs_headers(void);
 		bool prs_body(void);
 		const HttpRequest& getRequest(void) const;
+		std::string percent_decoding(std::string str);
 };
 
 #endif

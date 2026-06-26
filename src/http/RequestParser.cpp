@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 17:11:29 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 17:40:25 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -129,8 +129,8 @@ std::string RequestParser::percent_decoding(std::string str)
 				else
 				{
 					std::string str_hex;
-					str_hex.append(str[pos + 1]);
-					str_hex.append(str[pos + 2]);
+					str_hex += str[pos + 1];
+					str_hex += str[pos + 2];
 					char decoded = (char)strtol(str_hex.c_str(), NULL, 16);
 					result += decoded;
 					pos += 2;

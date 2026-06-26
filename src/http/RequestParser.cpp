@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/23 19:12:04 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 17:40:25 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -98,9 +98,48 @@ bool RequestParser::prs_headers(void)
 	{
 		std::cout << "Error" << std::endl;
 		_psr_state = ERROR;
-		return false;
+		return (false);
 	}
 	return true;
+}
+
+std::string RequestParser::percent_decoding(std::string str)
+{
+	std::string hex = "0123456789abcdefABCDEF";
+	std::string result;
+
+	for (size_t pos = 0; pos < str.size(); pos++)
+	{
+		if (str[pos] != '%')
+			result += str[pos];
+		else
+		{
+			if (pos + 2 >= str.size())
+				return ("");//malformadoRejeitar sequências malformadas com 400
+			if (hex.find(str[pos + 1]) == std::string::npos 
+				|| hex.find(str[pos + 2]) == std::string::npos)
+				return ("");
+			else
+			{
+				if (str[pos + 1] == '0' && str[pos + 2] == '0')
+					return ("");//rejeitar dangerous reserved
+				if (str[pos + 1] == '2' && (
+					str[pos + 2] == 'F' || str[pos + 2] == 'f'))
+					return ("");//rejeitar dangerous reserved
+				else
+				{
+					std::string str_hex;
+					str_hex += str[pos + 1];
+					str_hex += str[pos + 2];
+					char decoded = (char)strtol(str_hex.c_str(), NULL, 16);
+					result += decoded;
+					pos += 2;
+					
+				}
+			}
+		}
+	}
+	return (result);
 }
 
 bool RequestParser::prs_method(void)
@@ -120,9 +159,25 @@ bool RequestParser::prs_method(void)
 	{
 		std::string str_query = str_uri.substr(pos + 1);
 		str_uri.erase(pos);
-		_request.setQuery(str_query);
+		if (str_query.find("%") == std::string::npos)
+			_request.setQuery(str_query);
+		else
+		{
+			std::string d_query = percent_decoding(str_query);
+			if (d_query.empty())
+				return false;
+			_request.setQuery(d_query);
+		}
 	}
-	_request.setUri(str_uri);
+	if (str_uri.find("%") == std::string::npos)
+			_request.setUri(str_uri);
+		else
+		{
+			std::string d_uri = percent_decoding(str_uri);
+			if (d_uri.empty())
+				return false;
+			_request.setUri(d_uri);
+		}
 	
 	std::string str_version = str_extract("\r\n", 2);
 	if (str_version == "") 

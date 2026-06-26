@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:20:40 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/21 14:29:31 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/25 16:40:46 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,15 +39,15 @@ class HttpRequest
 		const std::map<std::string, std::string>& getHeaders(void) const;
 		const std::string&	getBody(void) const;
 
-		void	setMethod(const std::string &method);
-		void	setUri(const std::string &uri);
-		void	setQuery(const std::string &query);
-		void	setVersion(const std::string &version);
-		void	addHeader(const std::string &key, const std::string &value);
-		void	setBody(const std::string &body);
+		void		setMethod(const std::string &method);
+		void		setUri(const std::string &uri);
+		void		setQuery(const std::string &query);
+		void		setVersion(const std::string &version);
+		void		addHeader(const std::string &key, const std::string &value);
+		void		setBody(const std::string &body);
 
-		bool	hasHeader(const std::string &key) const;
-		std::string getHeader(const std::string &key) const;
+		bool		hasHeader(const std::string &key) const;
+		std::string	getHeader(const std::string &key) const;
 };
 
 #endif

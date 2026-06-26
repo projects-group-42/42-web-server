@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/22 18:07:53 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 17:43:28 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -57,6 +57,26 @@ int main(void)
  
 	test_parser("Request invalida (sem metodo)",
 		"\r\n\r\n");
+	test_parser("URI com %20",
+	"GET /hello%20world HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Query com %20",
+		"GET /search?q=Joao%20Silva HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("URI com %2F",
+		"GET /dir%2Ffile HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("URI com %00",
+		"GET /test%00abc HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Percent incompleto",
+		"GET /test% HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Hex incompleto",
+		"GET /test%2 HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Hex invalido",
+		"GET /test%GG HTTP/1.1\r\nHost: localhost\r\n\r\n");
 	const std::string	host = "0.0.0.0";
 	const int			port = 8080;
 	const int			backlog = 128;

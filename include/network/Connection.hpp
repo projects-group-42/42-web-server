@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:20:37 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/21 13:35:12 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:28:04 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,6 +41,7 @@ class Connection
 		void				reset_write_buffer(void);
 		double				last_activity(void) const;
 		const std::string&	get_read_buffer(void) const;
-
+		t_psr_state			get_psr_state(void) const;
+		const HttpRequest&	getRequest(void) const;
 };
 #endif

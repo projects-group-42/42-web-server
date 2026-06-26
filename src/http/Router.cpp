@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/25 21:01:30 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:36:23 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,46 +54,11 @@ const std::string &Router::getRoot(void) const
 	return (_handler.getRoot());
 }
 
-bool	Router::parseRequestLine(const std::string &buffer,
-				std::string &method, std::string &uriPath) const
-{
-	std::string::size_type	lineEnd = buffer.find("\r\n");
-	if (lineEnd == std::string::npos)
-		return (false);
-
-	std::string	line = buffer.substr(0, lineEnd);
-
-	std::string::size_type	firstSpace = line.find(' ');
-	if (firstSpace == std::string::npos)
-		return (false);
-
-	method = line.substr(0, firstSpace);
-
-	std::string::size_type	secondSpace = line.rfind(' ');
-	if (secondSpace == std::string::npos || secondSpace <= firstSpace)
-		return (false);
-
-	uriPath = line.substr(firstSpace + 1, secondSpace - firstSpace - 1);
-	return (true);
-}
-
-bool	Router::route(const std::string &requestBuffer,
+bool	Router::route(const HttpRequest &request,
 				std::string &response)
 {
-	if (requestBuffer.find("\r\n\r\n") == std::string::npos)
-		return (false);
-
-	std::string	method;
-	std::string	uriPath;
-	if (!parseRequestLine(requestBuffer, method, uriPath))
-	{
-		response = _handler.buildResponse(400, "text/html",
-					_handler.buildErrorBody(400, ""), false);
-		return (true);
-	}
-
-	if (method == "GET")
-		return (_handler.handleGet(requestBuffer, response));
+	if (request.getMethod() == "GET")
+		return (_handler.handleGet(request, response));
 
 	response = _handler.buildResponse(501, "text/html",
 				_handler.buildErrorBody(501, ""), false);

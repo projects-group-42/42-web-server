@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/25 21:01:27 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:32:51 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,16 +15,12 @@
 
 # include <string>
 # include "http/StaticFileHandler.hpp"
+# include "http/HttpRequest.hpp"
 
 class Router
 {
 	private:
 		StaticFileHandler	_handler;
-
-		// Extract method and URI path from "METHOD /path HTTP/1.1\r\n..."
-		bool	parseRequestLine(const std::string &buffer,
-							std::string &method,
-							std::string &uriPath) const;
 
 	public:
 		Router(void);
@@ -33,7 +29,7 @@ class Router
 		Router &operator=(const Router &other);
 		~Router(void);
 
-		bool	route(const std::string &requestBuffer,
+		bool	route(const HttpRequest &request,
 					std::string &response);
 
 		void				setRoot(const std::string &root);

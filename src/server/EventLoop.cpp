@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 20:06:38 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:43:46 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -75,8 +75,7 @@ bool EventLoop::handleClient(int fd)
 	{
 		Logger::info("Data received from client.");
 		// Check if we have a complete HTTP request (headers terminated)
-		const std::string &buf = _clients[fd].get_read_buffer();
-		if (buf.find("\r\n\r\n") != std::string::npos)
+		if (_clients[fd].get_psr_state() == COMPLETE)
 			handleRequest(fd);
 		return true;
 	}
@@ -90,7 +89,7 @@ void EventLoop::handleRequest(int fd)
 	Connection	&conn = _clients[fd];
 	std::string	response;
 
-	_router.route(conn.get_read_buffer(), response);
+	_router.route(conn.getRequest(), response);
 	conn.set_write_buffer(response);
 
 	// Switch this fd to POLLOUT so we can send the response

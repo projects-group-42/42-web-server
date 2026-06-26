@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/24 19:39:46 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:40:18 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -151,55 +151,13 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
 }
 
 /*
- * Parse the request-line from a raw HTTP GET buffer.
- * Returns true if line was extracted.
- */
-static bool extractGetPath(const std::string &buffer, std::string &path)
-{
-	std::string::size_type lineEnd = buffer.find("\r\n");
-	if (lineEnd == std::string::npos)
-		return (false);
-
-	std::string requestLine = buffer.substr(0, lineEnd);
-
-	// Expect: "GET /path HTTP/1.1"
-	std::string::size_type firstSpace = requestLine.find(' ');
-	if (firstSpace == std::string::npos)
-		return (false);
-	std::string method = requestLine.substr(0, firstSpace);
-	if (method != "GET")
-		return (false);
-
-	std::string::size_type secondSpace = requestLine.rfind(' ');
-	if (secondSpace == std::string::npos || secondSpace <= firstSpace)
-		return (false);
-
-	path = requestLine.substr(firstSpace + 1, secondSpace - firstSpace - 1);
-	return (true);
-}
-
-/*
  * Main entry-point.
  * Parse the raw request, resolve the path, serve the file, build the HTTP response.
  */
-bool StaticFileHandler::handleGet(const std::string &requestBuffer,
+bool StaticFileHandler::handleGet(const HttpRequest &request,
 		std::string &response)
 {
-	if (requestBuffer.find("\r\n") == std::string::npos)
-		return (false);
-
-	std::string	uriPath;
-	if (!extractGetPath(requestBuffer, uriPath))
-	{
-		response = buildResponse(400, "text/html", buildErrorBody(400, ""), false);
-		return (true);
-	}
-
-	bool headersComplete = (requestBuffer.find("\r\n\r\n") != std::string::npos);
-	if (!headersComplete)
-		return (false);
-
-	std::string resolvedPath = _root + uriPath;
+	std::string resolvedPath = _root + request.getUri();
 
 	if (resolvedPath.find("..") != std::string::npos)
 	{

@@ -3,17 +3,18 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/24 20:16:44 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:38:04 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef STATIC_FILE_HANDLER_HPP
 # define STATIC_FILE_HANDLER_HPP
 
-# include <string>
+#include "http/HttpRequest.hpp"
+#include <string>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -46,7 +47,7 @@ class StaticFileHandler
 
 		// Parse a raw HTTP GET request buffer and produce an HTTP response string.
 		// Returns true if request was well-formed enough to produce *some* response.
-		bool				handleGet(const std::string &requestBuffer,
+		bool				handleGet(const HttpRequest &request,
 								std::string &response);
 		std::string	buildResponse(int status, const std::string &contentType,
 		const std::string &body, bool keepAlive) const;

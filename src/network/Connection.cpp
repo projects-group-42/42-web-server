@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/22 17:02:59 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:42:28 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,6 +35,7 @@ Connection &Connection::operator=(const Connection &other)
 		_read_buffer = other._read_buffer;
 		_write_buffer = other._write_buffer;
 		_time = other._time;
+		_parser = other._parser;
 	}
 	return (*this);
 }
@@ -92,4 +93,14 @@ double Connection::last_activity(void) const
 const std::string &Connection::get_read_buffer(void) const
 {
 	return (_read_buffer);
+}
+
+t_psr_state Connection::get_psr_state(void) const
+{
+	return _parser.get_psr_state();
+}
+
+const HttpRequest& Connection::getRequest(void) const
+{
+	return _parser.getRequest();
 }

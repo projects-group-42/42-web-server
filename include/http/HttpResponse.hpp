@@ -46,7 +46,7 @@ class HttpResponse
 		std::string getStatusMessage(void) const;
 		std::string responseBuilder(void) const;
 		std::string getStatusLine(void) const;
-
+		std::string ErrorPage(void) const;
 };
 
 #endif

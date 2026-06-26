@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 20:06:38 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/26 18:43:46 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,16 +19,18 @@
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <cstdlib>
 
-EventLoop::EventLoop(void) : _sckt(NULL)
+EventLoop::EventLoop(void) : _sckt(NULL), _router("www")
 {
 }
 
-EventLoop::EventLoop(Socket *sckt) : _sckt(sckt)
+EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _router("www")
 {
 }
 
-EventLoop::EventLoop(const EventLoop &copy) : _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients)
+EventLoop::EventLoop(const EventLoop &copy)
+	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients), _router(copy._router)
 {
 }
 
@@ -43,6 +45,7 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 		_sckt = other._sckt;
 		_fds = other._fds;
 		_clients = other._clients;
+		_router = other._router;
 	}
 	return (*this);
 }
@@ -71,11 +74,50 @@ bool EventLoop::handleClient(int fd)
 	if (n > 0)
 	{
 		Logger::info("Data received from client.");
+		// Check if we have a complete HTTP request (headers terminated)
+		if (_clients[fd].get_psr_state() == COMPLETE)
+			handleRequest(fd);
 		return true;
 	}
 	if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return true;
 	return false;
+}
+
+void EventLoop::handleRequest(int fd)
+{
+	Connection	&conn = _clients[fd];
+	std::string	response;
+
+	_router.route(conn.getRequest(), response);
+	conn.set_write_buffer(response);
+
+	// Switch this fd to POLLOUT so we can send the response
+	for (size_t i = 0; i < _fds.size(); i++)
+	{
+		if (_fds[i].fd == fd)
+		{
+			_fds[i].events = POLLOUT;
+			break;
+		}
+	}
+}
+
+bool EventLoop::handleSend(int fd)
+{
+	Connection	&conn = _clients[fd];
+	ssize_t		sent = conn.send_data();
+
+	if (sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+		return true; // try again later
+	if (sent == -1)
+		return false; // error
+	if (!conn.has_data_to_send())
+	{
+		Logger::info("Response fully sent, closing connection.");
+		return false; // done, close
+	}
+	return true; // more to send
 }
 
 void EventLoop::run(void)
@@ -104,7 +146,15 @@ void EventLoop::run(void)
 				continue;
 			if (_fds[i].fd == _sckt->getFd())
 				acceptClients();
-			else if (handleClient(_fds[i].fd) == false)
+			else if ((_fds[i].revents & POLLOUT) && handleSend(_fds[i].fd) == false)
+			{
+				int fd = _fds[i].fd;
+				close(fd);
+				_clients.erase(fd);
+				_fds.erase(_fds.begin() + i);
+				i--;
+			}
+			else if ((_fds[i].revents & POLLIN) && handleClient(_fds[i].fd) == false)
 			{
 				int fd = _fds[i].fd;
 				close(fd);

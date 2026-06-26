@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:36:33 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/24 21:14:45 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/25 15:50:53 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -129,14 +129,15 @@ std::string HttpResponse::whatTimeIsIt(void)
 void HttpResponse::setDefaultHeaders(void)
 {
 	std::string date = whatTimeIsIt();
-	_headers["date"] = date;
-
-	_headers["server"] = "Webserv/1.0: Por favor funcione";
-	
 	std::ostringstream oss;
+
+	if (_body.empty())
+		_body = ErrorPage();
+
+	_headers["date"] = date;
+	_headers["server"] = "Webserv/1.0: Por favor funcione";
 	oss << _body.size();
 	_headers["content-length"] = oss.str();
-
 	_headers["connection"] = "close";
 }
 
@@ -155,7 +156,7 @@ std::string HttpResponse::getStatusLine(void) const
 
 std::string HttpResponse::responseBuilder(void) const
 {
-	//tá aqui só para o SetDefauçtHeaders não se sentir sozinho,
+	//tá aqui só para o SetDefaultHeaders não se sentir sozinho,
 	//quando tiver um handle a gente muda para lá kkkkk
 	const_cast<HttpResponse*>(this)->setDefaultHeaders();
 	std::string response;
@@ -177,3 +178,16 @@ std::string HttpResponse::responseBuilder(void) const
 	return (response);
 }
 
+std::string HttpResponse::ErrorPage(void) const
+{
+	std::string str_html;
+	std::ostringstream oss;
+	
+	oss << _status;
+	str_html.append("<html><body><h1>");
+	str_html.append(oss.str());
+	str_html.append(" ");
+	str_html.append(getStatusMessage());
+	str_html.append("</h1></body></html>");
+	return (str_html);
+}

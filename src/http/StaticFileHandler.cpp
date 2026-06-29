@@ -6,13 +6,12 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 18:40:18 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 18:35:52 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "http/StaticFileHandler.hpp"
 #include "http/MimeType.hpp"
-#include "http/HttpResponse.hpp"
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html")
@@ -59,58 +58,6 @@ const std::string &StaticFileHandler::getRoot(void) const
 }
 
 /*
- * Simple HTTP-date string for the Date header.
- */
-std::string StaticFileHandler::getDate(void) const
-{
-	char		buf[64];
-	std::time_t	now = std::time(NULL);
-	std::tm		*gmt = std::gmtime(&now);
-
-	if (!gmt)
-		return ("");
-	std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S %Z", gmt);
-	return (std::string(buf));
-}
-
-std::string StaticFileHandler::buildResponse(int status, const std::string &contentType,
-		const std::string &body, bool keepAlive) const
-{
-	HttpResponse		respModel;
-	std::ostringstream	resp;
-	respModel.setStatus(status);
-	resp << "HTTP/1.1 " << status << " "
-		 << respModel.getStatusMessage() << "\r\n";
-	resp << "Content-Length: " << body.size() << "\r\n";
-	resp << "Content-Type: " << contentType << "\r\n";
-	resp << "Date: " << getDate() << "\r\n";
-	resp << "Server: webserv/1.0\r\n";
-	resp << "Connection: " << (keepAlive ? "keep-alive" : "close") << "\r\n";
-	resp << "\r\n";
-	if (!body.empty())
-		resp << body;
-	return (resp.str());
-}
-
-/*
- * Minimal HTML error body for common status codes.
- */
-std::string StaticFileHandler::buildErrorBody(int status, const std::string &statusMsg) const
-{
-	(void)statusMsg;
-	HttpResponse tmp;
-	tmp.setStatus(status);
-	std::string msg = tmp.getStatusMessage();
-	std::ostringstream body;
-	body << "<!DOCTYPE html>\n"
-		 << "<html>\n<head><title>" << status << " " << msg
-		 << "</title></head>\n<body>\n<center><h1>"
-		 << status << " " << msg
-		 << "</h1></center>\n<hr><center>webserv/1.0</center>\n</body>\n</html>\n";
-	return (body.str());
-}
-
-/*
  * Serve a regular file, open it, read all bytes, set MIME type.
  * Returns HTTP status code.
  */
@@ -154,22 +101,22 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
  * Main entry-point.
  * Parse the raw request, resolve the path, serve the file, build the HTTP response.
  */
-bool StaticFileHandler::handleGet(const HttpRequest &request,
-		std::string &response)
+HttpResponse StaticFileHandler::handleGet(const HttpRequest &request)
 {
-	std::string resolvedPath = _root + request.getUri();
+	HttpResponse	response;
+	std::string		resolvedPath = _root + request.getUri();
 
 	if (resolvedPath.find("..") != std::string::npos)
 	{
-		response = buildResponse(403, "text/html", buildErrorBody(403, ""), false);
-		return (true);
+		response.setStatusCode(403);
+		return (response);
 	}
 
 	struct stat	pathStat;
 	if (stat(resolvedPath.c_str(), &pathStat) != 0)
 	{
-		response = buildResponse(404, "text/html", buildErrorBody(404, ""), false);
-		return (true);
+		response.setStatusCode(404);
+		return (response);
 	}
 
 	std::string	body;
@@ -183,6 +130,8 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 	else
 		status = 403;
 
-	response = buildResponse(status, contentType, body, false);
-	return (true);
+	response.setStatusCode(status);
+	response.setBody(body);
+	response.setHeaders("content-type", contentType);
+	return (response);
 }

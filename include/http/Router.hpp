@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 18:32:51 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 15:19:16 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -36,5 +36,5 @@ class Router
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
 };
-
+//RECEBE HTTP REQUEST E DEVOLVE HTTP RESPONSER STD::STRING &RESPONSE 
 #endif

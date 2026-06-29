@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/26 17:43:28 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 18:39:15 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,7 +29,7 @@ static void test_parser(const std::string& label, const std::string& raw)
 		Logger::info("  Query:   " + req.getQuery());
 		Logger::info("  Version: " + req.getVersion());
 		Logger::info("  Body:    " + req.getBody());
-		Logger::info("  Host:    " + req.getHeader("Host"));
+		Logger::info("  Host:    " + req.getHeaderValue("Host"));
 	}
 	else if (parser.get_psr_state() == ERROR)
 		Logger::error("  State:   ERROR");
@@ -57,9 +57,7 @@ int main(void)
  
 	test_parser("Request invalida (sem metodo)",
 		"\r\n\r\n");
-	test_parser("URI com %20",
-	"GET /hello%20world HTTP/1.1\r\nHost: localhost\r\n\r\n");
-
+	
 	test_parser("Query com %20",
 		"GET /search?q=Joao%20Silva HTTP/1.1\r\nHost: localhost\r\n\r\n");
 

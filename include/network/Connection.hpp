@@ -22,7 +22,6 @@ class Connection
 {
 	private:
 		int				_client_fd;
-		std::string		_read_buffer;
 		std::string		_write_buffer;
 		time_t			_time;
 		RequestParser	_parser;
@@ -40,7 +39,6 @@ class Connection
 		void				set_write_buffer(const std::string &data);
 		void				reset_write_buffer(void);
 		double				last_activity(void) const;
-		const std::string&	get_read_buffer(void) const;
 		t_psr_state			get_psr_state(void) const;
 		const HttpRequest&	getRequest(void) const;
 };

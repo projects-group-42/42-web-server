@@ -12,6 +12,7 @@
 
 #include "network/Connection.hpp"
 #include <sys/socket.h>
+#include <unistd.h>
 
 Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser()
 
@@ -23,16 +24,22 @@ Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL))
 }
 
 Connection::Connection(const Connection &copy)
+	: _client_fd(copy._client_fd),
+	  _write_buffer(copy._write_buffer),
+	  _time(copy._time),
+	  _parser(copy._parser)
 {
-	*this = copy;
+	const_cast<Connection&>(copy)._client_fd = -1;
 }
 
 Connection &Connection::operator=(const Connection &other)
 {
 	if (this != &other)
 	{
+		if (_client_fd >= 0)
+			close(_client_fd);
 		_client_fd = other._client_fd;
-		_read_buffer = other._read_buffer;
+		const_cast<Connection&>(other)._client_fd = -1;
 		_write_buffer = other._write_buffer;
 		_time = other._time;
 		_parser = other._parser;
@@ -42,6 +49,8 @@ Connection &Connection::operator=(const Connection &other)
 
 Connection::~Connection(void)
 {
+	if (_client_fd >= 0)
+		close(_client_fd);
 }
 
 ssize_t Connection::receive_data(void)
@@ -88,11 +97,6 @@ void	Connection::reset_write_buffer(void)
 double Connection::last_activity(void) const
 {
 	return (difftime(time(NULL), _time));
-}
-
-const std::string &Connection::get_read_buffer(void) const
-{
-	return (_read_buffer);
 }
 
 t_psr_state Connection::get_psr_state(void) const

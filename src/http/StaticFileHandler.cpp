@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 16:38:12 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:50:08 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -143,7 +143,7 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
  * Main entry-point.
  * Parse the raw request, resolve the path, serve the file, build the HTTP response.
  */
-bool StaticFileHandler::handleGet(const HttpRequest &request,
+bool StaticFileHandler::handle(const HttpRequest &request,
 		std::string &response)
 {
 	std::string resolvedPath = _root + request.getUri();

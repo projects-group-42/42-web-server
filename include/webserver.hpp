@@ -6,13 +6,14 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:29:30 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/22 21:37:46 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:51:27 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef WEBSERVER_HPP
 # define WEBSERVER_HPP
 
+# include "http/IRequestHandler.hpp"
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/MimeType.hpp"

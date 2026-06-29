@@ -3,26 +3,34 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
+<<<<<<< HEAD
 /*   Updated: 2026/06/29 18:36:11 by jucoelho         ###   ########.fr       */
+=======
+/*   Updated: 2026/06/29 16:50:29 by dajesus-         ###   ########.fr       */
+>>>>>>> origin/refactor/project-structure
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef STATIC_FILE_HANDLER_HPP
 # define STATIC_FILE_HANDLER_HPP
 
+<<<<<<< HEAD
 #include "http/HttpResponse.hpp"
+=======
+#include "http/IRequestHandler.hpp"
+>>>>>>> origin/refactor/project-structure
 #include "http/HttpRequest.hpp"
 #include <string>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sstream>
-#include <ctime>
 #include <cstdio>
 
+<<<<<<< HEAD
 /*
  * StaticFileHandler
  *
@@ -30,6 +38,9 @@
  * on the filesystem and filling an HttpResponse with the result.
  */
 class StaticFileHandler
+=======
+class StaticFileHandler : public IRequestHandler
+>>>>>>> origin/refactor/project-structure
 {
 	private:
 		std::string	_root;
@@ -51,8 +62,18 @@ class StaticFileHandler
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
 
+<<<<<<< HEAD
 		
 		HttpResponse handleGet(const HttpRequest &request);
+=======
+		// Parse a raw HTTP GET request buffer and produce an HTTP response string.
+		// Returns true if request was well-formed enough to produce *some* response.
+		bool				handle(const HttpRequest &request,
+								std::string &response);
+		std::string	buildResponse(int status, const std::string &contentType,
+		const std::string &body, bool keepAlive) const;
+		std::string	buildErrorBody(int status, const std::string &statusMsg) const;
+>>>>>>> origin/refactor/project-structure
 };
 
 #endif

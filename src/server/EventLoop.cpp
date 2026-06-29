@@ -148,17 +148,13 @@ void EventLoop::run(void)
 				acceptClients();
 			else if ((_fds[i].revents & POLLOUT) && handleSend(_fds[i].fd) == false)
 			{
-				int fd = _fds[i].fd;
-				close(fd);
-				_clients.erase(fd);
+				_clients.erase(_fds[i].fd);
 				_fds.erase(_fds.begin() + i);
 				i--;
 			}
 			else if ((_fds[i].revents & POLLIN) && handleClient(_fds[i].fd) == false)
 			{
-				int fd = _fds[i].fd;
-				close(fd);
-				_clients.erase(fd);
+				_clients.erase(_fds[i].fd);
 				_fds.erase(_fds.begin() + i);
 				i--;
 			}

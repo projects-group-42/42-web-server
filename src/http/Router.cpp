@@ -3,35 +3,43 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 18:36:23 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:50:18 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "http/Router.hpp"
 #include "http/HttpResponse.hpp"
+#include "utils/Logger.hpp"
 
 Router::Router(void)
-	: _handler("www")
+	: _staticHandler("www")
 {
+	_handlers["GET:/"] = &_staticHandler;
 }
 
 Router::Router(const std::string &root)
-	: _handler(root)
+	: _staticHandler(root)
 {
+	_handlers["GET:/"] = &_staticHandler;
 }
 
 Router::Router(const Router &copy)
-	: _handler(copy._handler)
+	: _staticHandler(copy._staticHandler), _handlers(copy._handlers)
 {
+	_handlers["GET:/"] = &_staticHandler;
 }
 
 Router &Router::operator=(const Router &other)
 {
 	if (this != &other)
-		_handler = other._handler;
+	{
+		_staticHandler = other._staticHandler;
+		_handlers = other._handlers;
+		_handlers["GET:/"] = &_staticHandler;
+	}
 	return (*this);
 }
 
@@ -39,28 +47,82 @@ Router::~Router(void)
 {
 }
 
+static std::string makeKey(const std::string &method, const std::string &path)
+{
+	return (method + ":" + path);
+}
+
+void	Router::addHandler(const std::string &method,
+			const std::string &path, IRequestHandler *handler)
+{
+	_handlers[makeKey(method, path)] = handler;
+}
+
 void	Router::setRoot(const std::string &root)
 {
-	_handler.setRoot(root);
+	_staticHandler.setRoot(root);
 }
 
 void	Router::setIndex(const std::string &index)
 {
-	_handler.setIndex(index);
+	_staticHandler.setIndex(index);
 }
 
 const std::string &Router::getRoot(void) const
 {
-	return (_handler.getRoot());
+	return (_staticHandler.getRoot());
+}
+
+IRequestHandler *Router::resolveHandler(const std::string &method,
+		const std::string &uri)
+{
+	std::string bestKey;
+	std::string bestPath;
+
+	for (std::map<std::string, IRequestHandler*>::iterator it =
+			_handlers.begin(); it != _handlers.end(); ++it)
+	{
+		const std::string &key = it->first;
+
+		size_t colonPos = key.find(':');
+		if (colonPos == std::string::npos)
+			continue;
+
+		std::string keyMethod = key.substr(0, colonPos);
+		std::string keyPath = key.substr(colonPos + 1);
+
+		if (keyMethod != method)
+			continue;
+
+		if (uri.compare(0, keyPath.size(), keyPath) == 0
+				&& keyPath.size() > bestPath.size())
+		{
+			bestKey = key;
+			bestPath = keyPath;
+		}
+	}
+
+	if (!bestKey.empty())
+		return (_handlers[bestKey]);
+	return (NULL);
 }
 
 bool	Router::route(const HttpRequest &request,
 				std::string &response)
 {
-	if (request.getMethod() == "GET")
-		return (_handler.handleGet(request, response));
+	IRequestHandler *handler = resolveHandler(
+			request.getMethod(), request.getUri());
 
-	response = _handler.buildResponse(501, "text/html",
-				_handler.buildErrorBody(501, ""), false);
+	if (handler == NULL)
+	{
+		response = _staticHandler.buildResponse(501, "text/html",
+					_staticHandler.buildErrorBody(501, ""), false);
+		Logger::warning("No handler for: " + request.getMethod() + " "
+				+ request.getUri());
+	}
+	else
+	{
+		handler->handle(request, response);
+	}
 	return (true);
 }

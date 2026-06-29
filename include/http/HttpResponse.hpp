@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/26 17:44:23 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 18:36:57 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,10 +19,14 @@
 class HttpResponse
 {
 	private:
+		//status line
 		std::string							_version;//protocol + version
+		//status code
+		int									_status_code;
+		//headers
 		std::map<std::string, std::string>	_headers;
+		//body
 		std::string							_body;
-		int									_status;
 
 	public:
 		HttpResponse(void);
@@ -31,22 +35,16 @@ class HttpResponse
 		~HttpResponse(void);
 
 		const std::string&	getVersion(void) const;
-		const std::map<std::string, std::string>& getHeaders(void) const;
+		int			getStatusCode(void) const;
+		const std::map<std::string,
+			std::string>&	getHeaders(void) const;
+		const std::string	getHeaderValue(const std::string &key) const;
 		const std::string&	getBody(void) const;
-		int					getStatus(void) const;
 
-		void	setVersion(const std::string &version);
-		void	addHeader(const std::string &key, const std::string &value);
-		void	setBody(const std::string &body);
-		void	setStatus(int status);		
-		void	setDefaultHeaders(void);
-		
-		std::string whatTimeIsIt(void);
-		std::string getHeader(const std::string &key) const;
-		std::string getStatusMessage(void) const;
-		std::string responseBuilder(void) const;
-		std::string getStatusLine(void) const;
-		std::string ErrorPage(void) const;
+		void				setVersion(const std::string &version);
+		void				setStatusCode(int status);
+		void				setHeaders(const std::string &key, const std::string &value);
+		void				setBody(const std::string &body);
 };
 
 #endif

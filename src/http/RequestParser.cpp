@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 17:40:25 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:01:02 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,20 +65,20 @@ std::string RequestParser::str_extract(std::string str_find, int nbr)
 }
 bool RequestParser::prs_body(void)
 {
-	size_t pos = strtoul(_request.getHeader("Content-Length").c_str(), NULL, 10);
-	if (pos == 0)
+	size_t h_size = strtoul(_request.getHeaderValue("Content-Length").c_str(), NULL, 10);
+	if (h_size == 0)
 	{
 		_psr_state = COMPLETE;
 		return true;
 	}
 	size_t b_size = _buffer.size();
-	if (pos > b_size)
+	if (h_size > b_size)
 		return false;
-	if (pos == 0)
-		return false;;
-	std::string temp = _buffer.substr(0, pos);
+	if (h_size == 0)
+		return false;
+	std::string temp = _buffer.substr(0, h_size);
 	_request.setBody(temp);
-	_buffer.erase(0, pos);
+	_buffer.erase(0, h_size);
 	_psr_state = COMPLETE;
 	return true;
 }
@@ -88,10 +88,18 @@ bool RequestParser::prs_headers(void)
 	while (_buffer.find(":") != std::string::npos)
 	{
 		std::string str_key = str_extract(":", 1);
+		if (str_key.find(" ") != std::string::npos)
+		{
+			std::cout << "Error" << std::endl;
+			_psr_state = ERROR;
+			return (false);
+		}
 		if (_buffer[0] == ' ')
 			_buffer.erase(0, 1);
 		std::string str_value = str_extract("\r\n", 2);
-		_request.addHeader(str_key, str_value);
+		if (_buffer[0] == ' ')
+			_buffer.erase(0, 1);
+		_request.setHeaders(str_key, str_value);
 	}
 	std::string str_value = str_extract("\r\n", 2);
 	if (!_request.hasHeader("Host"))
@@ -222,4 +230,3 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		_psr_state = COMPLETE;
 	}
 }
-

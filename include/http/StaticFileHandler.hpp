@@ -6,13 +6,14 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 18:38:04 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 18:36:11 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef STATIC_FILE_HANDLER_HPP
 # define STATIC_FILE_HANDLER_HPP
 
+#include "http/HttpResponse.hpp"
 #include "http/HttpRequest.hpp"
 #include <string>
 #include <sys/stat.h>
@@ -22,13 +23,18 @@
 #include <ctime>
 #include <cstdio>
 
+/*
+ * StaticFileHandler
+ *
+ * Handles GET requests by resolving the URI to a file or directory
+ * on the filesystem and filling an HttpResponse with the result.
+ */
 class StaticFileHandler
 {
 	private:
 		std::string	_root;
 		std::string	_index;
 
-		std::string	getDate(void) const;
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
@@ -45,13 +51,8 @@ class StaticFileHandler
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
 
-		// Parse a raw HTTP GET request buffer and produce an HTTP response string.
-		// Returns true if request was well-formed enough to produce *some* response.
-		bool				handleGet(const HttpRequest &request,
-								std::string &response);
-		std::string	buildResponse(int status, const std::string &contentType,
-		const std::string &body, bool keepAlive) const;
-		std::string	buildErrorBody(int status, const std::string &statusMsg) const;
+		
+		HttpResponse handleGet(const HttpRequest &request);
 };
 
 #endif

@@ -41,7 +41,6 @@ class HttpResponse
 		void	setStatus(int status);		
 		void	setDefaultHeaders(void);
 		
-		std::string whatTimeIsIt(void);
 		std::string getHeader(const std::string &key) const;
 		std::string getStatusMessage(void) const;
 		std::string responseBuilder(void) const;

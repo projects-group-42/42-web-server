@@ -3,16 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/26 18:40:18 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 16:38:12 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "http/StaticFileHandler.hpp"
 #include "http/MimeType.hpp"
 #include "http/HttpResponse.hpp"
+#include "utils/Utils.hpp"
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html")
@@ -61,18 +62,6 @@ const std::string &StaticFileHandler::getRoot(void) const
 /*
  * Simple HTTP-date string for the Date header.
  */
-std::string StaticFileHandler::getDate(void) const
-{
-	char		buf[64];
-	std::time_t	now = std::time(NULL);
-	std::tm		*gmt = std::gmtime(&now);
-
-	if (!gmt)
-		return ("");
-	std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S %Z", gmt);
-	return (std::string(buf));
-}
-
 std::string StaticFileHandler::buildResponse(int status, const std::string &contentType,
 		const std::string &body, bool keepAlive) const
 {
@@ -83,7 +72,7 @@ std::string StaticFileHandler::buildResponse(int status, const std::string &cont
 		 << respModel.getStatusMessage() << "\r\n";
 	resp << "Content-Length: " << body.size() << "\r\n";
 	resp << "Content-Type: " << contentType << "\r\n";
-	resp << "Date: " << getDate() << "\r\n";
+	resp << "Date: " << getHttpDate() << "\r\n";
 	resp << "Server: webserv/1.0\r\n";
 	resp << "Connection: " << (keepAlive ? "keep-alive" : "close") << "\r\n";
 	resp << "\r\n";

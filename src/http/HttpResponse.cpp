@@ -118,17 +118,9 @@ std::string HttpResponse::getStatusMessage(void) const
 	}
 }
 
-std::string HttpResponse::whatTimeIsIt(void)
-{
-	time_t now = time(NULL);
-	struct tm* timeinfo = gmtime(&now);
-	char buffer[100];
-	strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", timeinfo);
-	return (buffer);
-}
 void HttpResponse::setDefaultHeaders(void)
 {
-	std::string date = whatTimeIsIt();
+	std::string date = getHttpDate();
 	std::ostringstream oss;
 
 	if (_body.empty())

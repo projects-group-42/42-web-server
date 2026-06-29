@@ -11,7 +11,7 @@
 /* ************************************************************************** */
 
 # include "http/RequestParser.hpp"
-# include <iostream>
+# include "utils/Logger.hpp"
 
 RequestParser::RequestParser(void)
 	: _buffer(""), _len(0), _psr_state(REQUEST_LINE)
@@ -96,7 +96,7 @@ bool RequestParser::prs_headers(void)
 	std::string str_value = str_extract("\r\n", 2);
 	if (!_request.hasHeader("Host"))
 	{
-		std::cout << "Error" << std::endl;
+		Logger::error("Request missing Host header");
 		_psr_state = ERROR;
 		return (false);
 	}
@@ -200,14 +200,14 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		}
 		if(!prs_method())
 		{
-			std::cout << "Error" << std::endl;
+			Logger::error("RequestParser: invalid request line");
 			_psr_state = ERROR;
 			return;
 		}
 		_psr_state = HEADERS;
 		if(!prs_headers())
 		{
-			std::cout << "Error" << std::endl;
+			Logger::error("RequestParser: invalid headers");
 			_psr_state = ERROR;
 			return;
 		}

@@ -6,28 +6,29 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:34:19 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:56:45 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "http/Router.hpp"
 #include "http/HttpResponse.hpp"
+# include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 
 Router::Router(void)
-	: _staticHandler("www")
+	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
 }
 
 Router::Router(const std::string &root)
-	: _staticHandler(root)
+	: _staticHandler(root), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
 }
 
 Router::Router(const Router &copy)
-	: _staticHandler(copy._staticHandler), _handlers(copy._handlers)
+	: _staticHandler(copy._staticHandler), _handlers(copy._handlers), _responseBuilder(copy._responseBuilder)
 {
 	_handlers["GET:/"] = &_staticHandler;
 }
@@ -38,6 +39,7 @@ Router &Router::operator=(const Router &other)
 	{
 		_staticHandler = other._staticHandler;
 		_handlers = other._handlers;
+		_responseBuilder = other._responseBuilder;
 		_handlers["GET:/"] = &_staticHandler;
 	}
 	return (*this);
@@ -115,8 +117,8 @@ bool	Router::route(const HttpRequest &request,
 
 	if (handler == NULL)
 	{
-		response = _staticHandler.buildResponse(501, "text/html",
-					_staticHandler.buildErrorBody(501, ""), false);
+		response.setStatusCode(501);
+		response.setBody("");
 		Logger::warning("No handler for: " + request.getMethod() + " "
 				+ request.getUri());
 	}

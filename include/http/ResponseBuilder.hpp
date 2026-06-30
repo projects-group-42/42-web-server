@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 21:21:07 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:52:49 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,6 +42,7 @@ class ResponseBuilder
 	public:
 		ResponseBuilder(void);
 		ResponseBuilder(const std::string &serverName, bool keepAlive);
+		ResponseBuilder(const ResponseBuilder &copy);
 		ResponseBuilder& operator=(const ResponseBuilder &other);
 		~ResponseBuilder(void);
 

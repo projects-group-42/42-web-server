@@ -3,14 +3,15 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.cpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/26 18:43:46 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 22:00:06 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "server/EventLoop.hpp"
+#include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
 
@@ -87,10 +88,13 @@ bool EventLoop::handleClient(int fd)
 void EventLoop::handleRequest(int fd)
 {
 	Connection	&conn = _clients[fd];
-	std::string	response;
+	HttpResponse		response;
 
 	_router.route(conn.getRequest(), response);
-	conn.set_write_buffer(response);
+
+	ResponseBuilder builder;
+	std::string serialized = builder.builder(conn.getRequest(), response);
+	conn.set_write_buffer(serialized);
 
 	// Switch this fd to POLLOUT so we can send the response
 	for (size_t i = 0; i < _fds.size(); i++)

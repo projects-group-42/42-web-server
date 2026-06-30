@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:14:02 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:54:14 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,12 +18,15 @@
 # include "http/IRequestHandler.hpp"
 # include "http/StaticFileHandler.hpp"
 # include "http/HttpRequest.hpp"
+# include "http/HttpResponse.hpp"
+# include "http/ResponseBuilder.hpp"
 
 class Router
 {
 	private:
 		StaticFileHandler						_staticHandler;
 		std::map<std::string, IRequestHandler*>	_handlers;
+		ResponseBuilder							_responseBuilder;
 
 		IRequestHandler	*resolveHandler(const std::string &method,
 				const std::string &uri);
@@ -36,7 +39,7 @@ class Router
 		~Router(void);
 
 		bool	route(const HttpRequest &request,
-					std::string &response);
+					HttpResponse &response);
 
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);

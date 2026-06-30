@@ -44,6 +44,9 @@ class Router
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);
 
+		void	addHandler(const std::string &method,
+					const std::string &path, IRequestHandler *handler);
+
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;

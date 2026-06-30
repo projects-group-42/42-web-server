@@ -51,9 +51,8 @@ class StaticFileHandler : public IRequestHandler
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
 
-		
 		bool				handle(const HttpRequest &request,
-								HttpResponse &response);
+								  HttpResponse &response);
 };
 
 #endif

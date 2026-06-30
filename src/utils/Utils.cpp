@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/01 17:05:24 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/12 22:30:25 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:26:44 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,4 +32,13 @@ std::string toLower(const std::string &str)
 	for (size_t i = 0; i < result.size(); i++)
 		result[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(result[i])));
 	return result;
+}
+
+std::string getHttpDate(void)
+{
+	time_t		now = time(NULL);
+	struct tm	*gmt = std::gmtime(&now);
+	char		buf[100];
+	std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmt);
+	return (std::string(buf));
 }

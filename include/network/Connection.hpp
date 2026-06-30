@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Connection.hpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:20:37 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/26 18:28:04 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:16:29 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,6 @@ class Connection
 {
 	private:
 		int				_client_fd;
-		std::string		_read_buffer;
 		std::string		_write_buffer;
 		time_t			_time;
 		RequestParser	_parser;
@@ -40,7 +39,6 @@ class Connection
 		void				set_write_buffer(const std::string &data);
 		void				reset_write_buffer(void);
 		double				last_activity(void) const;
-		const std::string&	get_read_buffer(void) const;
 		t_psr_state			get_psr_state(void) const;
 		const HttpRequest&	getRequest(void) const;
 };

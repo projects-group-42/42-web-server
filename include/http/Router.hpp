@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 15:19:16 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:14:02 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,13 +14,19 @@
 # define ROUTER_HPP
 
 # include <string>
+# include <map>
+# include "http/IRequestHandler.hpp"
 # include "http/StaticFileHandler.hpp"
 # include "http/HttpRequest.hpp"
 
 class Router
 {
 	private:
-		StaticFileHandler	_handler;
+		StaticFileHandler						_staticHandler;
+		std::map<std::string, IRequestHandler*>	_handlers;
+
+		IRequestHandler	*resolveHandler(const std::string &method,
+				const std::string &uri);
 
 	public:
 		Router(void);
@@ -32,9 +38,12 @@ class Router
 		bool	route(const HttpRequest &request,
 					std::string &response);
 
+		void	addHandler(const std::string &method,
+					const std::string &path, IRequestHandler *handler);
+
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
 };
-//RECEBE HTTP REQUEST E DEVOLVE HTTP RESPONSER STD::STRING &RESPONSE 
+
 #endif

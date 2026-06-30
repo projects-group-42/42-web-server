@@ -3,16 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   ResponseBuilder.hpp                                :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 18:21:20 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:21:07 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef RESPONSEBUILDER_HPP
 # define RESPONSEBUILDER_HPP
 
+# include "utils/Utils.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/HttpRequest.hpp"
 
@@ -35,7 +36,6 @@ class ResponseBuilder
 		std::string getStatusMessage(int status) const;
 		std::string getStatusLine(const HttpRequest 
 			&request, const HttpResponse &response) const;
-		std::string	whatTimeIsIt(void )const;
 		void		setDefaultHeaders(HttpResponse &response) const;
 		std::string	ErrorPage(int status) const;
 

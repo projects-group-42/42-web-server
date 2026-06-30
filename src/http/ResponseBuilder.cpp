@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ResponseBuilder.cpp                                :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:36:33 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 18:29:23 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:22:25 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -89,22 +89,12 @@ std::string ResponseBuilder::getStatusLine(
 	return (status_line);
 }
 
-std::string ResponseBuilder::whatTimeIsIt(void) const
-{
-	char		buffer[100];
-	time_t		now = time(NULL);
-	struct tm*	timeinfo = gmtime(&now);
-
-	strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", timeinfo);
-	return (std::string(buffer));
-}
-
 void ResponseBuilder::setDefaultHeaders(HttpResponse &response) const
 {
 	std::ostringstream	b_size;
 	b_size << response.getBody().size();
 	
-	response.setHeaders("date", whatTimeIsIt());
+	response.setHeaders("date", getHttpDate());
 	response.setHeaders("server", _server_name);
 	response.setHeaders("content-length", b_size.str());
 	response.setHeaders("connection", _keep_alive ? "keep-alive" : "close");

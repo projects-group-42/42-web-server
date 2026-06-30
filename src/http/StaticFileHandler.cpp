@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 18:35:52 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:31:35 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -101,22 +101,22 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
  * Main entry-point.
  * Parse the raw request, resolve the path, serve the file, build the HTTP response.
  */
-HttpResponse StaticFileHandler::handleGet(const HttpRequest &request)
+bool StaticFileHandler::handle(const HttpRequest &request,
+		HttpResponse &response)
 {
-	HttpResponse	response;
 	std::string		resolvedPath = _root + request.getUri();
 
 	if (resolvedPath.find("..") != std::string::npos)
 	{
 		response.setStatusCode(403);
-		return (response);
+		return (true);
 	}
 
 	struct stat	pathStat;
 	if (stat(resolvedPath.c_str(), &pathStat) != 0)
 	{
 		response.setStatusCode(404);
-		return (response);
+		return (true);
 	}
 
 	std::string	body;
@@ -133,5 +133,5 @@ HttpResponse StaticFileHandler::handleGet(const HttpRequest &request)
 	response.setStatusCode(status);
 	response.setBody(body);
 	response.setHeaders("content-type", contentType);
-	return (response);
+	return (true);
 }

@@ -3,16 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 18:36:11 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 21:31:09 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef STATIC_FILE_HANDLER_HPP
 # define STATIC_FILE_HANDLER_HPP
 
+#include "http/IRequestHandler.hpp"
 #include "http/HttpResponse.hpp"
 #include "http/HttpRequest.hpp"
 #include <string>
@@ -20,7 +21,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sstream>
-#include <ctime>
 #include <cstdio>
 
 /*
@@ -29,7 +29,7 @@
  * Handles GET requests by resolving the URI to a file or directory
  * on the filesystem and filling an HttpResponse with the result.
  */
-class StaticFileHandler
+class StaticFileHandler : public IRequestHandler
 {
 	private:
 		std::string	_root;
@@ -52,7 +52,8 @@ class StaticFileHandler
 		const std::string	&getRoot(void) const;
 
 		
-		HttpResponse handleGet(const HttpRequest &request);
+		bool				handle(const HttpRequest &request,
+								HttpResponse &response);
 };
 
 #endif

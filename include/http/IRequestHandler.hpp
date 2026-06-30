@@ -1,23 +1,29 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Utils.hpp                                          :+:      :+:    :+:   */
+/*   IRequestHandler.hpp                                :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/06/01 17:03:24 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 21:26:32 by dajesus-         ###   ########.fr       */
+/*   Created: 2026/06/29 16:22:14 by dajesus-          #+#    #+#             */
+/*   Updated: 2026/06/29 21:32:42 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef UTILS_HPP
-#define UTILS_HPP
+#ifndef IREQUEST_HANDLER_HPP
+# define IREQUEST_HANDLER_HPP
 
 # include <string>
-# include <ctime>
 
-void		setNonBlocking(int fd);
-std::string	toLower(const std::string &str);
-std::string	getHttpDate(void);
+class HttpRequest;
+class HttpResponse;
+
+class IRequestHandler
+{
+public:
+	virtual ~IRequestHandler() {}
+	virtual bool handle(const HttpRequest &request,
+			HttpResponse &response) = 0;
+};
 
 #endif

@@ -3,15 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   RequestParser.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 16:01:02 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/06/29 22:27:52 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "http/RequestParser.hpp"
 # include "utils/Logger.hpp"
+# include <iostream>
 
 RequestParser::RequestParser(void)
 	: _buffer(""), _len(0), _psr_state(REQUEST_LINE)

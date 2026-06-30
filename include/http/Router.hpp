@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:54:14 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/06/29 22:23:50 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,9 +40,6 @@ class Router
 
 		bool	route(const HttpRequest &request,
 					HttpResponse &response);
-
-		void	addHandler(const std::string &method,
-					const std::string &path, IRequestHandler *handler);
 
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);

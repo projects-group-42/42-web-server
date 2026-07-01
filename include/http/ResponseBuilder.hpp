@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 21:52:49 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:14 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -48,6 +48,7 @@ class ResponseBuilder
 
 		std::string	builder(const HttpRequest &request, HttpResponse &response)
 	;
+		std::string	buildErrorResponse(int status_code) const;
 };
 
 #endif

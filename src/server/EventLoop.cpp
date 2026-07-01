@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 22:00:06 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:39:58 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -75,14 +75,38 @@ bool EventLoop::handleClient(int fd)
 	if (n > 0)
 	{
 		Logger::info("Data received from client.");
-		// Check if we have a complete HTTP request (headers terminated)
 		if (_clients[fd].get_psr_state() == COMPLETE)
 			handleRequest(fd);
+		else if (_clients[fd].get_psr_state() == ERROR)
+			handleParseError(fd);
 		return true;
 	}
 	if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return true;
 	return false;
+}
+
+void EventLoop::handleParseError(int fd)
+{
+	Connection		&conn = _clients[fd];
+	ResponseBuilder	builder;
+
+	int error_code = conn.get_error_code();
+	if (error_code == 0)
+		error_code = 400;
+
+	std::string serialized = builder.buildErrorResponse(error_code);
+	conn.set_write_buffer(serialized);
+
+	// Switch this fd to POLLOUT so we can send the error response
+	for (size_t i = 0; i < _fds.size(); i++)
+	{
+		if (_fds[i].fd == fd)
+		{
+			_fds[i].events = POLLOUT;
+			break;
+		}
+	}
 }
 
 void EventLoop::handleRequest(int fd)

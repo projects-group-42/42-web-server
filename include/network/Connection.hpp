@@ -25,6 +25,7 @@ class Connection
 		std::string		_write_buffer;
 		time_t			_time;
 		RequestParser	_parser;
+		bool			_keep_alive;
 
 	public:
 		Connection(void);
@@ -38,6 +39,9 @@ class Connection
 		bool				has_data_to_send(void) const;
 		void				set_write_buffer(const std::string &data);
 		void				reset_write_buffer(void);
+		void				set_keep_alive(bool keep_alive);
+		bool				get_keep_alive(void) const;
+		void				reset_for_next_request(void);
 		double				last_activity(void) const;
 		t_psr_state			get_psr_state(void) const;
 		const HttpRequest&	getRequest(void) const;

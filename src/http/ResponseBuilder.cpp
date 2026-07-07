@@ -45,6 +45,11 @@ ResponseBuilder::~ResponseBuilder(void)
 {
 }
 
+void	ResponseBuilder::setKeepAlive(bool keepAlive)
+{
+	_keep_alive = keepAlive;
+}
+
 std::string ResponseBuilder::getStatusMessage(int status) const
 {
 	switch(status)

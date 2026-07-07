@@ -37,8 +37,17 @@ RequestParser& RequestParser::operator=(const RequestParser &other)
 		_buffer = other._buffer;
 		_len = other._len;
 		_psr_state = other._psr_state;
+		_request = other._request;
 	}
 	return (*this);
+}
+
+void RequestParser::reset(void)
+{
+	_request = HttpRequest();
+	_psr_state = REQUEST_LINE;
+	if (!_buffer.empty())
+		feed("", 0);
 }
 
 RequestParser::~RequestParser(void)

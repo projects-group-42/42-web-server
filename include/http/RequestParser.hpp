@@ -43,6 +43,7 @@ class RequestParser
 		~RequestParser(void);
 
 		void feed(const char *buffer, ssize_t bytes_read);
+		void reset(void);
 		t_psr_state	get_psr_state(void) const;
 		std::string str_extract(std::string str_find, int nbr);
 		bool prs_method(void);

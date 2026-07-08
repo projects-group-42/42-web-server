@@ -12,6 +12,7 @@ SRC_FILES	= main.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
 			  http/StaticFileHandler.cpp \
+			  http/PostHandler.cpp \
 			  http/Router.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 

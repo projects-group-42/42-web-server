@@ -112,13 +112,29 @@ void EventLoop::handleParseError(int fd)
 void EventLoop::handleRequest(int fd)
 {
 	Connection	&conn = _clients[fd];
-	HttpResponse		response;
+	ResponseBuilder	builder;
 
-	_router.route(conn.getRequest(), response);
+	try
+	{
+		HttpResponse		response;
 
-	ResponseBuilder builder;
-	std::string serialized = builder.builder(conn.getRequest(), response);
-	conn.set_write_buffer(serialized);
+		_router.route(conn.getRequest(), response);
+
+		std::string serialized = builder.builder(conn.getRequest(), response);
+		conn.set_write_buffer(serialized);
+	}
+	catch (std::exception &e)
+	{
+		Logger::error(std::string("Internal Server Error: ") + e.what());
+		std::string serialized = builder.buildErrorResponse(500);
+		conn.set_write_buffer(serialized);
+	}
+	catch (...)
+	{
+		Logger::error("Internal Server Error: unknown exception");
+		std::string serialized = builder.buildErrorResponse(500);
+		conn.set_write_buffer(serialized);
+	}
 
 	// Switch this fd to POLLOUT so we can send the response
 	for (size_t i = 0; i < _fds.size(); i++)

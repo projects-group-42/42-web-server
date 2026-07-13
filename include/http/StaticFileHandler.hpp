@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:31:09 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/13 15:51:18 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -53,6 +53,8 @@ class StaticFileHandler : public IRequestHandler
 
 		bool				handle(const HttpRequest &request,
 								  HttpResponse &response);
+		std::string			rslv_req_realpath(const std::string &uri);
+
 };
 
 #endif

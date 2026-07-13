@@ -1,0 +1,210 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+class HttpRequest {
+    - std::string _method
+    - std::string _uri
+    - std::string _query
+    - std::string _version
+    - std::map<std::string, std::string> _headers
+    - std::string _body
+    + HttpRequest()
+    + HttpRequest(const HttpRequest &)
+    + HttpRequest& operator=(const HttpRequest &)
+    + ~HttpRequest()
+    + getMethod() : const std::string&
+    + getUri() : const std::string&
+    + getQuery() : const std::string&
+    + getVersion() : const std::string&
+    + getHeaders() : const std::map<std::string, std::string>&
+    + getHeaderValue(const std::string&) : const std::string
+    + getBody() : const std::string&
+    + setMethod(const std::string&)
+    + setUri(const std::string&)
+    + setQuery(const std::string&)
+    + setVersion(const std::string&)
+    + setHeaders(const std::string&, const std::string&)
+    + setBody(const std::string&)
+    + hasHeader(const std::string&) : bool
+}
+
+class HttpResponse {
+    - std::string _version
+    - int _status_code
+    - std::map<std::string, std::string> _headers
+    - std::string _body
+    + HttpResponse()
+    + HttpResponse(const HttpResponse &)
+    + HttpResponse& operator=(const HttpResponse &)
+    + ~HttpResponse()
+    + getVersion() : const std::string&
+    + getStatusCode() : int
+    + getHeaders() : const std::map<std::string, std::string>&
+    + getHeaderValue(const std::string&) : const std::string
+    + getBody() : const std::string&
+    + setVersion(const std::string&)
+    + setStatusCode(int)
+    + setHeaders(const std::string&, const std::string&)
+    + setBody(const std::string&)
+}
+
+class IRequestHandler {
+    + ~IRequestHandler()
+    + handle(const HttpRequest&, HttpResponse&) : bool
+}
+
+class StaticFileHandler {
+    - std::string _root
+    - std::string _index
+    - serveRegularFile(const std::string&, std::string&, std::string&) : int
+    - serveDirectory(const std::string&, std::string&, std::string&) : int
+    + StaticFileHandler()
+    + StaticFileHandler(const std::string&)
+    + StaticFileHandler(const StaticFileHandler &)
+    + operator=(const StaticFileHandler &) : StaticFileHandler&
+    + ~StaticFileHandler()
+    + setRoot(const std::string&)
+    + setIndex(const std::string&)
+    + getRoot() : const std::string&
+    + handle(const HttpRequest&, HttpResponse&) : bool
+}
+
+class Router {
+    - StaticFileHandler _staticHandler
+    - std::map<std::string, IRequestHandler*> _handlers
+    - ResponseBuilder _responseBuilder
+    - resolveHandler(const std::string&, const std::string&) : IRequestHandler*
+    + Router()
+    + Router(const std::string&)
+    + Router(const Router &)
+    + operator=(const Router &) : Router&
+    + ~Router()
+    + route(const HttpRequest&, HttpResponse&) : bool
+    + addHandler(const std::string&, const std::string&, IRequestHandler*)
+    + setRoot(const std::string&)
+    + setIndex(const std::string&)
+    + getRoot() : const std::string&
+}
+
+class RequestParser {
+    - std::string _buffer
+    - ssize_t _len
+    - t_psr_state _psr_state
+    - HttpRequest _request
+    - int _error_code
+    - setErrorState(int)
+    - isValidVersion(const std::string&) : bool
+    + RequestParser()
+    + RequestParser(std::string, ssize_t)
+    + RequestParser(const RequestParser &)
+    + operator=(const RequestParser &) : RequestParser&
+    + ~RequestParser()
+    + feed(const char*, ssize_t)
+    + get_psr_state() : t_psr_state
+    + get_error_code() : int
+    + str_extract(std::string, int) : std::string
+    + prs_method() : bool
+    + prs_headers() : bool
+    + prs_body() : bool
+    + getRequest() : const HttpRequest&
+    + percent_decoding(std::string) : std::string
+}
+
+class ResponseBuilder {
+    - std::string _server_name
+    - bool _keep_alive
+    - getStatusMessage(int) : std::string
+    - getStatusLine(const HttpRequest&, const HttpResponse&) : std::string
+    - setDefaultHeaders(HttpResponse&) : void
+    - ErrorPage(int) : std::string
+    + ResponseBuilder()
+    + ResponseBuilder(const std::string&, bool)
+    + ResponseBuilder(const ResponseBuilder &)
+    + operator=(const ResponseBuilder &) : ResponseBuilder&
+    + ~ResponseBuilder()
+    + builder(const HttpRequest&, HttpResponse&) : std::string
+    + buildErrorResponse(int) : std::string
+}
+
+class Connection {
+    - int _client_fd
+    - std::string _write_buffer
+    - time_t _time
+    - RequestParser _parser
+    + Connection()
+    + Connection(int)
+    + Connection(const Connection &)
+    + operator=(const Connection &) : Connection&
+    + ~Connection()
+    + receive_data() : ssize_t
+    + send_data() : ssize_t
+    + has_data_to_send() : bool
+    + set_write_buffer(const std::string&)
+    + reset_write_buffer() : void
+    + last_activity() : double
+    + get_psr_state() : t_psr_state
+    + get_error_code() : int
+    + getRequest() : const HttpRequest&
+}
+
+class Socket {
+    - int _fd
+    + Socket()
+    + ~Socket()
+    + create() : void
+    + bind(const std::string&, int) : void
+    + listen(int) : void
+    + getFd() : int
+}
+
+class EventLoop {
+    - Socket* _sckt
+    - std::vector<pollfd> _fds
+    - std::map<int, Connection> _clients
+    - Router _router
+    - acceptClients() : void
+    - handleClient(int) : bool
+    - handleParseError(int) : void
+    - handleRequest(int) : void
+    - handleSend(int) : bool
+    + EventLoop()
+    + EventLoop(Socket*)
+    + EventLoop(const EventLoop &)
+    + ~EventLoop()
+    + operator=(const EventLoop &) : EventLoop&
+    + run() : void
+}
+
+class Logger <<utility>> {
+    + info(const std::string&) : void
+    + warning(const std::string&) : void
+    + error(const std::string&) : void
+}
+
+class Utils <<utility>> {
+    + setNonBlocking(int) : void
+    + toLower(const std::string&) : std::string
+    + getHttpDate() : std::string
+}
+
+class MimeType <<utility>> {
+    + mimeType_resolve(const std::string&) : std::string
+}
+
+IRequestHandler <|-- StaticFileHandler
+Router --> StaticFileHandler
+Router --> ResponseBuilder
+Router --> IRequestHandler
+EventLoop --> Socket
+EventLoop --> Connection
+EventLoop --> Router
+Connection --> RequestParser
+RequestParser --> HttpRequest
+ResponseBuilder ..> HttpRequest
+ResponseBuilder ..> HttpResponse
+StaticFileHandler ..> HttpRequest
+StaticFileHandler ..> HttpResponse
+IRequestHandler ..> HttpRequest
+IRequestHandler ..> HttpResponse
+
+@enduml

@@ -6,13 +6,12 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/02 15:36:13 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/13 17:14:54 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "http/StaticFileHandler.hpp"
 #include "http/MimeType.hpp"
-#include <filesystem>
 #include <limits.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -101,74 +100,31 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
 		return (serveRegularFile(indexPath, body, contentType));
 	return (404);
 }
-
-bool resolve_request_path_realpath(const std::string &root,
-	const std::string &uri,std::string &out_resolved, int &out_status)
+std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 {
-	// build combined path
-	std::string combined = root;
-	if (combined.empty() || combined[combined.size()-1] != '/')
-		combined += '/';
-	std::string path = uri;
-	if (!path.empty() && path[0] == '/')
-		path = path.substr(1);
-	combined += path;
+	std::string	path = _root + '/' + uri;
+	size_t pos_above;
+	size_t pos_actual;
 
-	// canonicalize root
-	char root_real[PATH_MAX];
-	if (realpath(root.c_str(), root_real) == NULL) {
-		out_status = 500; // internal error resolving root
-		return false;
-	}
-
-	// try canonicalize target
-	char target_real[PATH_MAX];
-	if (realpath(combined.c_str(), target_real) != NULL) {
-		out_resolved = std::string(target_real);
-	} else {
-		if (errno != ENOENT) {
-			out_status = 403; // other error -> forbid
-			return false;
-		}
-		// target doesn't exist: canonicalize parent and append basename
-		std::string parent = combined;
-		std::string basename;
-		size_t pos = parent.rfind('/');
-		if (pos == std::string::npos) {
-			parent = ".";
-			basename = combined;
-		} else {
-			basename = parent.substr(pos + 1);
-			parent = parent.substr(0, pos);
-			if (parent.empty()) parent = "/";
-		}
-
-		char parent_real[PATH_MAX];
-		if (realpath(parent.c_str(), parent_real) == NULL) {
-			out_status = 403; // cannot resolve parent -> forbid
-			return false;
-		}
-		out_resolved = std::string(parent_real);
-		if (out_resolved[out_resolved.size() - 1] != '/')
-			out_resolved += '/';
-		out_resolved += basename;
-	}
-
-	// normalize root string for prefix check (no trailing slash unless root == "/")
-	std::string rootStr(root_real);
-	if (rootStr.size() > 1 && rootStr[rootStr.size() - 1] == '/')
-		rootStr.erase(rootStr.size() - 1);
-
-	// ensure containment: out_resolved must be inside rootStr
-	if (out_resolved.compare(0, rootStr.size(), rootStr) != 0 ||
-		(out_resolved.size() > rootStr.size() && out_resolved[rootStr.size()] != '/'))
+	while (( pos_above = path.find("/..")) != std::string::npos)
 	{
-		out_status = 403;
-		return false;
+		size_t subpos = path.rfind("/", pos_above -1);
+		if (subpos != std::string::npos)
+		{
+			path.erase(subpos, pos_above + 3 -subpos);
+		}
+		else
+		{
+			path = path.substr(pos_above + 3);
+		}
 	}
-
-	out_status = 200;
-	return true;
+	while ((pos_actual= path.find("/.")) != std::string::npos)
+	{
+		path = path.erase(pos_actual, 2);
+	}
+	if (path.compare(0, _root.size(), _root) != 0)
+		return ("");
+	return (path);
 }
 
 /*
@@ -178,29 +134,30 @@ bool resolve_request_path_realpath(const std::string &root,
 bool StaticFileHandler::handle(const HttpRequest &request,
 		HttpResponse &response)
 {
-	std::string	resolvedPath ;
+	std::string	resolved_path ;
 	int			status;
 
-	if (!resolve_request_path_realpath(_root, request.getUri(), resolvedPath, status))
+	resolved_path = rslv_req_realpath(request.getUri());
+	if (resolved_path == "")
 	{
-		response.setStatusCode(status);
+		response.setStatusCode(403);
 		return true;
 	}
 
 	struct stat	pathStat;
-	if (stat(resolvedPath.c_str(), &pathStat) != 0)
+	if (stat(resolved_path.c_str(), &pathStat) != 0)
 	{
 		response.setStatusCode(404);
 		return (true);
 	}
-
+	
 	std::string	body;
 	std::string	contentType;
 
 	if (S_ISREG(pathStat.st_mode))
-		status = serveRegularFile(resolvedPath, body, contentType);
+		status = serveRegularFile(resolved_path, body, contentType);
 	else if (S_ISDIR(pathStat.st_mode))
-		status = serveDirectory(resolvedPath, body, contentType);
+		status = serveDirectory(resolved_path, body, contentType);
 	else
 		status = 403;
 

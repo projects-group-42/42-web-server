@@ -26,8 +26,9 @@
 /*
  * StaticFileHandler
  *
- * Handles GET requests by resolving the URI to a file or directory
- * on the filesystem and filling an HttpResponse with the result.
+ * Serves a filesystem resource under the document root. GET reads the
+ * target file or directory index, POST writes the request body to the
+ * target file, and DELETE removes the target file.
  */
 class StaticFileHandler : public IRequestHandler
 {
@@ -41,6 +42,26 @@ class StaticFileHandler : public IRequestHandler
 						std::string &body, std::string &contentType);
 		std::string	rslv_req_realpath(const std::string &uri);
 
+	protected:
+		/*
+		 * Serves the resource resolved from the URI as the response body.
+		 */
+		bool				handleGet(const HttpRequest &request,
+								  HttpResponse &response);
+
+		/*
+		 * Writes the request body to the file resolved from the URI.
+		 * Returns 201 if the file was created, 200 if it was overwritten.
+		 */
+		bool				handlePost(const HttpRequest &request,
+								  HttpResponse &response);
+
+		/*
+		 * Removes the file resolved from the URI. Returns 200 on success.
+		 */
+		bool				handleDelete(const HttpRequest &request,
+								  HttpResponse &response);
+
 	public:
 		StaticFileHandler(void);
 		explicit StaticFileHandler(const std::string &root);
@@ -51,9 +72,6 @@ class StaticFileHandler : public IRequestHandler
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
-
-		bool				handle(const HttpRequest &request,
-								  HttpResponse &response);
 };
 
 #endif

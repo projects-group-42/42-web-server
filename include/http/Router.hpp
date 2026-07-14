@@ -17,7 +17,6 @@
 # include <map>
 # include "http/IRequestHandler.hpp"
 # include "http/StaticFileHandler.hpp"
-# include "http/PostHandler.hpp"
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/ResponseBuilder.hpp"
@@ -26,7 +25,6 @@ class Router
 {
 	private:
 		StaticFileHandler						_staticHandler;
-		PostHandler								_postHandler;
 		std::map<std::string, IRequestHandler*>	_handlers;
 		ResponseBuilder							_responseBuilder;
 

@@ -15,6 +15,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <vector>
+#include <cerrno>
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html")
@@ -159,10 +160,11 @@ std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 }
 
 /*
- * Main entry-point.
- * Parse the raw request, resolve the path, serve the file, build the HTTP response.
+ * Serves the resource resolved from the URI as the response body.
+ * Resolves the path, serves the file or directory index, and fills
+ * the HttpResponse with the result.
  */
-bool StaticFileHandler::handle(const HttpRequest &request,
+bool StaticFileHandler::handleGet(const HttpRequest &request,
 		HttpResponse &response)
 {
 	std::string		resolvedPath = rslv_req_realpath(request.getUri());
@@ -194,5 +196,99 @@ bool StaticFileHandler::handle(const HttpRequest &request,
 	response.setStatusCode(status);
 	response.setBody(body);
 	response.setHeaders("content-type", contentType);
+	return (true);
+}
+
+/*
+ * Writes the request body to the file resolved from the URI.
+ * Returns 201 if the file was created, 200 if it was overwritten.
+ */
+bool StaticFileHandler::handlePost(const HttpRequest &request,
+		HttpResponse &response)
+{
+	std::string	resolvedPath = rslv_req_realpath(request.getUri());
+
+	if (resolvedPath.empty())
+	{
+		response.setStatusCode(403);
+		return (true);
+	}
+
+	struct stat	pathStat;
+	bool		exists = (stat(resolvedPath.c_str(), &pathStat) == 0);
+
+	if (exists && S_ISDIR(pathStat.st_mode))
+	{
+		response.setStatusCode(400);
+		return (true);
+	}
+
+	int	fd = open(resolvedPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd == -1)
+	{
+		if (errno == EACCES)
+			response.setStatusCode(403);
+		else if (errno == ENOENT)
+			response.setStatusCode(404);
+		else
+			response.setStatusCode(500);
+		return (true);
+	}
+
+	const std::string	&body = request.getBody();
+	ssize_t				written = write(fd, body.c_str(), body.size());
+	close(fd);
+
+	if (written == -1 || static_cast<size_t>(written) != body.size())
+	{
+		response.setStatusCode(500);
+		return (true);
+	}
+
+	response.setStatusCode(exists ? 200 : 201);
+	return (true);
+}
+
+/*
+ * Removes the file resolved from the URI. Returns 200 on success,
+ * 404 when the target is missing, 403 when it is a directory or the
+ * removal is denied, and 500 on other failures.
+ */
+bool StaticFileHandler::handleDelete(const HttpRequest &request,
+		HttpResponse &response)
+{
+	std::string	resolvedPath = rslv_req_realpath(request.getUri());
+
+	if (resolvedPath.empty())
+	{
+		response.setStatusCode(403);
+		return (true);
+	}
+
+	struct stat	pathStat;
+	if (stat(resolvedPath.c_str(), &pathStat) != 0)
+	{
+		response.setStatusCode(404);
+		return (true);
+	}
+
+	if (S_ISDIR(pathStat.st_mode))
+	{
+		response.setStatusCode(403);
+		return (true);
+	}
+
+	if (unlink(resolvedPath.c_str()) == -1)
+	{
+		if (errno == EACCES || errno == EPERM)
+			response.setStatusCode(403);
+		else if (errno == ENOENT)
+			response.setStatusCode(404);
+		else
+			response.setStatusCode(500);
+		return (true);
+	}
+
+	response.setStatusCode(200);
 	return (true);
 }

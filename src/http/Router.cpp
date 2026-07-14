@@ -16,24 +16,27 @@
 #include "utils/Logger.hpp"
 
 Router::Router(void)
-	: _staticHandler("www"), _postHandler("www"), _responseBuilder("Webserv/1.0", false)
+	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
-	_handlers["POST:/"] = &_postHandler;
+	_handlers["POST:/"] = &_staticHandler;
+	_handlers["DELETE:/"] = &_staticHandler;
 }
 
 Router::Router(const std::string &root)
-	: _staticHandler(root), _postHandler(root), _responseBuilder("Webserv/1.0", false)
+	: _staticHandler(root), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
-	_handlers["POST:/"] = &_postHandler;
+	_handlers["POST:/"] = &_staticHandler;
+	_handlers["DELETE:/"] = &_staticHandler;
 }
 
 Router::Router(const Router &copy)
-	: _staticHandler(copy._staticHandler), _postHandler(copy._postHandler), _handlers(copy._handlers), _responseBuilder(copy._responseBuilder)
+	: _staticHandler(copy._staticHandler), _handlers(copy._handlers), _responseBuilder(copy._responseBuilder)
 {
 	_handlers["GET:/"] = &_staticHandler;
-	_handlers["POST:/"] = &_postHandler;
+	_handlers["POST:/"] = &_staticHandler;
+	_handlers["DELETE:/"] = &_staticHandler;
 }
 
 Router &Router::operator=(const Router &other)
@@ -41,11 +44,11 @@ Router &Router::operator=(const Router &other)
 	if (this != &other)
 	{
 		_staticHandler = other._staticHandler;
-		_postHandler = other._postHandler;
 		_handlers = other._handlers;
 		_responseBuilder = other._responseBuilder;
 		_handlers["GET:/"] = &_staticHandler;
-		_handlers["POST:/"] = &_postHandler;
+		_handlers["POST:/"] = &_staticHandler;
+		_handlers["DELETE:/"] = &_staticHandler;
 	}
 	return (*this);
 }
@@ -68,7 +71,6 @@ void	Router::addHandler(const std::string &method,
 void	Router::setRoot(const std::string &root)
 {
 	_staticHandler.setRoot(root);
-	_postHandler.setRoot(root);
 }
 
 void	Router::setIndex(const std::string &index)

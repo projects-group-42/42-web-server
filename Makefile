@@ -12,7 +12,8 @@ SRC_FILES	= main.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
 			  http/StaticFileHandler.cpp \
-			  http/Router.cpp
+			  http/Router.cpp \
+			  config/Lexer.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj
@@ -23,6 +24,10 @@ TEST_SRC	= tests/mime_types_test.cpp \
 			  src/http/MimeType.cpp \
 			  src/utils/Utils.cpp
 TEST_BIN	= test_mime
+
+LEXER_TEST_SRC	= tests/config_lexer_test.cpp \
+				  src/config/Lexer.cpp
+LEXER_TEST_BIN	= test_lexer
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -43,10 +48,14 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN)
 	./$(TEST_BIN)
+	./$(LEXER_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(LEXER_TEST_BIN): $(LEXER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
@@ -55,6 +64,7 @@ clean:
 fclean: clean
 	rm -f $(NAME)
 	rm -f $(TEST_BIN)
+	rm -f $(LEXER_TEST_BIN)
 
 re: fclean all
 

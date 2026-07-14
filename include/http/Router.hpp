@@ -31,7 +31,8 @@ class Router
 		ResponseBuilder							_responseBuilder;
 
 		IRequestHandler	*resolveHandler(const std::string &method,
-				const std::string &uri);
+				const std::string &uri, bool &pathFound,
+				std::string &allow);
 
 	public:
 		Router(void);

@@ -82,10 +82,13 @@ const std::string &Router::getRoot(void) const
 }
 
 IRequestHandler *Router::resolveHandler(const std::string &method,
-		const std::string &uri)
+		const std::string &uri, bool &pathFound, std::string &allow)
 {
 	std::string bestKey;
 	std::string bestPath;
+	std::map<std::string, bool> methods;
+
+	pathFound = false;
 
 	for (std::map<std::string, IRequestHandler*>::iterator it =
 			_handlers.begin(); it != _handlers.end(); ++it)
@@ -99,15 +102,25 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 		std::string keyMethod = key.substr(0, colonPos);
 		std::string keyPath = key.substr(colonPos + 1);
 
-		if (keyMethod != method)
-			continue;
-
-		if (uri.compare(0, keyPath.size(), keyPath) == 0
-				&& keyPath.size() > bestPath.size())
+		if (uri.compare(0, keyPath.size(), keyPath) == 0)
 		{
-			bestKey = key;
-			bestPath = keyPath;
+			pathFound = true;
+			methods[keyMethod] = true;
+			if (keyMethod == method && keyPath.size() > bestPath.size())
+			{
+				bestKey = key;
+				bestPath = keyPath;
+			}
 		}
+	}
+
+	allow.clear();
+	for (std::map<std::string, bool>::const_iterator it = methods.begin();
+			it != methods.end(); ++it)
+	{
+		if (!allow.empty())
+			allow.append(", ");
+		allow.append(it->first);
 	}
 
 	if (!bestKey.empty())
@@ -118,12 +131,20 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 bool	Router::route(const HttpRequest &request,
 				HttpResponse &response)
 {
+	bool pathFound = false;
+	std::string allow;
 	IRequestHandler *handler = resolveHandler(
-			request.getMethod(), request.getUri());
+			request.getMethod(), request.getUri(), pathFound, allow);
 
 	if (handler == NULL)
 	{
-		response.setStatusCode(501);
+		if (pathFound)
+		{
+			response.setStatusCode(405);
+			response.setHeaders("Allow", allow);
+		}
+		else
+			response.setStatusCode(501);
 		response.setBody("");
 		Logger::warning("No handler for: " + request.getMethod() + " "
 				+ request.getUri());

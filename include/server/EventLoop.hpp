@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/04 20:03:56 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:09 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,6 +30,7 @@ class EventLoop
 
 		void	acceptClients(void);
 		bool	handleClient(int fd);
+		void	handleParseError(int fd);
 		void	handleRequest(int fd);
 		bool	handleSend(int fd);
 

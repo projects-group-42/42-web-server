@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:20:37 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 21:16:29 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:11 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,6 +40,7 @@ class Connection
 		void				reset_write_buffer(void);
 		double				last_activity(void) const;
 		t_psr_state			get_psr_state(void) const;
+		int					get_error_code(void) const;
 		const HttpRequest&	getRequest(void) const;
 };
 #endif

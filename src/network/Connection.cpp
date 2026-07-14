@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 21:17:08 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:01 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -102,6 +102,11 @@ double Connection::last_activity(void) const
 t_psr_state Connection::get_psr_state(void) const
 {
 	return _parser.get_psr_state();
+}
+
+int Connection::get_error_code(void) const
+{
+	return (_parser.get_error_code());
 }
 
 const HttpRequest& Connection::getRequest(void) const

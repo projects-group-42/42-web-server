@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   RequestParser.hpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/26 17:39:35 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:17 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,7 +16,10 @@
 #include <string>
 #include <unistd.h>
 #include <cstdlib>
-# include "http/HttpRequest.hpp"
+#include "http/HttpRequest.hpp"
+
+#define MAX_URI_LENGTH 2048
+#define MAX_HEADER_SIZE 8192
 
 typedef enum e_psr_state
 {
@@ -34,6 +37,10 @@ class RequestParser
 		ssize_t		_len;
 		t_psr_state	_psr_state;
 		HttpRequest	_request;
+		int			_error_code;
+
+		void				setErrorState(int status_code);
+		bool				isValidVersion(const std::string &version) const;
 
 	public:
 		RequestParser(void);
@@ -44,6 +51,7 @@ class RequestParser
 
 		void feed(const char *buffer, ssize_t bytes_read);
 		t_psr_state	get_psr_state(void) const;
+		int			get_error_code(void) const;
 		std::string str_extract(std::string str_find, int nbr);
 		bool prs_method(void);
 		bool prs_headers(void);

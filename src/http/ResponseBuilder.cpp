@@ -45,6 +45,15 @@ ResponseBuilder::~ResponseBuilder(void)
 {
 }
 
+/*
+ * Selects whether the serialized response advertises a persistent
+ * connection ("keep-alive") or a closing one ("close").
+ */
+void	ResponseBuilder::setKeepAlive(bool keepAlive)
+{
+	_keep_alive = keepAlive;
+}
+
 std::string ResponseBuilder::getStatusMessage(int status) const
 {
 	switch(status)

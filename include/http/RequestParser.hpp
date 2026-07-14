@@ -50,6 +50,7 @@ class RequestParser
 		~RequestParser(void);
 
 		void feed(const char *buffer, ssize_t bytes_read);
+		void reset(void);
 		t_psr_state	get_psr_state(void) const;
 		int			get_error_code(void) const;
 		std::string str_extract(std::string str_find, int nbr);

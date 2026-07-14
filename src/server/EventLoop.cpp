@@ -98,12 +98,35 @@ void EventLoop::handleParseError(int fd)
 	std::string serialized = builder.buildErrorResponse(error_code);
 	conn.set_write_buffer(serialized);
 
-	// Switch this fd to POLLOUT so we can send the error response
+	setPollEvents(fd, POLLOUT);
+}
+
+/*
+ * Decides whether the client wants the connection kept open. HTTP/1.1
+ * defaults to persistent unless "Connection: close" is sent; HTTP/1.0
+ * defaults to closing unless "Connection: keep-alive" is sent.
+ */
+bool EventLoop::wantsKeepAlive(const HttpRequest &request) const
+{
+	std::string connection = toLower(request.getHeaderValue("connection"));
+
+	if (connection == "close")
+		return (false);
+	if (request.getVersion() == "HTTP/1.0")
+		return (connection == "keep-alive");
+	return (true);
+}
+
+/*
+ * Updates the poll interest (POLLIN/POLLOUT) for the given client fd.
+ */
+void EventLoop::setPollEvents(int fd, short events)
+{
 	for (size_t i = 0; i < _fds.size(); i++)
 	{
 		if (_fds[i].fd == fd)
 		{
-			_fds[i].events = POLLOUT;
+			_fds[i].events = events;
 			break;
 		}
 	}
@@ -113,6 +136,9 @@ void EventLoop::handleRequest(int fd)
 {
 	Connection	&conn = _clients[fd];
 	ResponseBuilder	builder;
+
+	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
+	builder.setKeepAlive(conn.get_keep_alive());
 
 	try
 	{
@@ -136,15 +162,7 @@ void EventLoop::handleRequest(int fd)
 		conn.set_write_buffer(serialized);
 	}
 
-	// Switch this fd to POLLOUT so we can send the response
-	for (size_t i = 0; i < _fds.size(); i++)
-	{
-		if (_fds[i].fd == fd)
-		{
-			_fds[i].events = POLLOUT;
-			break;
-		}
-	}
+	setPollEvents(fd, POLLOUT);
 }
 
 bool EventLoop::handleSend(int fd)
@@ -158,8 +176,17 @@ bool EventLoop::handleSend(int fd)
 		return false; // error
 	if (!conn.has_data_to_send())
 	{
-		Logger::info("Response fully sent, closing connection.");
-		return false; // done, close
+		if (!conn.get_keep_alive())
+		{
+			Logger::info("Response fully sent, closing connection.");
+			return false; // done, close
+		}
+		conn.reset_for_next_request();
+		setPollEvents(fd, POLLIN);
+		Logger::info("Response fully sent, keeping connection alive.");
+		if (conn.get_psr_state() == COMPLETE)
+			handleRequest(fd);
+		return true;
 	}
 	return true; // more to send
 }

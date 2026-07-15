@@ -14,12 +14,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser()
-
+Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser(), _keep_alive(false)
 {
 }
 
-Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _parser()
+Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _parser(), _keep_alive(false)
 {
 }
 
@@ -27,7 +26,8 @@ Connection::Connection(const Connection &copy)
 	: _client_fd(copy._client_fd),
 	  _write_buffer(copy._write_buffer),
 	  _time(copy._time),
-	  _parser(copy._parser)
+	  _parser(copy._parser),
+	  _keep_alive(copy._keep_alive)
 {
 	const_cast<Connection&>(copy)._client_fd = -1;
 }
@@ -43,6 +43,7 @@ Connection &Connection::operator=(const Connection &other)
 		_write_buffer = other._write_buffer;
 		_time = other._time;
 		_parser = other._parser;
+		_keep_alive = other._keep_alive;
 	}
 	return (*this);
 }
@@ -92,6 +93,33 @@ void	Connection::set_write_buffer(const std::string &data)
 void	Connection::reset_write_buffer(void)
 {
 	_write_buffer.clear();
+}
+
+/*
+ * Records whether this connection should stay open after the current
+ * response, based on the client's request.
+ */
+void	Connection::set_keep_alive(bool keep_alive)
+{
+	_keep_alive = keep_alive;
+}
+
+/*
+ * Returns whether this connection is to be reused after the response.
+ */
+bool	Connection::get_keep_alive(void) const
+{
+	return (_keep_alive);
+}
+
+/*
+ * Rewinds the parser for the next request on a kept-alive connection
+ * and refreshes the activity timestamp.
+ */
+void	Connection::reset_for_next_request(void)
+{
+	_parser.reset();
+	_time = time(NULL);
 }
 
 double Connection::last_activity(void) const

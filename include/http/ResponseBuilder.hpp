@@ -46,6 +46,7 @@ class ResponseBuilder
 		ResponseBuilder& operator=(const ResponseBuilder &other);
 		~ResponseBuilder(void);
 
+		void		setKeepAlive(bool keepAlive);
 		std::string	builder(const HttpRequest &request, HttpResponse &response)
 	;
 		std::string	buildErrorResponse(int status_code) const;

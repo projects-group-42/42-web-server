@@ -38,6 +38,7 @@ RequestParser& RequestParser::operator=(const RequestParser &other)
 		_buffer = other._buffer;
 		_len = other._len;
 		_psr_state = other._psr_state;
+		_request = other._request;
 		_error_code = other._error_code;
 	}
 	return (*this);
@@ -45,6 +46,20 @@ RequestParser& RequestParser::operator=(const RequestParser &other)
 
 RequestParser::~RequestParser(void)
 {
+}
+
+/*
+ * Prepares the parser to read the next request on a reused connection.
+ * Clears the previous request and error state, rewinds to the request
+ * line, and re-parses any bytes already buffered from a pipelined request.
+ */
+void RequestParser::reset(void)
+{
+	_request = HttpRequest();
+	_psr_state = REQUEST_LINE;
+	_error_code = 0;
+	if (!_buffer.empty())
+		feed("", 0);
 }
 
 t_psr_state RequestParser::get_psr_state(void) const

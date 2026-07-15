@@ -33,6 +33,8 @@ class EventLoop
 		void	handleParseError(int fd);
 		void	handleRequest(int fd);
 		bool	handleSend(int fd);
+		bool	wantsKeepAlive(const HttpRequest &request) const;
+		void	setPollEvents(int fd, short events);
 
 	public:
 		EventLoop(void);

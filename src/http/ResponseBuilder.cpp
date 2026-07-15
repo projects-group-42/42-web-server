@@ -106,7 +106,8 @@ void ResponseBuilder::setDefaultHeaders(HttpResponse &response) const
 	
 	response.setHeaders("date", getHttpDate());
 	response.setHeaders("server", _server_name);
-	response.setHeaders("content-length", b_size.str());
+	if (response.getStatusCode() != 204)
+		response.setHeaders("content-length", b_size.str());
 	response.setHeaders("connection", _keep_alive ? "keep-alive" : "close");
 }
 
@@ -115,7 +116,7 @@ std::string ResponseBuilder::builder(
 {
 	std::string result;
 
-	if (response.getBody().empty())
+	if (response.getStatusCode() != 204 && response.getBody().empty())
 		response.setBody(ErrorPage(response.getStatusCode()));
 	setDefaultHeaders(response);
 	result.append(getStatusLine(request, response));

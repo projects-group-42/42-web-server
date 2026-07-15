@@ -20,10 +20,37 @@ class HttpResponse;
 
 class IRequestHandler
 {
-public:
-	virtual ~IRequestHandler() {}
-	virtual bool handle(const HttpRequest &request,
-			HttpResponse &response) = 0;
+	protected:
+		/*
+		 * Handles a GET request. Defaults to 405 Method Not Allowed.
+		 */
+		virtual bool	handleGet(const HttpRequest &request,
+							HttpResponse &response);
+
+		/*
+		 * Handles a POST request. Defaults to 405 Method Not Allowed.
+		 */
+		virtual bool	handlePost(const HttpRequest &request,
+							HttpResponse &response);
+
+		/*
+		 * Handles a DELETE request. Defaults to 405 Method Not Allowed.
+		 */
+		virtual bool	handleDelete(const HttpRequest &request,
+							HttpResponse &response);
+
+	public:
+		/*
+		 * Destructor.
+		 */
+		virtual ~IRequestHandler();
+
+		/*
+		 * Dispatches the request to the method matching its HTTP verb.
+		 * Unsupported verbs yield 405 Method Not Allowed.
+		 */
+		bool			handle(const HttpRequest &request,
+							HttpResponse &response);
 };
 
 #endif

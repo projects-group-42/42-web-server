@@ -250,7 +250,7 @@ bool StaticFileHandler::handlePost(const HttpRequest &request,
 }
 
 /*
- * Removes the file resolved from the URI. Returns 200 on success,
+ * Removes the file resolved from the URI. Returns 204 on success,
  * 404 when the target is missing, 403 when it is a directory or the
  * removal is denied, and 500 on other failures.
  */
@@ -289,6 +289,6 @@ bool StaticFileHandler::handleDelete(const HttpRequest &request,
 		return (true);
 	}
 
-	response.setStatusCode(200);
+	response.setStatusCode(204);
 	return (true);
 }

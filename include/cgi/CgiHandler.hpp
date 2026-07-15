@@ -35,7 +35,9 @@ class CgiHandler
 							const std::string &extension) const;
 
 		/*
-		 * Resolves the script path for a URI under the CGI root.
+		 * Resolves the script path for a URI under the CGI root,
+		 * collapsing "." and ".." and rejecting any path that escapes
+		 * the root. Returns an empty string when the path escapes.
 		 */
 		std::string		resolvePath(const std::string &uri) const;
 
@@ -81,9 +83,9 @@ class CgiHandler
 		bool				isCgiRequest(const std::string &uri) const;
 
 		/*
-		 * Validates the script resolved from the URI (exists, is a
-		 * regular file, is readable). Sets the response status code
-		 * and returns false when validation fails.
+		 * Validates the script resolved from the URI (stays inside the
+		 * CGI root, exists, is a regular file, is readable). Sets the
+		 * response status code and returns false when validation fails.
 		 */
 		bool				validate(const std::string &uri,
 								HttpResponse &response) const;

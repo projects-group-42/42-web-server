@@ -13,6 +13,9 @@
 #include "cgi/CgiHandler.hpp"
 #include <sys/stat.h>
 #include <unistd.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <vector>
 
 /*
  * Default constructor. CGI root defaults to "cgi-bin".
@@ -84,11 +87,61 @@ bool CgiHandler::hasExtension(const std::string &uri,
 }
 
 /*
- * Resolves the script path for a URI under the CGI root.
+ * Returns the canonical absolute path of path, or an empty string when it
+ * cannot be resolved (for instance because it does not exist).
+ */
+static std::string canonicalPath(const std::string &path)
+{
+	char	buffer[PATH_MAX];
+
+	if (realpath(path.c_str(), buffer) == NULL)
+		return ("");
+	return (std::string(buffer));
+}
+
+/*
+ * Resolves the script path for a URI under the CGI root. The URI is split
+ * into segments, collapsing "." and ".." lexically; any ".." that would
+ * climb above the root returns an empty string. When the resolved target
+ * exists, its canonical path is checked against the canonical CGI root so
+ * symlinks cannot escape it. Returns an empty string on escape.
  */
 std::string CgiHandler::resolvePath(const std::string &uri) const
 {
-	return (_cgiRoot + uri);
+	std::vector<std::string>	segments;
+	std::string					path = _cgiRoot;
+	size_t						i = 0;
+
+	while (i < uri.size())
+	{
+		while (i < uri.size() && uri[i] == '/')
+			++i;
+		size_t	start = i;
+		while (i < uri.size() && uri[i] != '/')
+			++i;
+		if (i == start)
+			continue;
+		std::string	segment = uri.substr(start, i - start);
+		if (segment == ".")
+			continue;
+		if (segment == "..")
+		{
+			if (segments.empty())
+				return ("");
+			segments.pop_back();
+		}
+		else
+			segments.push_back(segment);
+	}
+	for (size_t j = 0; j < segments.size(); ++j)
+		path += "/" + segments[j];
+
+	std::string	root = canonicalPath(_cgiRoot);
+	std::string	resolved = canonicalPath(path);
+	if (!root.empty() && !resolved.empty() && resolved != root
+		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
+		return ("");
+	return (path);
 }
 
 /*
@@ -100,16 +153,16 @@ bool CgiHandler::isCgiRequest(const std::string &uri) const
 }
 
 /*
- * Validates the script resolved from the URI (exists, is a
- * regular file, is readable). Sets the response status code
- * and returns false when validation fails.
+ * Validates the script resolved from the URI (path stays inside the CGI
+ * root, exists, is a regular file, is readable). Sets the response status
+ * code and returns false when validation fails.
  */
 bool CgiHandler::validate(const std::string &uri,
 		HttpResponse &response) const
 {
 	std::string	scriptPath = resolvePath(uri);
 
-	if (scriptPath.find("..") != std::string::npos)
+	if (scriptPath.empty())
 	{
 		response.setStatusCode(403);
 		return (false);

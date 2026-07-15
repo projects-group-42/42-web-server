@@ -13,6 +13,7 @@ SRC_FILES	= main.cpp \
 			  http/ResponseBuilder.cpp \
 			  http/StaticFileHandler.cpp \
 			  http/Router.cpp \
+			  cgi/CgiHandler.cpp
 			  config/Lexer.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 

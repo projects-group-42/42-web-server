@@ -6,21 +6,22 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 22:27:52 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:06 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "http/RequestParser.hpp"
 # include "utils/Logger.hpp"
 # include <iostream>
+# include <cctype>
 
 RequestParser::RequestParser(void)
-	: _buffer(""), _len(0), _psr_state(REQUEST_LINE)
+	: _buffer(""), _len(0), _psr_state(REQUEST_LINE), _error_code(0)
 {
 	
 }
 RequestParser::RequestParser(std::string buffer, ssize_t len)
-	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE)
+	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE), _error_code(0)
 {
 	
 }
@@ -37,6 +38,7 @@ RequestParser& RequestParser::operator=(const RequestParser &other)
 		_buffer = other._buffer;
 		_len = other._len;
 		_psr_state = other._psr_state;
+		_error_code = other._error_code;
 	}
 	return (*this);
 }
@@ -53,6 +55,39 @@ t_psr_state RequestParser::get_psr_state(void) const
 const HttpRequest& RequestParser::getRequest(void) const
 {
 	return (_request);
+}
+
+void RequestParser::setErrorState(int status_code)
+{
+	_error_code = status_code;
+	_psr_state = ERROR;
+}
+
+int RequestParser::get_error_code(void) const
+{
+	return (_error_code);
+}
+
+bool RequestParser::isValidVersion(const std::string &version) const
+{
+	if (version.length() < 8)
+		return (false);
+	if (version.substr(0, 5) != "HTTP/")
+		return (false);
+	size_t dot = version.find('.', 5);
+	if (dot == std::string::npos || dot == 5)
+		return (false);
+	for (size_t i = 5; i < dot; i++)
+	{
+		if (!std::isdigit(version[i]))
+			return (false);
+	}
+	for (size_t i = dot + 1; i < version.length(); i++)
+	{
+		if (!std::isdigit(version[i]))
+			return (false);
+	}
+	return (true);
 }
 
 std::string RequestParser::str_extract(std::string str_find, int nbr)
@@ -86,13 +121,17 @@ bool RequestParser::prs_body(void)
 
 bool RequestParser::prs_headers(void)
 {
+	if (_buffer.size() > MAX_HEADER_SIZE)
+	{
+		setErrorState(431);
+		return false;
+	}
 	while (_buffer.find(":") != std::string::npos)
 	{
 		std::string str_key = str_extract(":", 1);
-		if (str_key.find(" ") != std::string::npos)
+		if (str_key.empty() || str_key.find(" ") != std::string::npos)
 		{
-			std::cout << "Error" << std::endl;
-			_psr_state = ERROR;
+			setErrorState(400);
 			return (false);
 		}
 		if (_buffer[0] == ' ')
@@ -106,7 +145,7 @@ bool RequestParser::prs_headers(void)
 	if (!_request.hasHeader("Host"))
 	{
 		Logger::error("Request missing Host header");
-		_psr_state = ERROR;
+		setErrorState(400);
 		return (false);
 	}
 	return true;
@@ -155,12 +194,23 @@ bool RequestParser::prs_method(void)
 {
 	std::string str_method = str_extract(" ", 1);
 	if (str_method == "")
+	{
+		setErrorState(400);
 		return false;
+	}
 	_request.setMethod(str_method);
 
 	std::string str_uri = str_extract(" ", 1);
 	if (str_uri == "")
+	{
+		setErrorState(400);
 		return false;
+	}
+	if (str_uri.size() > MAX_URI_LENGTH)
+	{
+		setErrorState(414);
+		return false;
+	}
 	size_t pos = str_uri.find("?");
 	if (pos == std::string::npos)
 		_request.setQuery("");
@@ -174,7 +224,10 @@ bool RequestParser::prs_method(void)
 		{
 			std::string d_query = percent_decoding(str_query);
 			if (d_query.empty())
+			{
+				setErrorState(400);
 				return false;
+			}
 			_request.setQuery(d_query);
 		}
 	}
@@ -184,13 +237,29 @@ bool RequestParser::prs_method(void)
 		{
 			std::string d_uri = percent_decoding(str_uri);
 			if (d_uri.empty())
+			{
+				setErrorState(400);
 				return false;
+			}
+			if (d_uri.size() > MAX_URI_LENGTH)
+			{
+				setErrorState(414);
+				return false;
+			}
 			_request.setUri(d_uri);
 		}
 	
 	std::string str_version = str_extract("\r\n", 2);
 	if (str_version == "") 
+	{
+		setErrorState(400);
 		return false;
+	}
+	if (!isValidVersion(str_version))
+	{
+		setErrorState(400);
+		return false;
+	}
 	_request.setVersion(str_version);
 	return true;
 }

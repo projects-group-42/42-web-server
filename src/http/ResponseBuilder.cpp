@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:36:33 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 21:22:25 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/01 17:40:04 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -63,6 +63,7 @@ std::string ResponseBuilder::getStatusMessage(int status) const
 		case 411: return "Length Required";
 		case 413: return "Content Too Large";
 		case 414: return "URI Too Long";
+		case 431: return "Request Header Fields Too Large";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
 		case 502: return "Bad Gateway";
@@ -135,4 +136,36 @@ std::string ResponseBuilder::ErrorPage(int status) const
 	str_html.append(getStatusMessage(status));
 	str_html.append("</h1></body></html>");
 	return (str_html);
+}
+
+std::string ResponseBuilder::buildErrorResponse(int status_code) const
+{
+	HttpResponse response;
+	std::ostringstream str_status;
+	std::string result;
+
+	response.setStatusCode(status_code);
+	response.setBody(ErrorPage(status_code));
+
+	setDefaultHeaders(response);
+
+	str_status << status_code;
+	result.append("HTTP/1.1 ");
+	result.append(str_status.str());
+	result.append(" ");
+	result.append(getStatusMessage(status_code));
+	result.append("\r\n");
+
+	std::map<std::string, std::string>::const_iterator it;
+	for (it = response.getHeaders().begin();
+		it != response.getHeaders().end(); ++it)
+	{
+		result.append(it->first);
+		result.append(": ");
+		result.append(it->second);
+		result.append("\r\n");
+	}
+	result.append("\r\n");
+	result.append(response.getBody());
+	return (result);
 }

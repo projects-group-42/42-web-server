@@ -12,6 +12,9 @@
 
 #include "http/StaticFileHandler.hpp"
 #include "http/MimeType.hpp"
+#include <limits.h>
+#include <stdlib.h>
+#include <vector>
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html")
@@ -98,15 +101,73 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
 }
 
 /*
+ * Return the canonical absolute path of `path`, or an empty string when it
+ * cannot be resolved (for instance because it does not exist).
+ */
+static std::string canonicalPath(const std::string &path)
+{
+	char	buffer[PATH_MAX];
+
+	if (realpath(path.c_str(), buffer) == NULL)
+		return ("");
+	return (std::string(buffer));
+}
+
+/*
+ * Resolve `uri` into a filesystem path inside the document root.
+ * The URI is split into segments, collapsing "." and ".." lexically; any ".."
+ * that would climb above the root returns an empty string so the caller can
+ * answer 403. When the resolved target exists, its canonical path is checked
+ * against the canonical root so symlinks cannot escape the document root.
+ */
+std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
+{
+	std::vector<std::string>	segments;
+	std::string					path = _root;
+	size_t						i = 0;
+
+	while (i < uri.size())
+	{
+		while (i < uri.size() && uri[i] == '/')
+			++i;
+		size_t	start = i;
+		while (i < uri.size() && uri[i] != '/')
+			++i;
+		if (i == start)
+			continue;
+		std::string	segment = uri.substr(start, i - start);
+		if (segment == ".")
+			continue;
+		if (segment == "..")
+		{
+			if (segments.empty())
+				return ("");
+			segments.pop_back();
+		}
+		else
+			segments.push_back(segment);
+	}
+	for (size_t j = 0; j < segments.size(); ++j)
+		path += "/" + segments[j];
+
+	std::string	root = canonicalPath(_root);
+	std::string	resolved = canonicalPath(path);
+	if (!root.empty() && !resolved.empty() && resolved != root
+		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
+		return ("");
+	return (path);
+}
+
+/*
  * Main entry-point.
  * Parse the raw request, resolve the path, serve the file, build the HTTP response.
  */
 bool StaticFileHandler::handle(const HttpRequest &request,
 		HttpResponse &response)
 {
-	std::string		resolvedPath = _root + request.getUri();
+	std::string		resolvedPath = rslv_req_realpath(request.getUri());
 
-	if (resolvedPath.find("..") != std::string::npos)
+	if (resolvedPath.empty())
 	{
 		response.setStatusCode(403);
 		return (true);

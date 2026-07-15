@@ -39,6 +39,7 @@ class StaticFileHandler : public IRequestHandler
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
+		std::string	rslv_req_realpath(const std::string &uri);
 
 	public:
 		StaticFileHandler(void);

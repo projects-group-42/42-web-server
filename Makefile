@@ -14,7 +14,7 @@ SRC_FILES	= main.cpp \
 			  http/IRequestHandler.cpp \
 			  http/StaticFileHandler.cpp \
 			  http/Router.cpp \
-			  cgi/CgiHandler.cpp
+			  cgi/CgiHandler.cpp \
 			  config/Lexer.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 

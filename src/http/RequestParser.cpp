@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   RequestParser.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:06 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/17 17:48:36 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -114,19 +114,76 @@ std::string RequestParser::str_extract(std::string str_find, int nbr)
 	_buffer.erase(0, pos + nbr);
 	return (temp);
 }
+//CHUNK_SIZE,
+//CHUNK_DATA,
+//CHUNK_TRAILER,
+
+/*antes de chamar chunked qqr coisa
+size_t pos = _buffer.find("\r\n");
+if (pos == std::string::npos)
+{
+	return;
+}*/
+
+bool RequestParser::prs_chunked_size(void)
+{
+	if (_psr_state != CHUNK_SIZE)
+		return true;
+	
+	_chunk_size = strtoul(str_extract("\r\n", 2).c_str(), NULL, 16);
+	//se é 0 chegou ao final: apaga resto do buffer e termina o parseamento
+	if (_chunk_size == 0)
+	{
+		//tem que tratar os trailers
+		_buffer.erase(0, 4);
+		_psr_state = COMPLETE;
+		return true;
+	}
+	//se não vai para chunk data
+	_psr_state = CHUNK_DATA;
+	return true;
+	
+}
+void RequestParser::prs_chunked_data(void)
+{
+	std::string temp;
+	
+	if (_psr_state != CHUNK_DATA)
+		return;
+	
+	size_t bytes_av = _buffer.find("\r\n");
+	if (bytes_av == std::string::npos)
+			return;
+
+	while (_chunk_size > 0 && bytes_av != std::string::npos)
+	{
+		//se chunk é maior que os bytes disp. ex chunk8 bytes disp 5 chunk = 3(quantos faltam)
+		if (_chunk_size > bytes_av)
+		{
+			_chunk_size -= bytes_av;
+		}
+		//eu adiciono os 5
+		temp = str_extract("\r\n", 2);
+		//ainda tem mais disponiveis com \r\n? se não vai sair do while e retorna falta e procura de novo
+		bytes_av = _buffer.find("\r\n");
+	}
+}
+
 bool RequestParser::prs_body(void)
 {
+	//h_size é p tamanho do body declarado no header
 	size_t h_size = strtoul(_request.getHeaderValue("Content-Length").c_str(), NULL, 10);
 	if (h_size == 0)
 	{
 		_psr_state = COMPLETE;
 		return true;
 	}
+	//b_size é o tamanho do body
 	size_t b_size = _buffer.size();
+	//se o tamnho declarado no header for maior que o do buffer retorna falso e le de novo
 	if (h_size > b_size)
 		return false;
-	if (h_size == 0)
-		return false;
+	//temp lê do buffer até o tamanho do header
 	std::string temp = _buffer.substr(0, h_size);
 	_request.setBody(temp);
 	_buffer.erase(0, h_size);
@@ -213,8 +270,8 @@ bool RequestParser::prs_method(void)
 		setErrorState(400);
 		return false;
 	}
-	_request.setMethod(str_method);
 
+	_request.setMethod(str_method);
 	std::string str_uri = str_extract(" ", 1);
 	if (str_uri == "")
 	{
@@ -281,6 +338,7 @@ bool RequestParser::prs_method(void)
 
 void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 {
+	//lê buffer
 	_buffer.append(buffer, bytes_read);
 	while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
 		_buffer.erase(0, 1);
@@ -304,14 +362,34 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 			_psr_state = ERROR;
 			return;
 		}
-		_psr_state = BODY;
-	}
-	if (_psr_state == BODY)
-	{
-		if(!prs_body())
+		if (_request.hasHeader("Transfer-Encoding") &&
+			_request.hasHeader("Content-Length"))
 		{
+			Logger::error("Bad Request");
+			setErrorState(400);
 			return;
 		}
+		if (_request.hasHeader("Transfer-Encoding"))
+			_psr_state = CHUNK_SIZE;
+		else
+			_psr_state = BODY;
+	}
+	if (_psr_state == CHUNK_SIZE || _psr_state == CHUNK_DATA)
+	{
+		size_t pos = _buffer.find("\r\n");
+		while (pos != std::string::npos)
+		{
+			if (!prs_chunked_body())
+				return;
+			prs_chunked_data;
+				return;
+		}
+		
+	}
+	else if (_psr_state == BODY)
+	{
+		if (prs_body())
+			return;
 		_psr_state = COMPLETE;
 	}
 }

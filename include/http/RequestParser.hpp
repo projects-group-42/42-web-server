@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   RequestParser.hpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:17 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/17 17:06:37 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,6 +26,9 @@ typedef enum e_psr_state
 	REQUEST_LINE,
 	HEADERS,
 	BODY,
+	CHUNK_SIZE,
+	CHUNK_DATA,
+	CHUNK_TRAILER,
 	COMPLETE,
 	ERROR
 }	t_psr_state;
@@ -38,6 +41,7 @@ class RequestParser
 		t_psr_state	_psr_state;
 		HttpRequest	_request;
 		int			_error_code;
+		int			_chunk_size;
 
 		void				setErrorState(int status_code);
 		bool				isValidVersion(const std::string &version) const;
@@ -59,6 +63,9 @@ class RequestParser
 		bool prs_body(void);
 		const HttpRequest& getRequest(void) const;
 		std::string percent_decoding(std::string str);
+		bool prs_chunked_body(void);
+		bool RequestParser::prs_chunked_size(void);
+		void RequestParser::prs_chunked_data(void);
 };
 
 #endif

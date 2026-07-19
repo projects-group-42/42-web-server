@@ -15,6 +15,8 @@ SRC_FILES	= main.cpp \
 			  http/StaticFileHandler.cpp \
 			  http/Router.cpp \
 			  cgi/CgiHandler.cpp \
+			  cgi/CgiPipes.cpp \
+			  config/Lexer.cpp
 			  config/Lexer.cpp \
 			  config/ConfigAST.cpp \
 			  config/ConfigParser.cpp

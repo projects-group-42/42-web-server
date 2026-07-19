@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 15:42:02 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/19 16:24:41 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,17 +15,13 @@
 # include <iostream>
 # include <cctype>
 
-int indic = 0;
-
 RequestParser::RequestParser(void)
 	: _buffer(""), _len(0), _psr_state(REQUEST_LINE), _error_code(0)
 {
-	
 }
 RequestParser::RequestParser(std::string buffer, ssize_t len)
 	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE), _error_code(0)
 {
-	
 }
 
 RequestParser::RequestParser(const RequestParser &copy)
@@ -123,53 +119,52 @@ bool RequestParser::prs_chunked_size(void)
 		return false;
 	
 	_chunk_size = strtoul(str_extract("\r\n", 2).c_str(), NULL, 16);
-	std::cout << indic++ << " " << "_chunk_size: " << _chunk_size << std::endl;
-	//se é 0 chegou ao final: apaga resto do buffer e termina o parseamento
+	
 	if (_chunk_size == 0)
 	{
-		//tem que tratar os trailers
-		std::cout << indic++ << " " << "_chunk_size: " << _chunk_size << std::endl;
-		_buffer.erase(0, 4);
-		_psr_state = COMPLETE;
-		return true;
+		size_t pos = _buffer.find("\r\n");
+		if (pos != std::string::npos)
+		{
+			_buffer.erase(0, 2);
+			_psr_state = COMPLETE;
+			return true;
+		}
+		else
+		{
+			_psr_state = ERROR;
+			Logger::error("400 Bad Request");
+			setErrorState(400);
+			return false;
+		}
 	}
-	//se não vai para chunk data
-	std::cout << indic++ << " " << "_chunk_size: " << _chunk_size << std::endl;
+
+	
 	_psr_state = CHUNK_DATA;
 	return false;
-	
 }
 
 bool RequestParser::prs_chunked_data(void)
 {
 	if (_psr_state != CHUNK_DATA)
 		return false;
-	//verifica quantos bytes tem para ler
 	size_t bytes_av = _buffer.find("\r\n");
-	//se não tem \r\n retorna para ler mais
 	if (bytes_av == std::string::npos)
 		return false;
-	std::cout << indic++ << " " << "_chunk_size: " << _chunk_size << std::endl;
-	//enquanto tamanho a ser lido for maior que zero e tiver bytes avaliable continua
 	while (_chunk_size > 0 && bytes_av != std::string::npos)
 	{
-		//se chunk é maior que os bytes disp. ex chunk8 bytes disp 5 chunk = 3(quantos faltam)
-		std::cout << indic++ << " " << "_chunk_size: " << _chunk_size << std::endl;
 		if (_chunk_size >= bytes_av)
 		{
 			_chunk_size -= bytes_av;
 			_request.setBody(str_extract("\r\n", 2));
 			bytes_av = _buffer.find("\r\n");
-			std::cout << indic++ << " " << "_chunk_size: " << _chunk_size << std::endl;
-		}
-		//se tem mais bytes para ler do que o size
+			}
 		else
 		{
+			_psr_state = ERROR;
 			Logger::error("400 Bad Request");
 			setErrorState(400);
 			return true;
 		}
-		//ainda tem mais disponiveis com \r\n? se não vai sair do while e retorna falta e procura de novo
 	}
 	if (_chunk_size == 0)
 	{

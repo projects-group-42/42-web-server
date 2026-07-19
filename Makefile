@@ -33,6 +33,12 @@ LEXER_TEST_SRC	= tests/config_lexer_test.cpp \
 				  src/config/Lexer.cpp
 LEXER_TEST_BIN	= test_lexer
 
+PARSER_TEST_SRC	= tests/config_parser_test.cpp \
+				  src/config/Lexer.cpp \
+				  src/config/ConfigAST.cpp \
+				  src/config/ConfigParser.cpp
+PARSER_TEST_BIN	= test_parser
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -52,14 +58,18 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
+	./$(PARSER_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(LEXER_TEST_BIN): $(LEXER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
@@ -69,6 +79,7 @@ fclean: clean
 	rm -f $(NAME)
 	rm -f $(TEST_BIN)
 	rm -f $(LEXER_TEST_BIN)
+	rm -f $(PARSER_TEST_BIN)
 
 re: fclean all
 

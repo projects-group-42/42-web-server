@@ -35,39 +35,14 @@ class CgiPipes
 		int	_bodyPipe[2];
 		int	_outputPipe[2];
 
-		/*
-		 * Closes fd if it is still open and marks it as closed (-1). Does
-		 * nothing when fd is already -1, which keeps every close idempotent.
-		 */
 		void		closeFd(int &fd);
 
 		CgiPipes(const CgiPipes &copy);
-
-		/*
-		 * Copy assignment. Declared private and left unimplemented so a
-		 * CgiPipes cannot be assigned: two owners would close the same fds.
-		 */
 		CgiPipes &operator=(const CgiPipes &other);
 
 	public:
-		/*
-		 * Default constructor. Marks every pipe end as not-yet-open (-1); no
-		 * pipe is created until create() is called.
-		 */
 		CgiPipes(void);
-
-		/*
-		 * Destructor. Closes any pipe end still open, so no descriptor is
-		 * leaked on any path.
-		 */
 		~CgiPipes(void);
-
-		/*
-		 * Creates the body and output pipes. On success both pipes are open
-		 * and true is returned. If the second pipe cannot be created the
-		 * first one is closed again before returning false, so no descriptor
-		 * is leaked on failure.
-		 */
 		bool		create(void);
 
 		/*
@@ -105,7 +80,7 @@ class CgiPipes
 		/*
 		 * Closes the ends that belong to the parent. Called by the child
 		 * right after fork: closes the body write end and the output read
-		 * end, which the child never uses.
+		 * end.
 		 */
 		void		closeParentEnds(void);
 

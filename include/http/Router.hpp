@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 22:23:50 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/19 14:40:32 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,8 +15,8 @@
 
 # include <string>
 # include <map>
-# include "http/IRequestHandler.hpp"
-# include "http/StaticFileHandler.hpp"
+# include "handlers/IRequestHandler.hpp"
+# include "handlers/StaticFileHandler.hpp"
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/ResponseBuilder.hpp"

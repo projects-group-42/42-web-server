@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/17 17:06:37 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/19 15:11:15 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,7 +41,7 @@ class RequestParser
 		t_psr_state	_psr_state;
 		HttpRequest	_request;
 		int			_error_code;
-		int			_chunk_size;
+		size_t		_chunk_size;
 
 		void				setErrorState(int status_code);
 		bool				isValidVersion(const std::string &version) const;
@@ -63,9 +63,9 @@ class RequestParser
 		bool prs_body(void);
 		const HttpRequest& getRequest(void) const;
 		std::string percent_decoding(std::string str);
-		bool prs_chunked_body(void);
-		bool RequestParser::prs_chunked_size(void);
-		void RequestParser::prs_chunked_data(void);
+		//bool prs_chunked_body(void);
+		bool prs_chunked_size(void);
+		bool prs_chunked_data(void);
 };
 
 #endif

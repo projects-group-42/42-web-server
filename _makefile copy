@@ -1,5 +1,22 @@
 NAME		= webserv
-SRC			= $(shell find src -name "*.cpp")
+
+SRC_FILES	= main.cpp \
+			  network/Socket.cpp \
+			  network/Connection.cpp \
+			  server/EventLoop.cpp \
+			  utils/Logger.cpp \
+			  utils/Utils.cpp \
+			  http/HttpRequest.cpp \
+			  http/HttpResponse.cpp \
+			  http/MimeType.cpp \
+			  http/RequestParser.cpp \
+			  http/ResponseBuilder.cpp \
+			  http/IRequestHandler.cpp \
+			  http/StaticFileHandler.cpp \
+			  http/Router.cpp \
+			  cgi/CgiHandler.cpp
+			  config/Lexer.cpp
+SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj
 OBJ			= $(SRC:%.cpp=$(OBJ_DIR)/%.o)

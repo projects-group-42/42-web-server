@@ -3,14 +3,14 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:31:35 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/19 14:45:40 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "http/StaticFileHandler.hpp"
+#include "handlers/StaticFileHandler.hpp"
 #include "http/MimeType.hpp"
 #include <limits.h>
 #include <stdlib.h>

@@ -11,11 +11,13 @@
 /* ************************************************************************** */
 
 #include "cgi/CgiHandler.hpp"
+#include "cgi/CgiPipes.hpp"
 #include <sys/stat.h>
 #include <unistd.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <vector>
+#include <sys/wait.h>
 
 CgiHandler::CgiHandler(void)
 	: _cgiRoot("cgi-bin")
@@ -159,6 +161,46 @@ std::string CgiHandler::resolvePath(const std::string &uri) const
 	return (path);
 }
 
+/*
+ * Runs in the child after fork: redirects the pipe ends onto stdin/stdout,
+ * closes the leftover pipe fds, then execve's the interpreter with the script
+ * as argv[1]. Never returns; _exit is called if any step fails.
+ */
+static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const std::string &scriptPath)
+{
+    char    *argv[3];
+    char    *envp[1];
+
+    pipes.closeParentEnds();
+    if(dup2(pipes.bodyReadFd(), STDIN_FILENO) == -1)
+        _exit(1);
+    if(dup2(pipes.outputWriteFd(), STDOUT_FILENO) == -1)
+        _exit(1);
+    pipes.closeChildEnds();
+
+    argv[0] = const_cast<char *>(interpreter.c_str());
+    argv[1] = const_cast<char *>(scriptPath.c_str());
+    argv[2] = NULL;
+    envp[0] = NULL;
+
+    execve(interpreter.c_str(), argv, envp);
+    _exit(1);
+}
+
+/*
+ * Reads fd until EOF, appending every chunk to output. Returns false only
+ * when read reports an error.
+ */
+static  bool    readAll(int fd, std::string &output)
+{
+    char    buffer[4096];
+    ssize_t bytes;
+
+    while((bytes = read(fd, buffer, sizeof(buffer))) > 0)
+        output.append(buffer, static_cast<size_t>(bytes));
+    return (bytes != -1);
+}
+
 bool CgiHandler::isCgiRequest(const std::string &uri) const
 {
 	return (hasExtension(uri, ".py"));
@@ -197,4 +239,35 @@ bool CgiHandler::validate(const std::string &uri,
 		return (false);
 	}
 	return (true);
+}
+
+/*
+ * Runs the CGI script through the interpreter: creates the pipes, forks, wires
+ * the child's stdin/stdout to the pipes, streams body to the child and collects
+ * its stdout into output. Reaps the child and returns false on fork/pipe failure.
+ */
+bool    CgiHandler::execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, std::string &output) const
+{
+    CgiPipes    pipes;
+    pid_t       pid;
+    ssize_t     sent;
+    bool        ok;
+
+    if (!pipes.create())
+        return(false);
+    pid = fork();
+    if (pid == -1)
+        return(false);
+    if (pid == 0)
+        runCgiChild(pipes, interpreter, scriptPath);
+    pipes.closeChildEnds();
+    if (!body.empty())
+    {
+        sent = write(pipes.bodyWriteFd(), body.c_str(), body.size());
+        (void)sent;
+    }
+    pipes.closeBodyWrite();
+    ok = readAll(pipes.outputReadFd(), output);
+    waitpid(pid, NULL, 0);
+    return (ok);
 }

@@ -26,8 +26,8 @@ class CgiHandler
 {
 	private:
 		std::string	_cgiRoot;
-		std::string		resolvePath(const std::string &uri) const;
-		bool    hasExtension(const std::string &uri, const std::string &extension) const;
+		std::string	resolvePath(const std::string &uri) const;
+		bool        hasExtension(const std::string &uri, const std::string &extension) const;
 
 	public:
 		CgiHandler(void);
@@ -40,6 +40,7 @@ class CgiHandler
 		const std::string	&getCgiRoot(void) const;
 		bool				isCgiRequest(const std::string &uri) const;
 		bool				validate(const std::string &uri, HttpResponse &response) const;
+		bool                execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, std::string &output) const;
 };
 
 #endif

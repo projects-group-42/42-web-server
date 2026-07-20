@@ -17,33 +17,21 @@
 #include <stdlib.h>
 #include <vector>
 
-/*
- * Default constructor. CGI root defaults to "cgi-bin".
- */
 CgiHandler::CgiHandler(void)
 	: _cgiRoot("cgi-bin")
 {
 }
 
-/*
- * Constructs a CgiHandler rooted at the given CGI directory.
- */
 CgiHandler::CgiHandler(const std::string &cgiRoot)
 	: _cgiRoot(cgiRoot)
 {
 }
 
-/*
- * Copy constructor.
- */
 CgiHandler::CgiHandler(const CgiHandler &copy)
 {
 	*this = copy;
 }
 
-/*
- * Copy assignment operator.
- */
 CgiHandler &CgiHandler::operator=(const CgiHandler &other)
 {
 	if (this != &other)
@@ -51,24 +39,15 @@ CgiHandler &CgiHandler::operator=(const CgiHandler &other)
 	return (*this);
 }
 
-/*
- * Destructor.
- */
 CgiHandler::~CgiHandler(void)
 {
 }
 
-/*
- * Sets the CGI root directory used to resolve scripts.
- */
 void	CgiHandler::setCgiRoot(const std::string &cgiRoot)
 {
 	_cgiRoot = cgiRoot;
 }
 
-/*
- * Returns the CGI root directory used to resolve scripts.
- */
 const std::string &CgiHandler::getCgiRoot(void) const
 {
 	return (_cgiRoot);
@@ -100,56 +79,89 @@ static std::string canonicalPath(const std::string &path)
 }
 
 /*
- * Resolves the script path for a URI under the CGI root. The URI is split
- * into segments, collapsing "." and ".." lexically; any ".." that would
- * climb above the root returns an empty string. When the resolved target
- * exists, its canonical path is checked against the canonical CGI root so
- * symlinks cannot escape it. Returns an empty string on escape.
+ * Splits uri into normalized path segments. Returns false when a
+ * ".." would climb above the root, true otherwise.
  */
-std::string CgiHandler::resolvePath(const std::string &uri) const
+static bool normalizeSegments(const std::string &uri,
+		std::vector<std::string> &segments)
 {
-	std::vector<std::string>	segments;
-	std::string					path = _cgiRoot;
-	size_t						i = 0;
+	size_t	counter = 0;
+	size_t	start;
+	std::string	segment;
 
-	while (i < uri.size())
+	while (counter < uri.size())
 	{
-		while (i < uri.size() && uri[i] == '/')
-			++i;
-		size_t	start = i;
-		while (i < uri.size() && uri[i] != '/')
-			++i;
-		if (i == start)
+		while (counter < uri.size() && uri[counter] == '/')
+		    ++counter;
+		start = counter;
+
+		while (counter < uri.size() && uri[counter] != '/')
+		    ++counter;
+		if (counter == start)
 			continue;
-		std::string	segment = uri.substr(start, i - start);
+
+		segment = uri.substr(start, counter - start);
 		if (segment == ".")
 			continue;
 		if (segment == "..")
 		{
 			if (segments.empty())
-				return ("");
+				return (false);
 			segments.pop_back();
 		}
 		else
 			segments.push_back(segment);
 	}
-	for (size_t j = 0; j < segments.size(); ++j)
-		path += "/" + segments[j];
+	return (true);
+}
 
-	std::string	root = canonicalPath(_cgiRoot);
-	std::string	resolved = canonicalPath(path);
-	if (!root.empty() && !resolved.empty() && resolved != root
-		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
-		return ("");
+/*
+ * Joins root and the normalized segments into a single slash-separated path.
+ */
+static std::string joinPath(const std::string &root,
+		const std::vector<std::string> &segments)
+{
+	std::string	path = root;
+
+	for (size_t counter = 0; counter < segments.size(); ++counter)
+		path += "/" + segments[counter];
 	return (path);
 }
 
 /*
- * Returns true if the URI's extension identifies a CGI request.
+ * Returns true when path canonically resolves inside root, so symlinks
+ * cannot escape it. Paths that cannot be canonicalized are treated as inside.
  */
+static bool isWithinRoot(const std::string &root, const std::string &path)
+{
+	std::string	canonicalRoot = canonicalPath(root);
+	std::string	resolved = canonicalPath(path);
+
+	if ((canonicalRoot.empty() || resolved.empty()) || resolved == canonicalRoot)
+		return (true);
+	return (resolved.compare(0, canonicalRoot.size() + 1, canonicalRoot + "/") == 0);
+}
+
+/*
+ * Resolves the script path for a URI under the CGI root. The URI is
+ * normalized, joined onto the root, and checked so symlinks cannot escape it.
+ * Returns an empty string on escape.
+ */
+std::string CgiHandler::resolvePath(const std::string &uri) const
+{
+	std::vector<std::string>	segments;
+
+	if (!normalizeSegments(uri, segments))
+		return ("");
+	std::string	path = joinPath(_cgiRoot, segments);
+	if (!isWithinRoot(_cgiRoot, path))
+		return ("");
+	return (path);
+}
+
 bool CgiHandler::isCgiRequest(const std::string &uri) const
 {
-	return (hasExtension(uri, ".php") || hasExtension(uri, ".py"));
+	return (hasExtension(uri, ".py"));
 }
 
 /*

@@ -12,12 +12,11 @@ SRC_FILES	= main.cpp \
 			  http/MimeType.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
-			  http/IRequestHandler.cpp \
-			  http/StaticFileHandler.cpp \
-			  http/Router.cpp \
+			  handlers/IRequestHandler.cpp \
+			  handlers/StaticFileHandler.cpp \
+			  server/Router.cpp \
 			  cgi/CgiHandler.cpp \
 			  cgi/CgiPipes.cpp \
-			  config/Lexer.cpp
 			  config/Lexer.cpp \
 			  config/ConfigAST.cpp \
 			  config/ConfigParser.cpp

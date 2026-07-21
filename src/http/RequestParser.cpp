@@ -115,61 +115,59 @@ std::string RequestParser::str_extract(std::string str_find, int nbr)
 
 bool RequestParser::prs_chunked_size(void)
 {
-	if (_psr_state != CHUNK_SIZE)
-		return false;
-	
-	_chunk_size = strtoul(str_extract("\r\n", 2).c_str(), NULL, 16);
-	
-	if (_chunk_size == 0)
+	size_t pos = _buffer.find("\r\n");
+	if (pos == std::string::npos)
+		return true;
+	std::string line = _buffer.substr(0, pos);
+	size_t semi = line.find(';');
+	if (semi != std::string::npos)
+		line.erase(semi);
+	if (line.empty()
+		|| line.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
 	{
-		size_t pos = _buffer.find("\r\n");
-		if (pos != std::string::npos)
-		{
-			_buffer.erase(0, 2);
-			_psr_state = COMPLETE;
-			return true;
-		}
-		else
-		{
-			_psr_state = ERROR;
-			Logger::error("400 Bad Request");
-			setErrorState(400);
-			return false;
-		}
+		Logger::error("400 Bad Request");
+		setErrorState(400);
+		return true;
 	}
-
-	
-	_psr_state = CHUNK_DATA;
+	_chunk_size = strtoul(line.c_str(), NULL, 16);
+	_buffer.erase(0, pos + 2);
+	if (_chunk_size == 0)
+		_psr_state = CHUNK_TRAILER;
+	else
+		_psr_state = CHUNK_DATA;
 	return false;
 }
 
 bool RequestParser::prs_chunked_data(void)
 {
-	if (_psr_state != CHUNK_DATA)
-		return false;
-	size_t bytes_av = _buffer.find("\r\n");
-	if (bytes_av == std::string::npos)
-		return false;
-	while (_chunk_size > 0 && bytes_av != std::string::npos)
+	if (_buffer.size() < _chunk_size + 2)
+		return true;
+	if (_buffer.compare(_chunk_size, 2, "\r\n") != 0)
 	{
-		if (_chunk_size >= bytes_av)
-		{
-			_chunk_size -= bytes_av;
-			_request.setBody(str_extract("\r\n", 2));
-			bytes_av = _buffer.find("\r\n");
-			}
-		else
-		{
-			_psr_state = ERROR;
-			Logger::error("400 Bad Request");
-			setErrorState(400);
-			return true;
-		}
+		Logger::error("400 Bad Request");
+		setErrorState(400);
+		return true;
 	}
-	if (_chunk_size == 0)
+	_request.setBody(_buffer.substr(0, _chunk_size));
+	_buffer.erase(0, _chunk_size + 2);
+	_psr_state = CHUNK_SIZE;
+	return false;
+}
+
+bool RequestParser::prs_chunked_trailer(void)
+{
+	if (_buffer.size() < 2)
+		return true;
+	if (_buffer.compare(0, 2, "\r\n") == 0)
 	{
-		_psr_state = CHUNK_SIZE;
+		_buffer.erase(0, 2);
+		_psr_state = COMPLETE;
+		return true;
 	}
+	size_t pos = _buffer.find("\r\n");
+	if (pos == std::string::npos)
+		return true;
+	_buffer.erase(0, pos + 2);
 	return false;
 }
 
@@ -342,10 +340,12 @@ bool RequestParser::prs_method(void)
 
 void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 {
-	//lê buffer
 	_buffer.append(buffer, bytes_read);
-	while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
-		_buffer.erase(0, 1);
+	if (_psr_state == REQUEST_LINE)
+	{
+		while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
+			_buffer.erase(0, 1);
+	}
 	if (_psr_state == REQUEST_LINE || _psr_state == HEADERS)
 	{
 		size_t pos = _buffer.find("\r\n\r\n");
@@ -378,38 +378,22 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		else
 			_psr_state = BODY;
 	}
-	if (_psr_state == CHUNK_SIZE || _psr_state == CHUNK_DATA)
+	while (_psr_state == CHUNK_SIZE || _psr_state == CHUNK_DATA
+		|| _psr_state == CHUNK_TRAILER)
 	{
-		// process as many chunk-size/data cycles as available in the buffer
-		while (true)
-		{
-			size_t pos = _buffer.find("\r\n");
-			if (pos == std::string::npos)
-				break;
-			if (_psr_state == CHUNK_SIZE)
-			{
-				// prs_chunked_size returns true on COMPLETE (last-chunk) or error
-				if (prs_chunked_size() == true)
-					return;
-			}
-			else if (_psr_state == CHUNK_DATA)
-			{
-				// prs_chunked_data returns true on error
-				if (prs_chunked_data() == true)
-					return;
-			}
-			else
-				break;
-		}
-		return;
-	}
-	else if (_psr_state == BODY)
-	{
-		if (prs_body())
+		bool stop;
+		if (_psr_state == CHUNK_SIZE)
+			stop = prs_chunked_size();
+		else if (_psr_state == CHUNK_DATA)
+			stop = prs_chunked_data();
+		else
+			stop = prs_chunked_trailer();
+		if (stop)
 			return;
-		// prs_body() sets _psr_state to COMPLETE when the body is fully received.
-		// If prs_body() returned false, the body is incomplete — keep state as BODY
-		// and wait for more data (do not mark COMPLETE here).
+	}
+	if (_psr_state == BODY)
+	{
+		prs_body();
 		return;
 	}
 }

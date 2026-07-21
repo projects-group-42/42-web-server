@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   RequestParser.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:06 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/19 16:24:41 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,12 +18,10 @@
 RequestParser::RequestParser(void)
 	: _buffer(""), _len(0), _psr_state(REQUEST_LINE), _error_code(0)
 {
-	
 }
 RequestParser::RequestParser(std::string buffer, ssize_t len)
 	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE), _error_code(0)
 {
-	
 }
 
 RequestParser::RequestParser(const RequestParser &copy)
@@ -114,19 +112,80 @@ std::string RequestParser::str_extract(std::string str_find, int nbr)
 	_buffer.erase(0, pos + nbr);
 	return (temp);
 }
+
+bool RequestParser::prs_chunked_size(void)
+{
+	size_t pos = _buffer.find("\r\n");
+	if (pos == std::string::npos)
+		return true;
+	std::string line = _buffer.substr(0, pos);
+	size_t semi = line.find(';');
+	if (semi != std::string::npos)
+		line.erase(semi);
+	if (line.empty()
+		|| line.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+	{
+		Logger::error("400 Bad Request");
+		setErrorState(400);
+		return true;
+	}
+	_chunk_size = strtoul(line.c_str(), NULL, 16);
+	_buffer.erase(0, pos + 2);
+	if (_chunk_size == 0)
+		_psr_state = CHUNK_TRAILER;
+	else
+		_psr_state = CHUNK_DATA;
+	return false;
+}
+
+bool RequestParser::prs_chunked_data(void)
+{
+	if (_buffer.size() < _chunk_size + 2)
+		return true;
+	if (_buffer.compare(_chunk_size, 2, "\r\n") != 0)
+	{
+		Logger::error("400 Bad Request");
+		setErrorState(400);
+		return true;
+	}
+	_request.setBody(_buffer.substr(0, _chunk_size));
+	_buffer.erase(0, _chunk_size + 2);
+	_psr_state = CHUNK_SIZE;
+	return false;
+}
+
+bool RequestParser::prs_chunked_trailer(void)
+{
+	if (_buffer.size() < 2)
+		return true;
+	if (_buffer.compare(0, 2, "\r\n") == 0)
+	{
+		_buffer.erase(0, 2);
+		_psr_state = COMPLETE;
+		return true;
+	}
+	size_t pos = _buffer.find("\r\n");
+	if (pos == std::string::npos)
+		return true;
+	_buffer.erase(0, pos + 2);
+	return false;
+}
+
 bool RequestParser::prs_body(void)
 {
+	//h_size é p tamanho do body declarado no header
 	size_t h_size = strtoul(_request.getHeaderValue("Content-Length").c_str(), NULL, 10);
 	if (h_size == 0)
 	{
 		_psr_state = COMPLETE;
 		return true;
 	}
+	//b_size é o tamanho do body
 	size_t b_size = _buffer.size();
+	//se o tamnho declarado no header for maior que o do buffer retorna falso e le de novo
 	if (h_size > b_size)
 		return false;
-	if (h_size == 0)
-		return false;
+	//temp lê do buffer até o tamanho do header
 	std::string temp = _buffer.substr(0, h_size);
 	_request.setBody(temp);
 	_buffer.erase(0, h_size);
@@ -213,8 +272,8 @@ bool RequestParser::prs_method(void)
 		setErrorState(400);
 		return false;
 	}
-	_request.setMethod(str_method);
 
+	_request.setMethod(str_method);
 	std::string str_uri = str_extract(" ", 1);
 	if (str_uri == "")
 	{
@@ -282,8 +341,11 @@ bool RequestParser::prs_method(void)
 void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 {
 	_buffer.append(buffer, bytes_read);
-	while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
-		_buffer.erase(0, 1);
+	if (_psr_state == REQUEST_LINE)
+	{
+		while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
+			_buffer.erase(0, 1);
+	}
 	if (_psr_state == REQUEST_LINE || _psr_state == HEADERS)
 	{
 		size_t pos = _buffer.find("\r\n\r\n");
@@ -304,14 +366,34 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 			_psr_state = ERROR;
 			return;
 		}
-		_psr_state = BODY;
+		if (_request.hasHeader("Transfer-Encoding") &&
+			_request.hasHeader("Content-Length"))
+		{
+			Logger::error("Bad Request");
+			setErrorState(400);
+			return;
+		}
+		if (_request.hasHeader("Transfer-Encoding"))
+			_psr_state = CHUNK_SIZE;
+		else
+			_psr_state = BODY;
+	}
+	while (_psr_state == CHUNK_SIZE || _psr_state == CHUNK_DATA
+		|| _psr_state == CHUNK_TRAILER)
+	{
+		bool stop;
+		if (_psr_state == CHUNK_SIZE)
+			stop = prs_chunked_size();
+		else if (_psr_state == CHUNK_DATA)
+			stop = prs_chunked_data();
+		else
+			stop = prs_chunked_trailer();
+		if (stop)
+			return;
 	}
 	if (_psr_state == BODY)
 	{
-		if(!prs_body())
-		{
-			return;
-		}
-		_psr_state = COMPLETE;
+		prs_body();
+		return;
 	}
 }

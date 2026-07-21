@@ -7,7 +7,7 @@ DEP			= $(OBJ:.o=.d)
 
 TEST_SRC	= tests/mime_types_test.cpp \
 			  src/http/MimeType.cpp \
-			  src/utils/Utils.cpp
+			  src/utils/Utils.cpp 
 TEST_BIN	= test_mime
 
 LEXER_TEST_SRC	= tests/config_lexer_test.cpp \

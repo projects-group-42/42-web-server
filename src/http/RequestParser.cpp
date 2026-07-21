@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 16:24:41 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/21 20:17:33 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,11 +16,13 @@
 # include <cctype>
 
 RequestParser::RequestParser(void)
-	: _buffer(""), _len(0), _psr_state(REQUEST_LINE), _error_code(0)
+	: _buffer(""), _len(0), _psr_state(REQUEST_LINE),
+	_error_code(0), _chunk_size(0)
 {
 }
 RequestParser::RequestParser(std::string buffer, ssize_t len)
-	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE), _error_code(0)
+	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE),
+	_error_code(0),  _chunk_size(0)
 {
 }
 
@@ -38,6 +40,7 @@ RequestParser& RequestParser::operator=(const RequestParser &other)
 		_psr_state = other._psr_state;
 		_request = other._request;
 		_error_code = other._error_code;
+		_chunk_size = other._chunk_size;
 	}
 	return (*this);
 }
@@ -117,13 +120,31 @@ bool RequestParser::prs_chunked_size(void)
 {
 	if (_psr_state != CHUNK_SIZE)
 		return false;
-	
-	_chunk_size = strtoul(str_extract("\r\n", 2).c_str(), NULL, 16);
-	
+	size_t pos = _buffer.find("\r\n");
+	if (pos == std::string::npos)
+		return false;
+	std::string hex_digit = _buffer.substr(0, pos);
+	if (hex_digit.empty())
+	{
+		setErrorState(400);
+		_psr_state = ERROR;
+		return true;
+	}
+	for (size_t i = 0; i < hex_digit.size(); i++)
+	{
+		if (!std::isxdigit(static_cast<unsigned char>(hex_digit[i])))
+		{
+			Logger::error("400 Bad Request: Invalid hexadecimal in chunk size");
+			setErrorState(400);
+			_psr_state = ERROR;
+			return true;
+		}
+	}
+	str_extract("\r\n", 2);
+	_chunk_size = strtoul(hex_digit.c_str(), NULL, 16);
 	if (_chunk_size == 0)
 	{
-		size_t pos = _buffer.find("\r\n");
-		if (pos != std::string::npos)
+		if (_buffer.size() >= 2 && _buffer[0] == '\r' && _buffer[1] == '\n')
 		{
 			_buffer.erase(0, 2);
 			_psr_state = COMPLETE;
@@ -131,14 +152,11 @@ bool RequestParser::prs_chunked_size(void)
 		}
 		else
 		{
-			_psr_state = ERROR;
-			Logger::error("400 Bad Request");
-			setErrorState(400);
+			//se tem trailers
+			_psr_state = CHUNK_TRAILER;
 			return false;
 		}
 	}
-
-	
 	_psr_state = CHUNK_DATA;
 	return false;
 }
@@ -147,29 +165,23 @@ bool RequestParser::prs_chunked_data(void)
 {
 	if (_psr_state != CHUNK_DATA)
 		return false;
-	size_t bytes_av = _buffer.find("\r\n");
-	if (bytes_av == std::string::npos)
+	if (_buffer.size() < _chunk_size + 2)
 		return false;
-	while (_chunk_size > 0 && bytes_av != std::string::npos)
+	if (_chunk_size > 0)
 	{
-		if (_chunk_size >= bytes_av)
-		{
-			_chunk_size -= bytes_av;
-			_request.setBody(str_extract("\r\n", 2));
-			bytes_av = _buffer.find("\r\n");
-			}
-		else
+		std::string chunk_data = _buffer.substr(0, _chunk_size);
+		_buffer.erase(0, _chunk_size);
+		if (_buffer.size() < 2 || _buffer[0] != '\r' || _buffer[1] != '\n')
 		{
 			_psr_state = ERROR;
 			Logger::error("400 Bad Request");
 			setErrorState(400);
 			return true;
 		}
+		_buffer.erase(0, 2);
+		_request.setBody(chunk_data);
 	}
-	if (_chunk_size == 0)
-	{
 		_psr_state = CHUNK_SIZE;
-	}
 	return false;
 }
 
@@ -342,7 +354,8 @@ bool RequestParser::prs_method(void)
 
 void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 {
-	//lê buffer
+	if (_psr_state == COMPLETE || _psr_state == ERROR)
+		return;
 	_buffer.append(buffer, bytes_read);
 	while (_buffer.size() > 0 && (_buffer[0] == '\r' || _buffer[0] == '\n'))
 		_buffer.erase(0, 1);
@@ -383,6 +396,7 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		// process as many chunk-size/data cycles as available in the buffer
 		while (true)
 		{
+			size_t old_size = _buffer.size();
 			size_t pos = _buffer.find("\r\n");
 			if (pos == std::string::npos)
 				break;
@@ -400,8 +414,23 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 			}
 			else
 				break;
+			if (old_size == _buffer.size())
+				break;
 		}
 		return;
+	}
+	else if (_psr_state == CHUNK_TRAILER)
+	{
+		size_t pos = _buffer.find("\r\n\r\n");
+		if (pos == std::string::npos)
+			return;
+		else
+		{
+			std::string trailers = str_extract("\r\n\r\n", 4);
+			_psr_state = ERROR;
+			Logger::error("400 Bad Request");
+			setErrorState(400);
+		}
 	}
 	else if (_psr_state == BODY)
 	{

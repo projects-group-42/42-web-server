@@ -41,6 +41,10 @@ PARSER_TEST_SRC	= tests/config_parser_test.cpp \
 				  src/config/ConfigParser.cpp
 PARSER_TEST_BIN	= test_parser
 
+SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
+						  src/config/ServerConfig.cpp
+SERVER_CONFIG_TEST_BIN	= test_server_config
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -60,10 +64,11 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
+	./$(SERVER_CONFIG_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -74,6 +79,9 @@ $(LEXER_TEST_BIN): $(LEXER_TEST_SRC)
 $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -82,6 +90,7 @@ fclean: clean
 	rm -f $(TEST_BIN)
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
+	rm -f $(SERVER_CONFIG_TEST_BIN)
 
 re: fclean all
 

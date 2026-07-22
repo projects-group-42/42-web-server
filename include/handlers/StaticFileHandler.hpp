@@ -3,17 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:31:09 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/19 14:40:46 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef STATIC_FILE_HANDLER_HPP
 # define STATIC_FILE_HANDLER_HPP
 
-#include "http/IRequestHandler.hpp"
+#include "handlers/IRequestHandler.hpp"
 #include "http/HttpResponse.hpp"
 #include "http/HttpRequest.hpp"
 #include <string>

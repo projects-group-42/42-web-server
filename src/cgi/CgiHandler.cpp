@@ -18,6 +18,9 @@
 #include <stdlib.h>
 #include <vector>
 #include <sys/wait.h>
+#include <poll.h>
+#include <fcntl.h>
+#include <errno.h>
 
 CgiHandler::CgiHandler(void)
 	: _cgiRoot("cgi-bin")
@@ -188,17 +191,106 @@ static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const s
 }
 
 /*
- * Reads fd until EOF, appending every chunk to output. Returns false only
- * when read reports an error.
+ * Puts fd into non-blocking mode so a write can never stall the parent.
+ * Returns false when the current flags cannot be read or updated.
  */
-static  bool    readAll(int fd, std::string &output)
+static bool setNonBlocking(int fd)
 {
-    char    buffer[4096];
-    ssize_t bytes;
+    int flags = fcntl(fd, F_GETFL, 0);
 
-    while((bytes = read(fd, buffer, sizeof(buffer))) > 0)
-        output.append(buffer, static_cast<size_t>(bytes));
-    return (bytes != -1);
+    if (flags == -1)
+        return (false);
+    return (fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1);
+}
+
+/*
+ * Feeds body to the child's stdin while draining its stdout at the same time,
+ * multiplexing both pipes with poll so a body larger than the pipe buffer
+ * cannot deadlock the parent. Returns false only on a poll or read error.
+ */
+static bool pumpCgiIo(CgiPipes &pipes, const std::string &body, std::string &output)
+{
+    struct pollfd   fds[2];
+    size_t          sent = 0;
+    bool            writing = !body.empty();
+    bool            reading = true;
+
+    if (!writing)
+        pipes.closeBodyWrite();
+    else
+        setNonBlocking(pipes.bodyWriteFd());
+    while (reading || writing)
+    {
+        nfds_t  count = 0;
+        int     outIndex = -1;
+        int     bodyIndex = -1;
+
+        if (reading)
+        {
+            fds[count].fd = pipes.outputReadFd();
+            fds[count].events = POLLIN;
+            fds[count].revents = 0;
+            outIndex = static_cast<int>(count);
+            ++count;
+        }
+        if (writing)
+        {
+            fds[count].fd = pipes.bodyWriteFd();
+            fds[count].events = POLLOUT;
+            fds[count].revents = 0;
+            bodyIndex = static_cast<int>(count);
+            ++count;
+        }
+        if (poll(fds, count, -1) == -1)
+        {
+            if (errno == EINTR)
+                continue;
+            return (false);
+        }
+        if (writing && (fds[bodyIndex].revents & (POLLERR | POLLHUP)))
+        {
+            pipes.closeBodyWrite();
+            writing = false;
+        }
+        else if (writing && (fds[bodyIndex].revents & POLLOUT))
+        {
+            ssize_t written = write(pipes.bodyWriteFd(), body.data() + sent, body.size() - sent);
+
+            if (written == -1)
+            {
+                if (errno != EAGAIN && errno != EWOULDBLOCK)
+                {
+                    pipes.closeBodyWrite();
+                    writing = false;
+                }
+            }
+            else
+            {
+                sent += static_cast<size_t>(written);
+                if (sent == body.size())
+                {
+                    pipes.closeBodyWrite();
+                    writing = false;
+                }
+            }
+        }
+        if (reading && (fds[outIndex].revents & (POLLIN | POLLHUP | POLLERR)))
+        {
+            char    buffer[4096];
+            ssize_t bytes = read(pipes.outputReadFd(), buffer, sizeof(buffer));
+
+            if (bytes > 0)
+                output.append(buffer, static_cast<size_t>(bytes));
+            else if (bytes == 0)
+            {
+                pipes.closeOutputRead();
+                reading = false;
+            }
+            else
+                return (false);
+        }
+    }
+    return (true);
 }
 
 bool CgiHandler::isCgiRequest(const std::string &uri) const
@@ -243,15 +335,17 @@ bool CgiHandler::validate(const std::string &uri,
 
 /*
  * Runs the CGI script through the interpreter: creates the pipes, forks, wires
- * the child's stdin/stdout to the pipes, streams body to the child and collects
- * its stdout into output. Reaps the child and returns false on fork/pipe failure.
+ * the child's stdin/stdout to the pipes, then streams body to the child while
+ * collecting its stdout into output at the same time. Reaps the child and
+ * returns false on fork/pipe failure, on I/O error, or when the script does
+ * not exit cleanly with status 0.
  */
 bool    CgiHandler::execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, std::string &output) const
 {
     CgiPipes    pipes;
     pid_t       pid;
-    ssize_t     sent;
     bool        ok;
+    int         status;
 
     if (!pipes.create())
         return(false);
@@ -261,13 +355,14 @@ bool    CgiHandler::execute(const std::string &interpreter, const std::string &s
     if (pid == 0)
         runCgiChild(pipes, interpreter, scriptPath);
     pipes.closeChildEnds();
-    if (!body.empty())
-    {
-        sent = write(pipes.bodyWriteFd(), body.c_str(), body.size());
-        (void)sent;
-    }
-    pipes.closeBodyWrite();
-    ok = readAll(pipes.outputReadFd(), output);
-    waitpid(pid, NULL, 0);
-    return (ok);
+    ok = pumpCgiIo(pipes, body, output);
+    if (waitpid(pid, &status, 0) == -1)
+        return (false);
+    if (!ok)
+        return (false);
+    if (!WIFEXITED(status))
+        return (false);
+    if (WEXITSTATUS(status) != 0)
+        return (false);
+    return (true);
 }

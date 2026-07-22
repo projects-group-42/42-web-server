@@ -69,10 +69,29 @@ static void	test_stdin_redirect(void)
 	std::remove("cgi_cat.sh");
 }
 
+/*
+ * Runs a script that echoes a body larger than the pipe buffer, checking the
+ * parent interleaves writing and reading instead of deadlocking on the write.
+ */
+static void	test_large_body(void)
+{
+	CgiHandler	handler;
+	std::string	body(1024 * 1024, 'x');
+	std::string	output;
+	bool		ok;
+
+	writeScript("cgi_cat.sh", "cat\n");
+	ok = handler.execute("/bin/sh", "cgi_cat.sh", body, output);
+	TEST(ok, "execute returns true on a large body");
+	TEST(output == body, "streams a body larger than the pipe buffer");
+	std::remove("cgi_cat.sh");
+}
+
 int	main(void)
 {
 	test_stdout_redirect();
 	test_stdin_redirect();
+	test_large_body();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

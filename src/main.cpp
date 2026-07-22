@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include <fcntl.h>
+#include <signal.h>
 #include "webserver.hpp"
 #include "http/RequestParser.hpp"
 
@@ -39,6 +40,7 @@ static void test_parser(const std::string& label, const std::string& raw)
  
 int main(void)
 {
+	signal(SIGPIPE, SIG_IGN);
 	// --- Parser tests ---
 	test_parser("GET sem body",
 		"GET /index.html HTTP/1.1\r\nHost: localhost\r\n\r\n");

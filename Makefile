@@ -41,6 +41,13 @@ PARSER_TEST_SRC	= tests/config_parser_test.cpp \
 				  src/config/ConfigParser.cpp
 PARSER_TEST_BIN	= test_parser
 
+CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
+				  src/cgi/CgiHandler.cpp \
+				  src/cgi/CgiPipes.cpp \
+				  src/http/HttpResponse.cpp \
+				  src/utils/Utils.cpp
+CGI_TEST_BIN	= test_cgi
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -60,10 +67,11 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
+	./$(CGI_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -74,6 +82,9 @@ $(LEXER_TEST_BIN): $(LEXER_TEST_SRC)
 $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(CGI_TEST_BIN): $(CGI_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -82,6 +93,7 @@ fclean: clean
 	rm -f $(TEST_BIN)
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
+	rm -f $(CGI_TEST_BIN)
 
 re: fclean all
 

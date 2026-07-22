@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include <fcntl.h>
+#include <signal.h>
 #include "webserver.hpp"
 #include "http/RequestParser.hpp"
 #include "utils/Logger.hpp"
@@ -231,6 +232,43 @@ int main(int argc, char **argv)
  /*
 int main(void)
 {
+	signal(SIGPIPE, SIG_IGN);
+	// --- Parser tests ---
+	test_parser("GET sem body",
+		"GET /index.html HTTP/1.1\r\nHost: localhost\r\n\r\n");
+ 
+	test_parser("GET com query",
+		"GET /search?q=foo HTTP/1.1\r\nHost: localhost\r\n\r\n");
+ 
+	test_parser("POST com body",
+		"POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello");
+ 
+	test_parser("GET com CRLF iniciais",
+		"\r\n\r\nGET /index.html HTTP/1.1\r\nHost: localhost\r\n\r\n");
+ 
+	test_parser("Request incompleta (sem fim de headers)",
+		"GET /index.html HTTP/1.1\r\nHost: localhost\r\n");
+ 
+	test_parser("Request invalida (sem metodo)",
+		"\r\n\r\n");
+	
+	test_parser("Query com %20",
+		"GET /search?q=Joao%20Silva HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("URI com %2F",
+		"GET /dir%2Ffile HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("URI com %00",
+		"GET /test%00abc HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Percent incompleto",
+		"GET /test% HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Hex incompleto",
+		"GET /test%2 HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+	test_parser("Hex invalido",
+		"GET /test%GG HTTP/1.1\r\nHost: localhost\r\n\r\n");
 	const std::string	host = "0.0.0.0";
 	const int			port = 8081;
 	const int			backlog = 128;

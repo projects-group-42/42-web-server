@@ -48,6 +48,7 @@ SERVER_CONFIG_TEST_BIN	= test_server_config
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/cgi/CgiHandler.cpp \
 				  src/cgi/CgiPipes.cpp \
+				  src/http/HttpRequest.cpp \
 				  src/http/HttpResponse.cpp \
 				  src/utils/Utils.cpp
 CGI_TEST_BIN	= test_cgi

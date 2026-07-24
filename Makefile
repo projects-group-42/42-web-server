@@ -17,6 +17,7 @@ SRC_FILES	= main.cpp \
 			  server/Router.cpp \
 			  cgi/CgiHandler.cpp \
 			  cgi/CgiPipes.cpp \
+			  cgi/CgiProcess.cpp \
 			  config/Lexer.cpp \
 			  config/ConfigAST.cpp \
 			  config/ConfigParser.cpp \
@@ -53,6 +54,11 @@ CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/utils/Utils.cpp
 CGI_TEST_BIN	= test_cgi
 
+CGIPROC_TEST_SRC	= tests/cgi_process_test.cpp \
+					  src/cgi/CgiProcess.cpp \
+					  src/cgi/CgiPipes.cpp
+CGIPROC_TEST_BIN	= test_cgi_process
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -77,11 +83,12 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN) $(CGIPROC_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(CGI_TEST_BIN)
+	./$(CGIPROC_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -96,6 +103,9 @@ $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(CGIPROC_TEST_BIN): $(CGIPROC_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -106,6 +116,7 @@ fclean: clean
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
+	rm -f $(CGIPROC_TEST_BIN)
 
 re: fclean all
 

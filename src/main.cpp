@@ -26,6 +26,7 @@
 #include "server/EventLoop.hpp"
 #include <unistd.h>
 #include <fcntl.h>
+#include <csignal>
 
 int main(int argc, char **argv)
 {
@@ -36,6 +37,7 @@ int main(int argc, char **argv)
 	const int			port = 8081;
 	const int			backlog = 128;
 
+	signal(SIGPIPE, SIG_IGN);
 	try
 	{
 		Socket sckt;

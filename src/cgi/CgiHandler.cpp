@@ -300,13 +300,14 @@ bool CgiHandler::isCgiRequest(const std::string &uri) const
 
 /*
  * Validates the script resolved from the URI (path stays inside the CGI
- * root, exists, is a regular file, is readable). Sets the response status
- * code and returns false when validation fails.
+ * root, exists, is a regular file, is readable) and writes the resolved path
+ * into scriptPath on success. Sets the response status code and returns false
+ * when validation fails.
  */
-bool CgiHandler::validate(const std::string &uri,
+bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 		HttpResponse &response) const
 {
-	std::string	scriptPath = resolvePath(uri);
+	scriptPath = resolvePath(uri);
 
 	if (scriptPath.empty())
 	{

@@ -53,6 +53,16 @@ CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/utils/Utils.cpp
 CGI_TEST_BIN	= test_cgi
 
+MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/utils/Utils.cpp
+MULTIPART_TEST_BIN	= test_multipart
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -77,11 +87,12 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(CGI_TEST_BIN)
+	./$(MULTIPART_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -96,6 +107,9 @@ $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(MULTIPART_TEST_BIN): $(MULTIPART_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -106,6 +120,7 @@ fclean: clean
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
+	rm -f $(MULTIPART_TEST_BIN)
 
 re: fclean all
 

@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <vector>
+#include <sstream>
 #include <sys/wait.h>
 #include <poll.h>
 #include <fcntl.h>
@@ -167,12 +168,12 @@ std::string CgiHandler::resolvePath(const std::string &uri) const
 /*
  * Runs in the child after fork: redirects the pipe ends onto stdin/stdout,
  * closes the leftover pipe fds, then execve's the interpreter with the script
- * as argv[1]. Never returns; _exit is called if any step fails.
+ * as argv[1] and the prepared CGI environment. Never returns; _exit is called
+ * if any step fails.
  */
-static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const std::string &scriptPath)
+static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const std::string &scriptPath, char **envp)
 {
     char    *argv[3];
-    char    *envp[1];
 
     pipes.closeParentEnds();
     if(dup2(pipes.bodyReadFd(), STDIN_FILENO) == -1)
@@ -184,7 +185,6 @@ static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const s
     argv[0] = const_cast<char *>(interpreter.c_str());
     argv[1] = const_cast<char *>(scriptPath.c_str());
     argv[2] = NULL;
-    envp[0] = NULL;
 
     execve(interpreter.c_str(), argv, envp);
     _exit(1);
@@ -334,26 +334,98 @@ bool CgiHandler::validate(const std::string &uri,
 }
 
 /*
- * Runs the CGI script through the interpreter: creates the pipes, forks, wires
- * the child's stdin/stdout to the pipes, then streams body to the child while
- * collecting its stdout into output at the same time. Reaps the child and
- * returns false on fork/pipe failure, on I/O error, or when the script does
- * not exit cleanly with status 0.
+ * Converts a decimal value into its string representation.
  */
-bool    CgiHandler::execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, std::string &output) const
+static std::string toString(size_t value)
 {
-    CgiPipes    pipes;
-    pid_t       pid;
-    bool        ok;
-    int         status;
+    std::ostringstream  stream;
 
+    stream << value;
+    return (stream.str());
+}
+
+/*
+ * Builds the CGI meta-variable name for an HTTP header: uppercases the key,
+ * replaces every '-' with '_', and prefixes it with "HTTP_".
+ */
+static std::string headerToMetaVar(const std::string &key)
+{
+    std::string name = "HTTP_";
+
+    for (size_t i = 0; i < key.size(); ++i)
+    {
+        char c = key[i];
+        if (c == '-')
+            name += '_';
+        else if (c >= 'a' && c <= 'z')
+            name += static_cast<char>(c - 'a' + 'A');
+        else
+            name += c;
+    }
+    return (name);
+}
+
+/*
+ * Builds the CGI environment for a request and the
+ * resolved script path. Includes the request method, query string, protocol
+ * and content metadata, and forwards every request header as an HTTP_ variable
+ * except the ones already exposed as CONTENT_TYPE and CONTENT_LENGTH.
+ */
+std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request, const std::string &scriptPath) const
+{
+    std::vector<std::string>    env;
+    std::string                 protocol = request.getVersion();
+    std::string                 contentType = request.getHeaderValue("Content-Type");
+
+    if (protocol.empty())
+        protocol = "HTTP/1.1";
+    env.push_back("GATEWAY_INTERFACE=CGI/1.1");
+    env.push_back("SERVER_SOFTWARE=Webserv/1.0");
+    env.push_back("SERVER_PROTOCOL=" + protocol);
+    env.push_back("REDIRECT_STATUS=200");
+    env.push_back("REQUEST_METHOD=" + request.getMethod());
+    env.push_back("QUERY_STRING=" + request.getQuery());
+    env.push_back("SCRIPT_NAME=" + request.getUri());
+    env.push_back("SCRIPT_FILENAME=" + scriptPath);
+    env.push_back("CONTENT_LENGTH=" + toString(request.getBody().size()));
+    if (!contentType.empty())
+        env.push_back("CONTENT_TYPE=" + contentType);
+    const std::map<std::string, std::string> &headers = request.getHeaders();
+    for (std::map<std::string, std::string>::const_iterator it = headers.begin();
+            it != headers.end(); ++it)
+    {
+        if (it->first == "content-type" || it->first == "content-length")
+            continue;
+        env.push_back(headerToMetaVar(it->first) + "=" + it->second);
+    }
+    return (env);
+}
+
+/*
+ * Runs the CGI script through the interpreter: creates the pipes, forks, wires
+ * the child's stdin/stdout to the pipes, passes env as the child's environment,
+ * then streams body to the child while collecting its stdout into output at the
+ * same time. Reaps the child and returns false on fork/pipe failure, on I/O
+ * error, or when the script does not exit cleanly with status 0.
+ */
+bool    CgiHandler::execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, const std::vector<std::string> &env, std::string &output) const
+{
+    CgiPipes                pipes;
+    std::vector<char *>     envp;
+    pid_t                   pid;
+    bool                    ok;
+    int                     status;
+
+    for (size_t i = 0; i < env.size(); ++i)
+        envp.push_back(const_cast<char *>(env[i].c_str()));
+    envp.push_back(NULL);
     if (!pipes.create())
         return(false);
     pid = fork();
     if (pid == -1)
         return(false);
     if (pid == 0)
-        runCgiChild(pipes, interpreter, scriptPath);
+        runCgiChild(pipes, interpreter, scriptPath, &envp[0]);
     pipes.closeChildEnds();
     ok = pumpCgiIo(pipes, body, output);
     if (waitpid(pid, &status, 0) == -1)

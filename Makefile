@@ -19,7 +19,8 @@ SRC_FILES	= main.cpp \
 			  cgi/CgiPipes.cpp \
 			  config/Lexer.cpp \
 			  config/ConfigAST.cpp \
-			  config/ConfigParser.cpp
+			  config/ConfigParser.cpp \
+			  config/ServerConfig.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj
@@ -41,6 +42,9 @@ PARSER_TEST_SRC	= tests/config_parser_test.cpp \
 				  src/config/ConfigParser.cpp
 PARSER_TEST_BIN	= test_parser
 
+SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
+						  src/config/ServerConfig.cpp
+SERVER_CONFIG_TEST_BIN	= test_server_config
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/cgi/CgiHandler.cpp \
 				  src/cgi/CgiPipes.cpp \
@@ -67,6 +71,11 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
+	./$(TEST_BIN)
+	./$(LEXER_TEST_BIN)
+	./$(PARSER_TEST_BIN)
+	./$(SERVER_CONFIG_TEST_BIN)
 test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
@@ -82,6 +91,7 @@ $(LEXER_TEST_BIN): $(LEXER_TEST_SRC)
 $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
@@ -93,6 +103,7 @@ fclean: clean
 	rm -f $(TEST_BIN)
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
+	rm -f $(SERVER_CONFIG_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
 
 re: fclean all

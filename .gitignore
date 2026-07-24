@@ -1,5 +1,10 @@
 # binário
 webserv
+# test binaries
+test_mime
+test_lexer
+test_parser
+test_cgi
 # build artifacts
 obj/
 *.o

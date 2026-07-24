@@ -1,4 +1,5 @@
 NAME		= webserv
+SRC			= $(shell find src -name "*.cpp")
 
 SRC_FILES	= main.cpp \
 			  network/Socket.cpp \
@@ -11,9 +12,9 @@ SRC_FILES	= main.cpp \
 			  http/MimeType.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
-			  http/IRequestHandler.cpp \
-			  http/StaticFileHandler.cpp \
-			  http/Router.cpp \
+			  handlers/IRequestHandler.cpp \
+			  handlers/StaticFileHandler.cpp \
+			  server/Router.cpp \
 			  cgi/CgiHandler.cpp \
 			  cgi/CgiPipes.cpp \
 			  config/Lexer.cpp \
@@ -44,6 +45,12 @@ PARSER_TEST_BIN	= test_parser
 SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
 						  src/config/ServerConfig.cpp
 SERVER_CONFIG_TEST_BIN	= test_server_config
+CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
+				  src/cgi/CgiHandler.cpp \
+				  src/cgi/CgiPipes.cpp \
+				  src/http/HttpResponse.cpp \
+				  src/utils/Utils.cpp
+CGI_TEST_BIN	= test_cgi
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -69,6 +76,11 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN)
+	./$(TEST_BIN)
+	./$(LEXER_TEST_BIN)
+	./$(PARSER_TEST_BIN)
+	./$(CGI_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -80,6 +92,7 @@ $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
+$(CGI_TEST_BIN): $(CGI_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
@@ -91,6 +104,7 @@ fclean: clean
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
+	rm -f $(CGI_TEST_BIN)
 
 re: fclean all
 

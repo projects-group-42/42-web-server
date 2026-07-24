@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 14:40:46 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/24 18:21:08 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,6 +41,12 @@ class StaticFileHandler : public IRequestHandler
 		int			serveDirectory(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		std::string	rslv_req_realpath(const std::string &uri);
+		int			saveFile(const std::string &resolvedPath,
+						const std::string &content);
+		bool		isMultipartFormData(const HttpRequest &request,
+						std::string &boundary) const;
+		bool		handleMultipartUpload(const HttpRequest &request,
+						const std::string &boundary, HttpResponse &response);
 
 	protected:
 		/*

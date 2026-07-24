@@ -3,15 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 14:45:40 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/24 18:23:26 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "handlers/StaticFileHandler.hpp"
 #include "http/MimeType.hpp"
+#include "http/MultipartParser.hpp"
+#include "utils/Utils.hpp"
 #include <limits.h>
 #include <stdlib.h>
 #include <vector>
@@ -200,52 +202,141 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 }
 
 /*
- * Writes the request body to the file resolved from the URI.
- * Returns 201 if the file was created, 200 if it was overwritten.
+ * Creates or overwrites the file at `resolvedPath` with `content`.
+ * Returns the HTTP status code describing the outcome: 201 when the file
+ * did not exist yet, 200 when an existing file was overwritten, 400 when
+ * the target is a directory, 403/404/500 on the matching write failures.
+ */
+int StaticFileHandler::saveFile(const std::string &resolvedPath,
+		const std::string &content)
+{
+	struct stat	pathStat;
+	bool		exists = (stat(resolvedPath.c_str(), &pathStat) == 0);
+
+	if (exists && S_ISDIR(pathStat.st_mode))
+		return (400);
+
+	int	fd = open(resolvedPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd == -1)
+	{
+		if (errno == EACCES)
+			return (403);
+		if (errno == ENOENT)
+			return (404);
+		return (500);
+	}
+
+	ssize_t	written = write(fd, content.c_str(), content.size());
+	close(fd);
+
+	if (written == -1 || static_cast<size_t>(written) != content.size())
+		return (500);
+	return (exists ? 200 : 201);
+}
+
+/*
+ * Detects a multipart/form-data POST and extracts its boundary token.
+ * Returns true whenever Content-Type declares multipart/form-data, even if
+ * the boundary parameter turns out to be missing or malformed, so the
+ * caller can answer with the appropriate error.
+ */
+bool StaticFileHandler::isMultipartFormData(const HttpRequest &request,
+		std::string &boundary) const
+{
+	std::string	contentType = request.getHeaderValue("Content-Type");
+	std::string	lowerType = toLower(contentType);
+
+	if (lowerType.compare(0, 19, "multipart/form-data") != 0)
+		return (false);
+	MultipartParser::extractBoundary(contentType, boundary);
+	return (true);
+}
+
+/*
+ * Parses a multipart/form-data body and saves every file part under the
+ * directory addressed by the request URI, naming each file after its
+ * Content-Disposition "filename" attribute. Form fields without a filename
+ * are ignored. Returns 400 on a malformed body or when no file part is
+ * present, 201/200 mirroring handlePost when at least one file is saved,
+ * and 403/404/500 on the matching save failures.
+ */
+bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
+		const std::string &boundary, HttpResponse &response)
+{
+	if (boundary.empty())
+	{
+		response.setStatusCode(400);
+		return (true);
+	}
+
+	MultipartParser	parser;
+	if (!parser.parse(request.getBody(), boundary))
+	{
+		response.setStatusCode(parser.getErrorCode());
+		return (true);
+	}
+
+	std::string	baseUri = request.getUri();
+	if (baseUri.empty() || baseUri[baseUri.size() - 1] != '/')
+		baseUri += "/";
+
+	const std::vector<MultipartPart>	&parts = parser.getParts();
+	size_t								savedFiles = 0;
+	bool								anyCreated = false;
+
+	for (size_t i = 0; i < parts.size(); ++i)
+	{
+		if (!parts[i].isFile())
+			continue;
+
+		std::string	resolvedPath = rslv_req_realpath(baseUri + parts[i].filename);
+		if (resolvedPath.empty())
+		{
+			response.setStatusCode(403);
+			return (true);
+		}
+
+		int	status = saveFile(resolvedPath, parts[i].content);
+		if (status != 200 && status != 201)
+		{
+			response.setStatusCode(status);
+			return (true);
+		}
+		++savedFiles;
+		anyCreated = anyCreated || (status == 201);
+	}
+
+	if (savedFiles == 0)
+	{
+		response.setStatusCode(400);
+		return (true);
+	}
+
+	response.setStatusCode(anyCreated ? 201 : 200);
+	return (true);
+}
+
+/*
+ * Writes the request body to the file resolved from the URI. When the
+ * request carries multipart/form-data, delegates to handleMultipartUpload
+ * to extract and save the file part(s) instead. Returns 201 if a file was
+ * created, 200 if it was overwritten.
  */
 bool StaticFileHandler::handlePost(const HttpRequest &request,
 		HttpResponse &response)
 {
-	std::string	resolvedPath = rslv_req_realpath(request.getUri());
+	std::string	boundary;
+	if (isMultipartFormData(request, boundary))
+		return (handleMultipartUpload(request, boundary, response));
 
+	std::string	resolvedPath = rslv_req_realpath(request.getUri());
 	if (resolvedPath.empty())
 	{
 		response.setStatusCode(403);
 		return (true);
 	}
 
-	struct stat	pathStat;
-	bool		exists = (stat(resolvedPath.c_str(), &pathStat) == 0);
-
-	if (exists && S_ISDIR(pathStat.st_mode))
-	{
-		response.setStatusCode(400);
-		return (true);
-	}
-
-	int	fd = open(resolvedPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd == -1)
-	{
-		if (errno == EACCES)
-			response.setStatusCode(403);
-		else if (errno == ENOENT)
-			response.setStatusCode(404);
-		else
-			response.setStatusCode(500);
-		return (true);
-	}
-
-	const std::string	&body = request.getBody();
-	ssize_t				written = write(fd, body.c_str(), body.size());
-	close(fd);
-
-	if (written == -1 || static_cast<size_t>(written) != body.size())
-	{
-		response.setStatusCode(500);
-		return (true);
-	}
-
-	response.setStatusCode(exists ? 200 : 201);
+	response.setStatusCode(saveFile(resolvedPath, request.getBody()));
 	return (true);
 }
 

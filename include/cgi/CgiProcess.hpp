@@ -41,6 +41,7 @@ class CgiProcess
 		bool		_writing;
 		bool		_reading;
 		bool		_reaped;
+		long		_deadlineMs;
 
 		CgiProcess(const CgiProcess &copy);
 		CgiProcess &operator=(const CgiProcess &other);
@@ -55,6 +56,8 @@ class CgiProcess
 		void				stopWriting(void);
 		int					reap(void);
 		void				terminate(void);
+		void				setDeadlineMs(long deadlineMs);
+		long				deadlineMs(void) const;
 		bool				isReading(void) const;
 		bool				isWriting(void) const;
 		bool				finished(void) const;

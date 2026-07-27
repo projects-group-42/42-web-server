@@ -149,9 +149,26 @@ static bool isWithinRoot(const std::string &root, const std::string &path)
 }
 
 /*
+ * Returns the last path component of path, ignoring trailing slashes.
+ */
+static std::string baseName(const std::string &path)
+{
+	std::string	trimmed = path;
+
+	while (trimmed.size() > 1 && trimmed[trimmed.size() - 1] == '/')
+		trimmed.erase(trimmed.size() - 1);
+	std::string::size_type	slash = trimmed.rfind('/');
+	if (slash == std::string::npos)
+		return (trimmed);
+	return (trimmed.substr(slash + 1));
+}
+
+/*
  * Resolves the script path for a URI under the CGI root. The URI is
- * normalized, joined onto the root, and checked so symlinks cannot escape it.
- * Returns an empty string on escape.
+ * normalized, its leading mount segment (matching the CGI root name) is
+ * dropped so "/cgi-bin/x.py" maps to "<root>/x.py", the rest is joined onto
+ * the root, and the result is checked so symlinks cannot escape it. Returns an
+ * empty string on escape.
  */
 std::string CgiHandler::resolvePath(const std::string &uri) const
 {
@@ -159,6 +176,8 @@ std::string CgiHandler::resolvePath(const std::string &uri) const
 
 	if (!normalizeSegments(uri, segments))
 		return ("");
+	if (!segments.empty() && segments.front() == baseName(_cgiRoot))
+		segments.erase(segments.begin());
 	std::string	path = joinPath(_cgiRoot, segments);
 	if (!isWithinRoot(_cgiRoot, path))
 		return ("");
@@ -482,7 +501,7 @@ void CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) 
                 response.setStatusCode(status);
         }
         else
-            response.setHeaders(key, value);
+            response.addHeader(key, value);
     }
     response.setBody(raw.substr(sep + sepLen));
 }

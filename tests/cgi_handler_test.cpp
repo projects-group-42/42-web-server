@@ -232,6 +232,49 @@ static void	test_parse_no_headers(void)
 	TEST(response.getBody() == "just a plain body\n", "parseCgiOutput serves headerless output as body");
 }
 
+/*
+ * Checks a script is resolved both through the mount prefix "/cgi-bin/x.py"
+ * and directly as "/x.py", so the CGI root name is not doubled in the path.
+ */
+static void	test_validate_mount_prefix(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+	std::string		prefixed;
+	std::string		bare;
+
+	writeScript("cgi-bin/probe_cgi.py", "print()\n");
+	TEST(handler.validate("/cgi-bin/probe_cgi.py", prefixed, response),
+		"validate accepts the /cgi-bin prefixed URI");
+	TEST(prefixed == "cgi-bin/probe_cgi.py", "validate resolves prefixed URI without doubling the root");
+	TEST(handler.validate("/probe_cgi.py", bare, response),
+		"validate accepts the bare URI");
+	TEST(bare == "cgi-bin/probe_cgi.py", "validate resolves the bare URI to the same path");
+	std::remove("cgi-bin/probe_cgi.py");
+}
+
+/*
+ * Checks parseCgiOutput keeps every occurrence of a repeated header instead of
+ * collapsing them, so multiple Set-Cookie lines survive.
+ */
+static void	test_parse_duplicate_headers(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+	int				cookies = 0;
+
+	handler.parseCgiOutput(
+		"Content-Type: text/html\r\nSet-Cookie: a=1\r\nSet-Cookie: b=2\r\n\r\nbody",
+		response);
+	const std::vector<std::pair<std::string, std::string> >	&headers = response.getHeaders();
+	for (size_t i = 0; i < headers.size(); ++i)
+	{
+		if (headers[i].first == "set-cookie")
+			++cookies;
+	}
+	TEST(cookies == 2, "parseCgiOutput preserves duplicate Set-Cookie headers");
+}
+
 int	main(void)
 {
 	test_stdout_redirect();
@@ -244,6 +287,8 @@ int	main(void)
 	test_parse_redirect();
 	test_parse_lf_separator();
 	test_parse_no_headers();
+	test_validate_mount_prefix();
+	test_parse_duplicate_headers();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

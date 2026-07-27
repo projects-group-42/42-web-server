@@ -43,6 +43,7 @@ class CgiHandler
 		bool				isCgiRequest(const std::string &uri) const;
 		bool				validate(const std::string &uri, std::string &scriptPath, HttpResponse &response) const;
 		std::vector<std::string>	buildEnv(const HttpRequest &request, const std::string &scriptPath) const;
+		void				parseCgiOutput(const std::string &raw, HttpResponse &response) const;
 		bool                execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, const std::vector<std::string> &env, std::string &output) const;
 };
 

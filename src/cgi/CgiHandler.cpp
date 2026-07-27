@@ -403,6 +403,91 @@ std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request, const 
 }
 
 /*
+ * Strips leading and trailing spaces, tabs and a trailing carriage return from
+ * a CGI header value.
+ */
+static std::string trimHeaderValue(const std::string &value)
+{
+    size_t  start = 0;
+    size_t  end = value.size();
+
+    while (start < end && (value[start] == ' ' || value[start] == '\t'))
+        ++start;
+    while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t'
+            || value[end - 1] == '\r'))
+        --end;
+    return (value.substr(start, end - start));
+}
+
+/*
+ * Case-insensitive check for the CGI "Status" header name.
+ */
+static bool isStatusHeader(const std::string &key)
+{
+    static const char   name[] = "status";
+
+    if (key.size() != sizeof(name) - 1)
+        return (false);
+    for (size_t i = 0; i < key.size(); ++i)
+    {
+        char    c = key[i];
+        if (c >= 'A' && c <= 'Z')
+            c = static_cast<char>(c - 'A' + 'a');
+        if (c != name[i])
+            return (false);
+    }
+    return (true);
+}
+
+/*
+ * Converts the raw CGI output into an HttpResponse: splits the header block
+ * from the body at the first blank line, maps each "Key: Value" line into a
+ * response header, consumes the "Status" header into the status code (default
+ * 200), and stores the remaining bytes as the body. When no header separator
+ * is present the whole output is treated as the body.
+ */
+void CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) const
+{
+    std::string::size_type  sep = raw.find("\r\n\r\n");
+    std::string::size_type  sepLen = 4;
+
+    response.setStatusCode(200);
+    if (sep == std::string::npos)
+    {
+        sep = raw.find("\n\n");
+        sepLen = 2;
+    }
+    if (sep == std::string::npos)
+    {
+        response.setBody(raw);
+        return ;
+    }
+
+    std::istringstream  headers(raw.substr(0, sep));
+    std::string         line;
+
+    while (std::getline(headers, line))
+    {
+        std::string::size_type  colon = line.find(':');
+        if (colon == std::string::npos)
+            continue;
+        std::string key = line.substr(0, colon);
+        std::string value = trimHeaderValue(line.substr(colon + 1));
+        if (isStatusHeader(key))
+        {
+            std::istringstream  code(value);
+            int                 status = 0;
+            code >> status;
+            if (status >= 100 && status <= 599)
+                response.setStatusCode(status);
+        }
+        else
+            response.setHeaders(key, value);
+    }
+    response.setBody(raw.substr(sep + sepLen));
+}
+
+/*
  * Runs the CGI script through the interpreter: creates the pipes, forks, wires
  * the child's stdin/stdout to the pipes, passes env as the child's environment,
  * then streams body to the child while collecting its stdout into output at the

@@ -356,8 +356,7 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 	{
 		HttpResponse	response;
 
-		response.setStatusCode(200);
-		response.setBody(proc->output());
+		_cgiHandler.parseCgiOutput(proc->output(), response);
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
 	}
 	else

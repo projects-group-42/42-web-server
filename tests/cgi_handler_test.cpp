@@ -18,6 +18,7 @@
 
 #include "cgi/CgiHandler.hpp"
 #include "http/HttpRequest.hpp"
+#include "http/HttpResponse.hpp"
 
 static int	s_pass = 0;
 static int	s_fail = 0;
@@ -158,6 +159,79 @@ static void	test_env_reaches_script(void)
 	std::remove("cgi_env.sh");
 }
 
+/*
+ * Checks parseCgiOutput consumes the Status header into the status code and
+ * forwards the other headers and the body of a CRLF-delimited CGI response.
+ */
+static void	test_parse_status_and_headers(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	handler.parseCgiOutput(
+		"Status: 201 Created\r\nContent-Type: text/plain\r\nX-Foo: bar\r\n\r\nhello body",
+		response);
+	TEST(response.getStatusCode() == 201, "parseCgiOutput reads Status code");
+	TEST(response.getHeaderValue("Content-Type") == "text/plain", "parseCgiOutput forwards Content-Type");
+	TEST(response.getHeaderValue("X-Foo") == "bar", "parseCgiOutput forwards custom headers");
+	TEST(response.getBody() == "hello body", "parseCgiOutput extracts the body");
+}
+
+/*
+ * Checks the status defaults to 200 when the CGI output has no Status header.
+ */
+static void	test_parse_default_status(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	handler.parseCgiOutput("Content-Type: text/html\r\n\r\n<h1>hi</h1>", response);
+	TEST(response.getStatusCode() == 200, "parseCgiOutput defaults to 200 without Status");
+	TEST(response.getHeaderValue("Content-Type") == "text/html", "parseCgiOutput keeps Content-Type without Status");
+	TEST(response.getBody() == "<h1>hi</h1>", "parseCgiOutput extracts body without Status");
+}
+
+/*
+ * Checks a redirect Status code is applied and the Location header is kept.
+ */
+static void	test_parse_redirect(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	handler.parseCgiOutput("Status: 302 Found\r\nLocation: /next\r\n\r\n", response);
+	TEST(response.getStatusCode() == 302, "parseCgiOutput reads redirect Status");
+	TEST(response.getHeaderValue("Location") == "/next", "parseCgiOutput forwards Location");
+	TEST(response.getBody() == "", "parseCgiOutput accepts an empty body with headers");
+}
+
+/*
+ * Checks a CGI response delimited by a bare LF blank line is parsed too.
+ */
+static void	test_parse_lf_separator(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	handler.parseCgiOutput("Content-Type: text/plain\nStatus: 404 Not Found\n\nmissing", response);
+	TEST(response.getStatusCode() == 404, "parseCgiOutput reads Status with LF separator");
+	TEST(response.getHeaderValue("Content-Type") == "text/plain", "parseCgiOutput forwards header with LF separator");
+	TEST(response.getBody() == "missing", "parseCgiOutput extracts body with LF separator");
+}
+
+/*
+ * Checks headerless output is served entirely as the body with a 200 status.
+ */
+static void	test_parse_no_headers(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	handler.parseCgiOutput("just a plain body\n", response);
+	TEST(response.getStatusCode() == 200, "parseCgiOutput defaults to 200 without a header block");
+	TEST(response.getBody() == "just a plain body\n", "parseCgiOutput serves headerless output as body");
+}
+
 int	main(void)
 {
 	test_stdout_redirect();
@@ -165,6 +239,11 @@ int	main(void)
 	test_large_body();
 	test_build_env();
 	test_env_reaches_script();
+	test_parse_status_and_headers();
+	test_parse_default_status();
+	test_parse_redirect();
+	test_parse_lf_separator();
+	test_parse_no_headers();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

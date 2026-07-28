@@ -20,12 +20,12 @@
 #include <cerrno>
 
 StaticFileHandler::StaticFileHandler(void)
-	: _root("www"), _index("index.html")
+	: _root("www"), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
 {
 }
 
 StaticFileHandler::StaticFileHandler(const std::string &root)
-	: _root(root), _index("index.html")
+	: _root(root), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
 {
 }
 
@@ -40,6 +40,7 @@ StaticFileHandler &StaticFileHandler::operator=(const StaticFileHandler &other)
 	{
 		_root = other._root;
 		_index = other._index;
+		_maxBodySize = other._maxBodySize;
 	}
 	return (*this);
 }
@@ -56,6 +57,15 @@ void	StaticFileHandler::setRoot(const std::string &root)
 void	StaticFileHandler::setIndex(const std::string &index)
 {
 	_index = index;
+}
+
+/*
+ * Sets the maximum accepted request body size in bytes. A negative value
+ * disables the limit; the default mirrors the server's client_max_body_size.
+ */
+void	StaticFileHandler::setMaxBodySize(long maxBodySize)
+{
+	_maxBodySize = maxBodySize;
 }
 
 const std::string &StaticFileHandler::getRoot(void) const
@@ -253,12 +263,28 @@ bool StaticFileHandler::isMultipartFormData(const HttpRequest &request,
 }
 
 /*
+ * Returns the final path component of `name`, discarding everything up to
+ * and including the last '/' or '\'. Strips directory components from an
+ * attacker-controlled upload filename so a part can only be written inside
+ * the target directory.
+ */
+static std::string	fileBaseName(const std::string &name)
+{
+	size_t	slash = name.find_last_of("/\\");
+
+	if (slash == std::string::npos)
+		return (name);
+	return (name.substr(slash + 1));
+}
+
+/*
  * Parses a multipart/form-data body and saves every file part under the
- * directory addressed by the request URI, naming each file after its
- * Content-Disposition "filename" attribute. Form fields without a filename
- * are ignored. Returns 400 on a malformed body or when no file part is
- * present, 201/200 mirroring handlePost when at least one file is saved,
- * and 403/404/500 on the matching save failures.
+ * directory addressed by the request URI, naming each file after the base
+ * name of its Content-Disposition "filename" attribute. Form fields without
+ * a filename are ignored. Returns 400 on a malformed body, an unsafe
+ * filename, or when no file part is present, 201/200 mirroring handlePost
+ * when at least one file is saved, and 403/404/500 on the matching save
+ * failures.
  */
 bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
 		const std::string &boundary, HttpResponse &response)
@@ -289,7 +315,14 @@ bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
 		if (!parts[i].isFile())
 			continue;
 
-		std::string	resolvedPath = rslv_req_realpath(baseUri + parts[i].filename);
+		std::string	filename = fileBaseName(parts[i].filename);
+		if (filename.empty() || filename == "." || filename == "..")
+		{
+			response.setStatusCode(400);
+			return (true);
+		}
+
+		std::string	resolvedPath = rslv_req_realpath(baseUri + filename);
 		if (resolvedPath.empty())
 		{
 			response.setStatusCode(403);
@@ -319,12 +352,20 @@ bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
 /*
  * Writes the request body to the file resolved from the URI. When the
  * request carries multipart/form-data, delegates to handleMultipartUpload
- * to extract and save the file part(s) instead. Returns 201 if a file was
+ * to extract and save the file part(s) instead. Rejects with 413 when the
+ * body exceeds the configured maximum size. Returns 201 if a file was
  * created, 200 if it was overwritten.
  */
 bool StaticFileHandler::handlePost(const HttpRequest &request,
 		HttpResponse &response)
 {
+	if (_maxBodySize >= 0
+		&& request.getBody().size() > static_cast<size_t>(_maxBodySize))
+	{
+		response.setStatusCode(413);
+		return (true);
+	}
+
 	std::string	boundary;
 	if (isMultipartFormData(request, boundary))
 		return (handleMultipartUpload(request, boundary, response));

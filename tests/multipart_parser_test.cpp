@@ -55,6 +55,16 @@ static void	test_extract_boundary(void)
 	TEST(!MultipartParser::extractBoundary("multipart/form-data", boundary)
 		&& boundary.empty(),
 		"reports missing boundary parameter");
+
+	TEST(MultipartParser::extractBoundary(
+			"multipart/form-data; myboundary=WRONG; boundary=RIGHT", boundary)
+		&& boundary == "RIGHT",
+		"ignores a substring match inside another parameter");
+
+	TEST(!MultipartParser::extractBoundary(
+			"multipart/form-data; myboundary=WRONG", boundary)
+		&& boundary.empty(),
+		"reports missing boundary when only a substring match exists");
 }
 
 /* ------------------------------------------------------------------ */
@@ -286,6 +296,104 @@ static void	test_handler_rejects_body_without_file_part(void)
 	rmdir("mp_root4");
 }
 
+static void	test_handler_strips_path_from_filename(void)
+{
+	mkdir("mp_root5", 0755);
+	mkdir("mp_root5/uploads", 0755);
+	std::remove("mp_root5/uploads/escape.txt");
+	std::remove("mp_root5/escape.txt");
+
+	StaticFileHandler	handler("mp_root5");
+	HttpRequest			request;
+	HttpResponse		response;
+	std::string			body =
+		"--BOUND\r\n"
+		"Content-Disposition: form-data; name=\"file\"; filename=\"../escape.txt\"\r\n"
+		"\r\n"
+		"contained"
+		"\r\n--BOUND--\r\n";
+
+	request.setMethod("POST");
+	request.setUri("/uploads");
+	request.setHeaders("Content-Type", "multipart/form-data; boundary=BOUND");
+	request.setBody(body);
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 201,
+		"saves a traversal filename inside the upload directory");
+	TEST(fileContains("mp_root5/uploads/escape.txt", "contained"),
+		"strips the directory component from the filename");
+
+	struct stat	st;
+	TEST(stat("mp_root5/escape.txt", &st) != 0,
+		"does not write outside the upload directory");
+
+	std::remove("mp_root5/uploads/escape.txt");
+	std::remove("mp_root5/escape.txt");
+	rmdir("mp_root5/uploads");
+	rmdir("mp_root5");
+}
+
+static void	test_handler_rejects_dotdot_filename(void)
+{
+	mkdir("mp_root6", 0755);
+	mkdir("mp_root6/uploads", 0755);
+
+	StaticFileHandler	handler("mp_root6");
+	HttpRequest			request;
+	HttpResponse		response;
+	std::string			body =
+		"--BOUND\r\n"
+		"Content-Disposition: form-data; name=\"file\"; filename=\"..\"\r\n"
+		"\r\n"
+		"payload"
+		"\r\n--BOUND--\r\n";
+
+	request.setMethod("POST");
+	request.setUri("/uploads");
+	request.setHeaders("Content-Type", "multipart/form-data; boundary=BOUND");
+	request.setBody(body);
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 400,
+		"rejects a filename that resolves to no base name");
+
+	rmdir("mp_root6/uploads");
+	rmdir("mp_root6");
+}
+
+static void	test_handler_rejects_oversized_body(void)
+{
+	mkdir("mp_root7", 0755);
+	mkdir("mp_root7/uploads", 0755);
+
+	StaticFileHandler	handler("mp_root7");
+	handler.setMaxBodySize(8);
+	HttpRequest			request;
+	HttpResponse		response;
+	std::string			body =
+		"--BOUND\r\n"
+		"Content-Disposition: form-data; name=\"file\"; filename=\"big.txt\"\r\n"
+		"\r\n"
+		"way past the limit"
+		"\r\n--BOUND--\r\n";
+
+	request.setMethod("POST");
+	request.setUri("/uploads");
+	request.setHeaders("Content-Type", "multipart/form-data; boundary=BOUND");
+	request.setBody(body);
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 413,
+		"answers 413 when the body exceeds the maximum size");
+
+	rmdir("mp_root7/uploads");
+	rmdir("mp_root7");
+}
+
 int	main(void)
 {
 	test_extract_boundary();
@@ -298,6 +406,9 @@ int	main(void)
 	test_handler_overwrites_existing_file();
 	test_handler_rejects_missing_boundary();
 	test_handler_rejects_body_without_file_part();
+	test_handler_strips_path_from_filename();
+	test_handler_rejects_dotdot_filename();
+	test_handler_rejects_oversized_body();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

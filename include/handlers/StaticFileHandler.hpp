@@ -35,6 +35,7 @@ class StaticFileHandler : public IRequestHandler
 	private:
 		std::string	_root;
 		std::string	_index;
+		long		_maxBodySize;
 
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
@@ -77,6 +78,7 @@ class StaticFileHandler : public IRequestHandler
 
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
+		void				setMaxBodySize(long maxBodySize);
 		const std::string	&getRoot(void) const;
 };
 

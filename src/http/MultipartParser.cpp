@@ -89,6 +89,12 @@ bool MultipartParser::extractBoundary(const std::string &contentType,
 	size_t		pos = lower.find("boundary=");
 
 	boundary.clear();
+	while (pos != std::string::npos)
+	{
+		if (pos == 0 || contentType[pos - 1] == ';' || contentType[pos - 1] == ' ')
+			break;
+		pos = lower.find("boundary=", pos + 1);
+	}
 	if (pos == std::string::npos)
 		return (false);
 

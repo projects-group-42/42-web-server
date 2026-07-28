@@ -245,10 +245,11 @@ int StaticFileHandler::saveFile(const std::string &resolvedPath,
 }
 
 /*
- * Detects a multipart/form-data POST and extracts its boundary token.
- * Returns true whenever Content-Type declares multipart/form-data, even if
- * the boundary parameter turns out to be missing or malformed, so the
- * caller can answer with the appropriate error.
+ * Detects a multipart/form-data request by inspecting the Content-Type
+ * header and extracts its boundary token. Does not check the request
+ * method. Returns true whenever Content-Type declares multipart/form-data,
+ * even if the boundary parameter turns out to be missing or malformed, so
+ * the caller can answer with the appropriate error.
  */
 bool StaticFileHandler::isMultipartFormData(const HttpRequest &request,
 		std::string &boundary) const

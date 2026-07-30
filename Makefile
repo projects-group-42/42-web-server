@@ -12,6 +12,7 @@ SRC_FILES	= main.cpp \
 			  http/MimeType.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
+			  http/MultipartParser.cpp \
 			  handlers/IRequestHandler.cpp \
 			  handlers/StaticFileHandler.cpp \
 			  server/Router.cpp \
@@ -54,10 +55,15 @@ CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/utils/Utils.cpp
 CGI_TEST_BIN	= test_cgi
 
-CGIPROC_TEST_SRC	= tests/cgi_process_test.cpp \
-					  src/cgi/CgiProcess.cpp \
-					  src/cgi/CgiPipes.cpp
-CGIPROC_TEST_BIN	= test_cgi_process
+MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/utils/Utils.cpp
+MULTIPART_TEST_BIN	= test_multipart
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -78,17 +84,13 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(CGI_TEST_BIN) $(CGIPROC_TEST_BIN)
-	./$(TEST_BIN)
-	./$(LEXER_TEST_BIN)
-	./$(PARSER_TEST_BIN)
 	./$(CGI_TEST_BIN)
-	./$(CGIPROC_TEST_BIN)
+	./$(MULTIPART_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -100,10 +102,12 @@ $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-$(CGIPROC_TEST_BIN): $(CGIPROC_TEST_SRC)
+$(MULTIPART_TEST_BIN): $(MULTIPART_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
@@ -116,7 +120,7 @@ fclean: clean
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
-	rm -f $(CGIPROC_TEST_BIN)
+	rm -f $(MULTIPART_TEST_BIN)
 
 re: fclean all
 

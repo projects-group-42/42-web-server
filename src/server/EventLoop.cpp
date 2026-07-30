@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 #include <cstdlib>
 
+static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
+
 EventLoop::EventLoop(void) : _sckt(NULL), _router("www")
 {
 }
@@ -31,7 +33,9 @@ EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _router("www")
 }
 
 EventLoop::EventLoop(const EventLoop &copy)
-	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients), _router(copy._router)
+	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients),
+	  _router(copy._router), _cgiHandler(copy._cgiHandler),
+	  _cgi(copy._cgi), _pipeToClient(copy._pipeToClient)
 {
 }
 
@@ -47,6 +51,9 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 		_fds = other._fds;
 		_clients = other._clients;
 		_router = other._router;
+		_cgiHandler = other._cgiHandler;
+		_cgi = other._cgi;
+		_pipeToClient = other._pipeToClient;
 	}
 	return (*this);
 }
@@ -138,6 +145,11 @@ void EventLoop::handleRequest(int fd)
 	ResponseBuilder	builder;
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
+	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))
+	{
+		startCgi(fd);
+		return ;
+	}
 	builder.setKeepAlive(conn.get_keep_alive());
 
 	try
@@ -191,6 +203,196 @@ bool EventLoop::handleSend(int fd)
 	return true; // more to send
 }
 
+/*
+ * Appends a new pollfd for fd with the given interest to the poll set.
+ */
+void EventLoop::addPollFd(int fd, short events)
+{
+	struct pollfd	pfd;
+
+	pfd.fd = fd;
+	pfd.events = events;
+	pfd.revents = 0;
+	_fds.push_back(pfd);
+}
+
+/*
+ * Marks fd's poll entry as inactive by setting its fd to -1, which poll()
+ * ignores. The entry is removed later by compactPollFds so the set is never
+ * resized while the run() loop is iterating it.
+ */
+void EventLoop::disablePollFd(int fd)
+{
+	if (fd < 0)
+		return ;
+	for (size_t i = 0; i < _fds.size(); ++i)
+	{
+		if (_fds[i].fd == fd)
+		{
+			_fds[i].fd = -1;
+			_fds[i].events = 0;
+			break;
+		}
+	}
+}
+
+/*
+ * Drops every poll entry disabled during the current iteration.
+ */
+void EventLoop::compactPollFds(void)
+{
+	for (size_t i = 0; i < _fds.size(); )
+	{
+		if (_fds[i].fd == -1)
+			_fds.erase(_fds.begin() + i);
+		else
+			++i;
+	}
+}
+
+/*
+ * Queues an error response on the client and arms it for sending. Used when a
+ * CGI request cannot be started (invalid script or fork failure).
+ */
+void EventLoop::sendCgiError(int fd, int status)
+{
+	Connection		&conn = _clients[fd];
+	ResponseBuilder	builder;
+
+	builder.setKeepAlive(conn.get_keep_alive());
+	conn.set_write_buffer(builder.buildErrorResponse(status));
+	setPollEvents(fd, POLLOUT);
+}
+
+/*
+ * Starts a CGI request without blocking the server: validates the script,
+ * forks the interpreter, registers the CGI pipe fds in the poll set, and parks
+ * the client fd (no interest) until the child finishes. On validation or fork
+ * failure it queues the matching error response instead.
+ */
+void EventLoop::startCgi(int fd)
+{
+	Connection		&conn = _clients[fd];
+	std::string		scriptPath;
+	HttpResponse	errorResponse;
+
+	if (!_cgiHandler.validate(conn.getRequest().getUri(), scriptPath, errorResponse))
+	{
+		sendCgiError(fd, errorResponse.getStatusCode());
+		return ;
+	}
+
+	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(), scriptPath);
+	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());
+
+	if (!proc->start(CGI_INTERPRETER, scriptPath, env))
+	{
+		delete proc;
+		sendCgiError(fd, 500);
+		return ;
+	}
+	_cgi[fd] = proc;
+	_pipeToClient[proc->outputReadFd()] = fd;
+	addPollFd(proc->outputReadFd(), POLLIN);
+	if (proc->isWriting())
+	{
+		_pipeToClient[proc->bodyWriteFd()] = fd;
+		addPollFd(proc->bodyWriteFd(), POLLOUT);
+	}
+	setPollEvents(fd, 0);
+	Logger::info("CGI started, server stays responsive.");
+}
+
+/*
+ * Advances one CGI pipe by a single non-blocking step. Writable steps feed the
+ * request body to the child; readable steps drain its output. A finished
+ * direction is unregistered from the poll set, and once both directions are
+ * done the response is built and sent.
+ */
+void EventLoop::handleCgiIo(int fd, short revents)
+{
+	int			clientFd = _pipeToClient[fd];
+	CgiProcess	*proc = _cgi[clientFd];
+
+	if (fd == proc->bodyWriteFd())
+	{
+		if (revents & (POLLERR | POLLHUP | POLLNVAL))
+			proc->stopWriting();
+		else if (revents & POLLOUT)
+			proc->onWritable();
+		if (!proc->isWriting())
+		{
+			disablePollFd(fd);
+			_pipeToClient.erase(fd);
+		}
+	}
+	else
+	{
+		if (revents & (POLLIN | POLLHUP | POLLERR))
+			proc->onReadable();
+		if (!proc->isReading())
+		{
+			disablePollFd(fd);
+			_pipeToClient.erase(fd);
+		}
+	}
+	if (proc->finished())
+		finishCgi(clientFd, proc);
+}
+
+/*
+ * Reaps the finished child, turns its collected output into an HTTP response
+ * (502 when the script did not exit cleanly), arms the client for sending, and
+ * releases the process.
+ */
+void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
+{
+	Connection		&conn = _clients[clientFd];
+	ResponseBuilder	builder;
+	int				status = proc->reap();
+
+	builder.setKeepAlive(conn.get_keep_alive());
+	if (status == 0)
+	{
+		HttpResponse	response;
+
+		response.setStatusCode(200);
+		response.setBody(proc->output());
+		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
+	}
+	else
+		conn.set_write_buffer(builder.buildErrorResponse(502));
+	setPollEvents(clientFd, POLLOUT);
+	_cgi.erase(clientFd);
+	delete proc;
+	Logger::info("CGI finished, response queued.");
+}
+
+/*
+ * Tears down a CGI whose client disconnected mid-execution: unregisters its
+ * pipe fds, kills and reaps the child, and drops the client connection.
+ */
+void EventLoop::abortCgi(int clientFd)
+{
+	CgiProcess	*proc = _cgi[clientFd];
+
+	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); )
+	{
+		if (it->second == clientFd)
+		{
+			disablePollFd(it->first);
+			_pipeToClient.erase(it++);
+		}
+		else
+			++it;
+	}
+	_cgi.erase(clientFd);
+	delete proc;
+	disablePollFd(clientFd);
+	_clients.erase(clientFd);
+	Logger::info("Client disconnected during CGI, process terminated.");
+}
+
 void EventLoop::run(void)
 {
 	if (!_sckt)
@@ -213,22 +415,40 @@ void EventLoop::run(void)
 		}
 		for (size_t i = 0; i < _fds.size(); i++)
 		{
-			if (_fds[i].revents == 0)
+			int		fd = _fds[i].fd;
+			short	revents = _fds[i].revents;
+
+			if (revents == 0 || fd == -1)
 				continue;
-			if (_fds[i].fd == _sckt->getFd())
-				acceptClients();
-			else if ((_fds[i].revents & POLLOUT) && handleSend(_fds[i].fd) == false)
+			if (fd == _sckt->getFd())
 			{
-				_clients.erase(_fds[i].fd);
+				acceptClients();
+				continue;
+			}
+			if (_pipeToClient.count(fd))
+			{
+				handleCgiIo(fd, revents);
+				continue;
+			}
+			if (_cgi.count(fd))
+			{
+				if (revents & (POLLHUP | POLLERR | POLLNVAL))
+					abortCgi(fd);
+				continue;
+			}
+			if ((revents & POLLOUT) && handleSend(fd) == false)
+			{
+				_clients.erase(fd);
 				_fds.erase(_fds.begin() + i);
 				i--;
 			}
-			else if ((_fds[i].revents & POLLIN) && handleClient(_fds[i].fd) == false)
+			else if ((revents & POLLIN) && handleClient(fd) == false)
 			{
-				_clients.erase(_fds[i].fd);
+				_clients.erase(fd);
 				_fds.erase(_fds.begin() + i);
 				i--;
 			}
 		}
+		compactPollFds();
 	}
 }

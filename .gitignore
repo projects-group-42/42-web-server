@@ -5,6 +5,7 @@ test_mime
 test_lexer
 test_parser
 test_cgi
+test_cgi_process
 # build artifacts
 obj/
 *.o

@@ -18,6 +18,7 @@ SRC_FILES	= main.cpp \
 			  server/Router.cpp \
 			  cgi/CgiHandler.cpp \
 			  cgi/CgiPipes.cpp \
+			  cgi/CgiProcess.cpp \
 			  config/Lexer.cpp \
 			  config/ConfigAST.cpp \
 			  config/ConfigParser.cpp \

@@ -41,7 +41,7 @@ class CgiHandler
 		void				setCgiRoot(const std::string &cgiRoot);
 		const std::string	&getCgiRoot(void) const;
 		bool				isCgiRequest(const std::string &uri) const;
-		bool				validate(const std::string &uri, HttpResponse &response) const;
+		bool				validate(const std::string &uri, std::string &scriptPath, HttpResponse &response) const;
 		std::vector<std::string>	buildEnv(const HttpRequest &request, const std::string &scriptPath) const;
 		bool                execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, const std::vector<std::string> &env, std::string &output) const;
 };

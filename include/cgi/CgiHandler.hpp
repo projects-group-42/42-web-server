@@ -13,8 +13,10 @@
 #ifndef CGI_HANDLER_HPP
 # define CGI_HANDLER_HPP
 
+# include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include <string>
+# include <vector>
 
 /*
  * CgiHandler
@@ -40,7 +42,8 @@ class CgiHandler
 		const std::string	&getCgiRoot(void) const;
 		bool				isCgiRequest(const std::string &uri) const;
 		bool				validate(const std::string &uri, HttpResponse &response) const;
-		bool                execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, std::string &output) const;
+		std::vector<std::string>	buildEnv(const HttpRequest &request, const std::string &scriptPath) const;
+		bool                execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, const std::vector<std::string> &env, std::string &output) const;
 };
 
 #endif

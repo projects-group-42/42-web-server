@@ -47,6 +47,10 @@ class EventLoop
 		void	handleCgiIo(int fd, short revents);
 		void	finishCgi(int clientFd, CgiProcess *proc);
 		void	abortCgi(int clientFd);
+		void	unregisterCgiPipes(int clientFd);
+		void	timeoutCgi(int clientFd);
+		void	checkCgiTimeouts(void);
+		int		cgiPollTimeout(void);
 		void	sendCgiError(int fd, int status);
 
 	public:

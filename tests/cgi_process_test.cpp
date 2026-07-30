@@ -153,12 +153,25 @@ static void	test_empty_body_closes_stdin(void)
 	std::remove("cgi_p_cat.sh");
 }
 
+/*
+ * Checks the deadline the event loop stores on the process is read back
+ * unchanged, so the timeout comparison uses the value that was set.
+ */
+static void	test_deadline_roundtrip(void)
+{
+	CgiProcess	proc(-1, "");
+
+	proc.setDeadlineMs(123456);
+	TEST(proc.deadlineMs() == 123456, "deadlineMs returns the value set by setDeadlineMs");
+}
+
 int	main(void)
 {
 	test_incremental_output();
 	test_body_forwarded();
 	test_large_body();
 	test_empty_body_closes_stdin();
+	test_deadline_roundtrip();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

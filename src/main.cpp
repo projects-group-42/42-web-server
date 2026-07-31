@@ -6,38 +6,36 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/19 15:15:29 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/31 18:48:12 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <fcntl.h>
-#include "utils/Logger.hpp"
-#include <string>
-#include <cstring>
-#include "utils/Logger.hpp"
-#include "network/Socket.hpp"
-#include "server/EventLoop.hpp"
-#include <unistd.h>
-#include <fcntl.h>
-#include <string>
-#include <cstring>
-#include "utils/Logger.hpp"
-#include "network/Socket.hpp"
-#include "server/EventLoop.hpp"
-#include <unistd.h>
-#include <fcntl.h>
 #include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <string>
+#include <unistd.h>
+#include "utils/Logger.hpp"
+#include "network/Socket.hpp"
+#include "server/EventLoop.hpp"
+#include "config/ConfigUtils.hpp"
+#include "config/Lexer.hpp"
 
 int main(int argc, char **argv)
 {
-
-    (void)argv;
-    (void)argc;
-	const std::string	host = "0.0.0.0";
-	const int			port = 8081;
-	const int			backlog = 128;
-
-	signal(SIGPIPE, SIG_IGN);
+	HandleConfig config_file(argc == 2 ? argv[1]: "");
+	ConfigBlock tree = config_file.handle();
+	
+	std::cout << "=== MEU CONFIGBLOCK ===" << std::endl;
+	std::cout << "tree.name: " << tree.name << std::endl;
+	std::cout << "tree.directives.size(): " << tree.directives.size() << std::endl;
+	std::cout << "tree.children.size(): " << tree.children.size() << std::endl;
+	for (size_t i = 0; i < tree.children.size(); i++)
+	{
+		std::cout << "  child[" << i << "].name: " << tree.children[i].name << std::endl;
+		std::cout << "  child[" << i << "].directives.size(): " << tree.children[i].directives.size() << std::endl;
+	}
+	/*signal(SIGPIPE, SIG_IGN);
 	try
 	{
 		Socket sckt;
@@ -58,6 +56,6 @@ int main(int argc, char **argv)
 	{
 		Logger::error(e.what());
 		return 1;
-	}
+	}*/
 	return 0;
 }

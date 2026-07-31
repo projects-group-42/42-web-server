@@ -360,11 +360,23 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 			return;
 		}
 		_psr_state = HEADERS;
-		if(!prs_headers())
 		{
-			Logger::error("RequestParser: invalid headers");
-			_psr_state = ERROR;
-			return;
+			size_t headers_end = _buffer.find("\r\n\r\n");
+			if (headers_end == std::string::npos)
+			{
+				Logger::error("RequestParser: missing header terminator");
+				setErrorState(400);
+				return;
+			}
+			std::string body_data = _buffer.substr(headers_end + 4);
+			_buffer.erase(headers_end + 2);
+			if(!prs_headers())
+			{
+				Logger::error("RequestParser: invalid headers");
+				_psr_state = ERROR;
+				return;
+			}
+			_buffer = body_data;
 		}
 		if (_request.hasHeader("Transfer-Encoding") &&
 			_request.hasHeader("Content-Length"))

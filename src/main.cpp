@@ -6,51 +6,47 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/19 15:15:29 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 17:02:02 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <fcntl.h>
-#include "utils/Logger.hpp"
-#include <string>
-#include <cstring>
-#include "utils/Logger.hpp"
-#include "network/Socket.hpp"
-#include "server/EventLoop.hpp"
-#include <unistd.h>
-#include <fcntl.h>
-#include <string>
-#include <cstring>
-#include "utils/Logger.hpp"
-#include "network/Socket.hpp"
-#include "server/EventLoop.hpp"
-#include <unistd.h>
-#include <fcntl.h>
 #include <csignal>
+#include <fcntl.h>
+#include <sstream>
+#include <string>
+#include <unistd.h>
+#include "utils/Logger.hpp"
+#include "network/Socket.hpp"
+#include "server/EventLoop.hpp"
+#include "config/ConfigLoader.hpp"
+#include "config/Lexer.hpp"
+#include "config/ServerConfig.hpp"
+
+/* Maximum queue length specifiable by listen.  */
+#define SOMAXCONN	4096
 
 int main(int argc, char **argv)
 {
-
-    (void)argv;
-    (void)argc;
-	const std::string	host = "0.0.0.0";
-	const int			port = 8081;
-	const int			backlog = 128;
-
+	ConfigLoader config_file(argc == 2 ? argv[1] : "conf/simple.conf");
+	ServerConfig config = config_file.loader();
+	
 	signal(SIGPIPE, SIG_IGN);
 	try
 	{
 		Socket sckt;
 
 		sckt.create();
-		sckt.bind(host, port);
-		sckt.listen(backlog);
+		sckt.bind(config.host, config.port);
+		sckt.listen(SOMAXCONN);
 		int flags = fcntl(sckt.getFd(), F_GETFL, 0);
 		if (flags != -1 && (flags & O_NONBLOCK))
 			Logger::info("Socket is non-blocking.");
 		else
 			Logger::warning("Socket is blocking.");
-		Logger::info("Listening on 0.0.0.0:8081 — connect with: nc localhost 8081");
+
+		std::ostringstream oss;
+		oss << "Listening on " << config.host << ":" << config.port;
+		Logger::info(oss.str());
 		EventLoop loop(&sckt);
 		loop.run();
 	}

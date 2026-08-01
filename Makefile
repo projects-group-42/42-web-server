@@ -22,6 +22,7 @@ SRC_FILES	= main.cpp \
 			  config/Lexer.cpp \
 			  config/ConfigAST.cpp \
 			  config/ConfigParser.cpp \
+			  config/ConfigLoader.cpp \
 			  config/ServerConfig.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 

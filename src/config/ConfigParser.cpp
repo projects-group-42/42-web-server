@@ -14,7 +14,7 @@
 
 # include <stdexcept>
 # include <sstream>
-#include "utils/Logger.hpp"
+
 /**
  * @brief Default constructor for ConfigParser.
  * Initializes an empty parser with no tokens and cursor at position 0.
@@ -198,6 +198,5 @@ ConfigBlock ConfigParser::parse(void)
 
 	parseBlockBody(root);
 	expect(TOKEN_EOF, "end of file");
-	Logger::info("Parser called");
 	return (root);
 }

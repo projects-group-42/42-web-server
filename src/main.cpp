@@ -11,14 +11,14 @@
 /* ************************************************************************** */
 
 #include <csignal>
-#include <cstring>
 #include <fcntl.h>
+#include <sstream>
 #include <string>
 #include <unistd.h>
 #include "utils/Logger.hpp"
 #include "network/Socket.hpp"
 #include "server/EventLoop.hpp"
-#include "config/ConfigLoader1.hpp"
+#include "config/ConfigLoader.hpp"
 #include "config/Lexer.hpp"
 #include "config/ServerConfig.hpp"
 
@@ -27,7 +27,7 @@
 
 int main(int argc, char **argv)
 {
-	ConfigLoader config_file(argc == 2 ? argv[1]: "simple.conf");
+	ConfigLoader config_file(argc == 2 ? argv[1] : "conf/simple.conf");
 	ServerConfig config = config_file.loader();
 	
 	signal(SIGPIPE, SIG_IGN);
@@ -43,7 +43,10 @@ int main(int argc, char **argv)
 			Logger::info("Socket is non-blocking.");
 		else
 			Logger::warning("Socket is blocking.");
-		Logger::info("Listening on 0.0.0.0:8081 — connect with: nc localhost 8081");
+
+		std::ostringstream oss;
+		oss << "Listening on " << config.host << ":" << config.port;
+		Logger::info(oss.str());
 		EventLoop loop(&sckt);
 		loop.run();
 	}

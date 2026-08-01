@@ -13,14 +13,12 @@
 #ifndef CONFIGLOADER_HPP
 # define CONFIGLOADER_HPP
 
-#include <cstdlib>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include "config/Lexer.hpp"
-#include "config/ConfigParser.hpp"
-# include "config/ConfigAST.hpp"
+# include <cstdlib>
+# include <fstream>
+# include <sstream>
+# include <string>
+# include "config/Lexer.hpp"
+# include "config/ConfigParser.hpp"
 # include "config/ConfigAST.hpp"
 # include "config/ServerConfig.hpp"
 
@@ -38,12 +36,11 @@ class ConfigLoader
 		ConfigLoader &operator=(const ConfigLoader &other);
 		~ConfigLoader(void);
 
-		std::string configPath(void);
 		ServerConfig loader(void);
+
+	private:
+		std::string configPath(void);
 		void parse_listen(void);
-		
 };
 
 #endif
-
-

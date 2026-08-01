@@ -12,7 +12,7 @@
 
 # include "config/Lexer.hpp"
 # include <cctype>
-#include "utils/Logger.hpp"
+
 /* ------------------------------------------------------------------ */
 /* Token                                                              */
 /* ------------------------------------------------------------------ */
@@ -245,6 +245,5 @@ std::vector<Token> Lexer::tokenize(void)
 		tokens.push_back(token);
 	}
 	while (token.type != TOKEN_EOF);
-	Logger::info("Tokens Created");
 	return (tokens);
 }

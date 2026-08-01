@@ -41,6 +41,11 @@ class ConfigLoader
 	private:
 		std::string configPath(void);
 		void parse_listen(void);
+		void parse_locations(void);
+
+		static bool	parseBool(const std::string &s);
+		static void	parseAutoindex(LocationConfig &loc,
+					const ConfigDirective &d);
 };
 
 #endif

@@ -1,18 +1,19 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   ConfigUtils.hpp                                    :+:      :+:    :+:   */
+/*   ConfigLoader1.hpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/30 18:31:46 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 17:15:26 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef CONFIGUTILS_HPP
-# define CONFIGUTILS_HPP
+#ifndef CONFIGLOADER_HPP
+# define CONFIGLOADER_HPP
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -21,15 +22,26 @@
 #include "config/ConfigParser.hpp"
 # include "config/ConfigAST.hpp"
 # include "config/ConfigAST.hpp"
+# include "config/ServerConfig.hpp"
 
-struct HandleConfig
+class ConfigLoader
 {
-	std::string					_file_path;
+	private:
+		std::string					_file_path;
+		ServerConfig				_config;
+		ConfigBlock					_tree;
 
-	HandleConfig(void);
-	HandleConfig(const std::string &file_path);
-	std::string configPath(void);
-	ConfigBlock handle(void);
+	public:
+		ConfigLoader(void);
+		ConfigLoader(const std::string &file_path);
+		ConfigLoader(const ConfigLoader &copy);
+		ConfigLoader &operator=(const ConfigLoader &other);
+		~ConfigLoader(void);
+
+		std::string configPath(void);
+		ServerConfig loader(void);
+		void parse_listen(void);
+		
 };
 
 #endif

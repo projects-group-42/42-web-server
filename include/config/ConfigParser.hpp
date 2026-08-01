@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ConfigParser.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 11:43:14 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 16:10:04 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/01 13:35:10 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,6 +41,7 @@ class ConfigParser
 		~ConfigParser(void);
 
 		ConfigBlock	parse(void);
+
 };
 
 #endif

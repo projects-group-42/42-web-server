@@ -6,13 +6,13 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/12 20:27:44 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/30 18:44:53 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 12:54:24 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 # include "config/Lexer.hpp"
 # include <cctype>
-
+#include "utils/Logger.hpp"
 /* ------------------------------------------------------------------ */
 /* Token                                                              */
 /* ------------------------------------------------------------------ */
@@ -245,5 +245,6 @@ std::vector<Token> Lexer::tokenize(void)
 		tokens.push_back(token);
 	}
 	while (token.type != TOKEN_EOF);
+	Logger::info("Tokens Created");
 	return (tokens);
 }

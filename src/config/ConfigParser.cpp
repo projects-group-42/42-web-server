@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 11:46:22 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/30 18:49:18 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 13:43:43 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,7 +14,7 @@
 
 # include <stdexcept>
 # include <sstream>
-
+#include "utils/Logger.hpp"
 /**
  * @brief Default constructor for ConfigParser.
  * Initializes an empty parser with no tokens and cursor at position 0.
@@ -198,5 +198,6 @@ ConfigBlock ConfigParser::parse(void)
 
 	parseBlockBody(root);
 	expect(TOKEN_EOF, "end of file");
+	Logger::info("Parser called");
 	return (root);
 }

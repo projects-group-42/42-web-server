@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/31 18:48:12 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 17:02:02 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,31 +18,26 @@
 #include "utils/Logger.hpp"
 #include "network/Socket.hpp"
 #include "server/EventLoop.hpp"
-#include "config/ConfigUtils.hpp"
+#include "config/ConfigLoader1.hpp"
 #include "config/Lexer.hpp"
+#include "config/ServerConfig.hpp"
+
+/* Maximum queue length specifiable by listen.  */
+#define SOMAXCONN	4096
 
 int main(int argc, char **argv)
 {
-	HandleConfig config_file(argc == 2 ? argv[1]: "");
-	ConfigBlock tree = config_file.handle();
+	ConfigLoader config_file(argc == 2 ? argv[1]: "simple.conf");
+	ServerConfig config = config_file.loader();
 	
-	std::cout << "=== MEU CONFIGBLOCK ===" << std::endl;
-	std::cout << "tree.name: " << tree.name << std::endl;
-	std::cout << "tree.directives.size(): " << tree.directives.size() << std::endl;
-	std::cout << "tree.children.size(): " << tree.children.size() << std::endl;
-	for (size_t i = 0; i < tree.children.size(); i++)
-	{
-		std::cout << "  child[" << i << "].name: " << tree.children[i].name << std::endl;
-		std::cout << "  child[" << i << "].directives.size(): " << tree.children[i].directives.size() << std::endl;
-	}
-	/*signal(SIGPIPE, SIG_IGN);
+	signal(SIGPIPE, SIG_IGN);
 	try
 	{
 		Socket sckt;
 
 		sckt.create();
-		sckt.bind(host, port);
-		sckt.listen(backlog);
+		sckt.bind(config.host, config.port);
+		sckt.listen(SOMAXCONN);
 		int flags = fcntl(sckt.getFd(), F_GETFL, 0);
 		if (flags != -1 && (flags & O_NONBLOCK))
 			Logger::info("Socket is non-blocking.");
@@ -56,6 +51,6 @@ int main(int argc, char **argv)
 	{
 		Logger::error(e.what());
 		return 1;
-	}*/
+	}
 	return 0;
 }

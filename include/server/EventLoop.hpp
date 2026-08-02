@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:09 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:45:30 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,7 @@
 #include "http/Router.hpp"
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiProcess.hpp"
+#include "config/ServerConfig.hpp"
 #include <vector>
 #include <map>
 #include <poll.h>
@@ -25,7 +26,8 @@
 class EventLoop
 {
 	private:
-		Socket						*_sckt;
+		std::vector<Socket*>		_sckt;
+		std::vector<ServerConfig>	_configs;
 		std::vector<struct pollfd>	_fds;
 		std::map<int, Connection>	_clients;
 		Router						_router;
@@ -33,7 +35,8 @@ class EventLoop
 		std::map<int, CgiProcess*>	_cgi;
 		std::map<int, int>			_pipeToClient;
 
-		void	acceptClients(void);
+		bool	isMasterSocket(int fd) const;
+		void	acceptClients(int fd);
 		bool	handleClient(int fd);
 		void	handleParseError(int fd);
 		void	handleRequest(int fd);
@@ -48,15 +51,20 @@ class EventLoop
 		void	finishCgi(int clientFd, CgiProcess *proc);
 		void	abortCgi(int clientFd);
 		void	sendCgiError(int fd, int status);
+		std::string
+				cleanHostHeader(const std::string& rawHost) const;
+		const ServerConfig& 
+				getServerConfigForRequest(int clientPort,
+				const HttpRequest& request) const;
 
 	public:
 		EventLoop(void);
-		EventLoop(Socket *sckt);
+		EventLoop(const std::vector<ServerConfig>& configs);
 		EventLoop(const EventLoop &copy);
-		~EventLoop(void);
-
 		EventLoop&	operator=(const EventLoop &other);
-
+		~EventLoop(void);
+		
+		void	setupSockets(void);
 		void	run(void);
 };
 #endif

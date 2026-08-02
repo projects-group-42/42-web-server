@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 17:02:02 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:21:59 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <iostream>
 #include "utils/Logger.hpp"
 #include "network/Socket.hpp"
 #include "server/EventLoop.hpp"
@@ -27,27 +28,13 @@
 
 int main(int argc, char **argv)
 {
-	ConfigLoader config_file(argc == 2 ? argv[1] : "conf/simple.conf");
-	ServerConfig config = config_file.loader();
-	
 	signal(SIGPIPE, SIG_IGN);
 	try
 	{
-		Socket sckt;
-
-		sckt.create();
-		sckt.bind(config.host, config.port);
-		sckt.listen(SOMAXCONN);
-		int flags = fcntl(sckt.getFd(), F_GETFL, 0);
-		if (flags != -1 && (flags & O_NONBLOCK))
-			Logger::info("Socket is non-blocking.");
-		else
-			Logger::warning("Socket is blocking.");
-
-		std::ostringstream oss;
-		oss << "Listening on " << config.host << ":" << config.port;
-		Logger::info(oss.str());
-		EventLoop loop(&sckt);
+		ConfigLoader config_file(argc == 2 ? argv[1] : "conf/simple.conf");
+		std::vector<ServerConfig> configs = config_file.loader();
+		EventLoop loop(configs);
+		loop.setupSockets();
 		loop.run();
 	}
 	catch (const std::exception &e)

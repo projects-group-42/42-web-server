@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/19 12:30:29 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 23:31:47 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,26 +14,27 @@
 #include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
-
 #include <unistd.h>
 #include <cerrno>
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <cstdlib>
+#include <iostream>
 
 static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
 
-EventLoop::EventLoop(void) : _sckt(NULL), _router("www")
+EventLoop::EventLoop(void) : _configs(), _router("www")
 {
 }
 
-EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _router("www")
+EventLoop::EventLoop(const std::vector<ServerConfig>& configs) : _configs(configs), _router("www")
 {
 }
 
 EventLoop::EventLoop(const EventLoop &copy)
-	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients),
+	:  _sckt(copy._sckt), _configs(copy. _configs),
+	  _fds(copy._fds), _clients(copy._clients),
 	  _router(copy._router), _cgiHandler(copy._cgiHandler),
 	  _cgi(copy._cgi), _pipeToClient(copy._pipeToClient)
 {
@@ -41,6 +42,8 @@ EventLoop::EventLoop(const EventLoop &copy)
 
 EventLoop::~EventLoop(void)
 {
+	for (size_t i = 0; i < _sckt.size(); i++)
+		delete _sckt[i];
 }
 
 EventLoop &EventLoop::operator=(const EventLoop &other)
@@ -48,6 +51,7 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 	if (this != &other)
 	{
 		_sckt = other._sckt;
+		_configs = other._configs;
 		_fds = other._fds;
 		_clients = other._clients;
 		_router = other._router;
@@ -58,11 +62,59 @@ EventLoop &EventLoop::operator=(const EventLoop &other)
 	return (*this);
 }
 
-void EventLoop::acceptClients(void)
+void EventLoop::setupSockets(void)
+{
+	std::vector<int> bound_ports;
+
+	for (size_t i = 0; i < _configs.size(); i++)
+	{
+		int current_port = _configs[i].port;
+		bool already_bound = false;
+
+		for (size_t j = 0; j < bound_ports.size(); j++) {
+			if (bound_ports[j] == current_port) {
+				already_bound = true;
+				break;
+			}
+		}
+
+		if (!already_bound)
+		{
+			Socket* sckt = new Socket();
+			sckt->create();
+			sckt->bind(_configs[i].host, current_port);
+			sckt->listen(SOMAXCONN);
+			
+			int flags = fcntl(sckt->getFd(), F_GETFL, 0);
+			if (flags != -1 && (flags & O_NONBLOCK))
+				Logger::info("Socket is non-blocking.");
+			else
+				Logger::warning("Socket is blocking.");
+
+			std::ostringstream oss;
+			oss << "Listening on " << _configs[i].host << ":" << current_port;
+			Logger::info(oss.str());
+
+			_sckt.push_back(sckt);
+			bound_ports.push_back(current_port);
+		}
+	}
+}
+
+bool EventLoop::isMasterSocket(int fd) const
+{
+	for (size_t i = 0; i < _sckt.size(); i++) {
+		if (_sckt[i]->getFd() == fd)
+			return true;
+	}
+	return false;
+}
+
+void EventLoop::acceptClients(int fd)
 {
 	while (true)
 	{
-		int client = accept(_sckt->getFd(), NULL, NULL);
+		int client = accept(fd, NULL, NULL);
 		if (client == -1)
 			break;
 		setNonBlocking(client);
@@ -143,6 +195,8 @@ void EventLoop::handleRequest(int fd)
 {
 	Connection	&conn = _clients[fd];
 	ResponseBuilder	builder;
+	int clientPort = conn.getLocalPort(); // (Ou de onde você guarda a porta)
+	const ServerConfig& chosenConfig = getServerConfigForRequest(clientPort, conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))
@@ -155,9 +209,7 @@ void EventLoop::handleRequest(int fd)
 	try
 	{
 		HttpResponse response;
-
-		_router.route(conn.getRequest(), response);
-
+		_router.route(conn.getRequest(), response, chosenConfig);
 		std::string serialized = builder.builder(conn.getRequest(), response);
 		conn.set_write_buffer(serialized);
 	}
@@ -173,7 +225,6 @@ void EventLoop::handleRequest(int fd)
 		std::string serialized = builder.buildErrorResponse(500);
 		conn.set_write_buffer(serialized);
 	}
-
 	setPollEvents(fd, POLLOUT);
 }
 
@@ -395,15 +446,16 @@ void EventLoop::abortCgi(int clientFd)
 
 void EventLoop::run(void)
 {
-	if (!_sckt)
-		throw std::runtime_error("EventLoop: no socket set");
-
-	struct pollfd s_listening;
-	s_listening.fd = _sckt->getFd();
-	s_listening.events = POLLIN;
-	s_listening.revents = 0;
-	_fds.push_back(s_listening);
-
+	if (_sckt.empty())
+		throw std::runtime_error("EventLoop: no sockets initialized");
+	for (size_t i = 0; i < _sckt.size(); i++)
+	{
+		struct pollfd s_listening;
+		s_listening.fd = _sckt[i]->getFd();
+		s_listening.events = POLLIN;
+		s_listening.revents = 0;
+		_fds.push_back(s_listening);
+	}
 	while (true)
 	{
 		int ready = poll(_fds.data(), _fds.size(), -1);
@@ -417,12 +469,11 @@ void EventLoop::run(void)
 		{
 			int		fd = _fds[i].fd;
 			short	revents = _fds[i].revents;
-
 			if (revents == 0 || fd == -1)
 				continue;
-			if (fd == _sckt->getFd())
+			if (isMasterSocket(fd))
 			{
-				acceptClients();
+				acceptClients(fd);
 				continue;
 			}
 			if (_pipeToClient.count(fd))
@@ -451,4 +502,56 @@ void EventLoop::run(void)
 		}
 		compactPollFds();
 	}
+}
+
+// Remove a porta do cabeçalho Host (ex: "meu-site.com:8080" vira "meu-site.com")
+std::string EventLoop::cleanHostHeader(const std::string& rawHost) const
+{
+	size_t colon_pos = rawHost.find(':');
+	if (colon_pos != std::string::npos)
+		return rawHost.substr(0, colon_pos);
+	return rawHost;
+}
+
+// O Coração da Issue #44: Escolhe o servidor certo!
+const ServerConfig& EventLoop::getServerConfigForRequest(int clientPort, const HttpRequest& request) const
+{
+	std::string hostHeader = cleanHostHeader(request.getHeaderValue("Host"));
+	const ServerConfig* defaultServer = NULL;
+
+
+	std::cout << "[MATCH DEBUG] Porta do cliente: " << clientPort << "\n";
+    std::cout << "[MATCH DEBUG] Host header recebido (limpo): '" << hostHeader << "'\n";
+
+	
+	for (size_t i = 0; i < _configs.size(); ++i)
+	{
+		std::cout << "[MATCH DEBUG] Verificando server config index " << i 
+                  << " na porta " << _configs[i].port << "\n";
+		// 1. Filtra para olhar apenas para servidores que estão nesta porta
+		if (_configs[i].port == clientPort)
+		{
+			// O primeiro que encontrarmos nesta porta é o fallback (default server)
+			if (defaultServer == NULL)
+				defaultServer = &_configs[i];
+
+			// 2. Procura um match exato no array de server_names
+			for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
+			{
+				std::cout << "[MATCH DEBUG]   -> Comparando com serverName: '" << _configs[i].serverNames[j] << "'\n";
+				if (_configs[i].serverNames[j] == hostHeader)
+				{
+					std::cout << "[MATCH DEBUG]   ✅ MATCH EXATO ENCONTRADO!\n";
+					return _configs[i]; // Bingo! Encontrou o domínio exato.
+				}
+			}
+		}
+	}
+
+	// 3. Se não houver match exato do nome, devolve o servidor padrão desta porta
+	if (defaultServer != NULL)
+		return *defaultServer;
+
+	// Caso extremo (segurança)
+	return _configs[0];
 }

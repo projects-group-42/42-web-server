@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   ConfigLoader1.hpp                                  :+:      :+:    :+:   */
+/*   ConfigLoader.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 17:15:26 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 21:19:18 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,7 +26,7 @@ class ConfigLoader
 {
 	private:
 		std::string					_file_path;
-		ServerConfig				_config;
+		std::vector<ServerConfig>	_servers;
 		ConfigBlock					_tree;
 
 	public:
@@ -36,11 +36,12 @@ class ConfigLoader
 		ConfigLoader &operator=(const ConfigLoader &other);
 		~ConfigLoader(void);
 
-		ServerConfig loader(void);
+		std::vector<ServerConfig> loader(void);
 
 	private:
 		std::string configPath(void);
-		void parse_listen(void);
+		void parse_listen(const ConfigDirective &directive, ServerConfig &server);
+		void parse_names(const ConfigDirective &directive, ServerConfig &server);
 };
 
 #endif

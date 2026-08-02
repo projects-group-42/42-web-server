@@ -3,15 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   Connection.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:01 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:43:48 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "network/Connection.hpp"
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <unistd.h>
 
 Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser(), _keep_alive(false)
@@ -140,4 +141,19 @@ int Connection::get_error_code(void) const
 const HttpRequest& Connection::getRequest(void) const
 {
 	return _parser.getRequest();
+}
+
+int Connection::getLocalPort(void) const
+{
+	struct sockaddr_in address;
+	socklen_t len = sizeof(address);
+
+	// Pergunta ao kernel qual o endereço/porta amarrado a este socket
+	if (getsockname(_client_fd, (struct sockaddr *)&address, &len) == -1)
+	{
+		return 0;
+	}
+
+	// Retorna a porta convertida para o formato legível (Host Byte Order)
+	return ntohs(address.sin_port);
 }

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:56:45 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:49:45 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -131,7 +131,7 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 }
 
 bool	Router::route(const HttpRequest &request,
-				HttpResponse &response)
+				HttpResponse &response, const ServerConfig &config)
 {
 	bool pathFound = false;
 	std::string allow;
@@ -153,6 +153,7 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
+		setRoot(config.root);
 		handler->handle(request, response);
 	}
 	return (true);

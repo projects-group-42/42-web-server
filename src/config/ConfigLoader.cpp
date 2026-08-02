@@ -89,6 +89,8 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 			{
 				parse_index(*it, current_server);
 			}
+			else if (it->name == "error_page")
+				parse_error_page(*it, current_server);
 		}
 		std::vector<ConfigBlock>::const_iterator child_it;
 		for (child_it = block_it->children.begin(); child_it != block_it->children.end(); ++child_it)
@@ -155,6 +157,37 @@ void ConfigLoader::parse_index(
 		throw std::runtime_error("index directive requires an argument");
 	server.index = directive.args[0];
 
+}
+
+void ConfigLoader::parse_error_page(
+	const ConfigDirective &directive,
+	ServerConfig &server)
+{
+	if (directive.args.size() < 2)
+		throw std::runtime_error("error_page requires status code and path");
+
+	const std::string &path = directive.args.back();
+	if (path.empty())
+		throw std::runtime_error("invalid error_page directive");
+
+	for (size_t j = 0; j < directive.args.size() - 1; ++j)
+	{
+		const std::string &code_str = directive.args[j];
+		if (code_str.empty())
+			throw std::runtime_error("invalid error_page status code");
+
+		for (size_t i = 0; i < code_str.size(); ++i)
+		{
+			if (!std::isdigit(code_str[i]))
+				throw std::runtime_error("invalid error_page status code");
+		}
+
+		int code = std::atoi(code_str.c_str());
+		if (code < 400 || code > 599)
+			throw std::runtime_error("invalid error_page status code");
+
+		server.errorPages[code] = path;
+	}
 }
 
 LocationConfig ConfigLoader::parse_location(const ConfigBlock &block)

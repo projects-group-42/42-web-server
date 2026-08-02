@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 01:11:30 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 01:44:21 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,12 @@
 #include "http/HttpResponse.hpp"
 #include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
+#include "http/MimeType.hpp"
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <iostream>
 
 Router::Router(void)
 	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
@@ -60,6 +66,48 @@ Router::~Router(void)
 static std::string makeKey(const std::string &method, const std::string &path)
 {
 	return (method + ":" + path);
+}
+
+static std::string makeErrorPagePath(const std::string &root,
+						 const std::string &errorPath)
+{
+	if (errorPath.empty())
+		return ("");
+	if (root.empty())
+	{
+		if (!errorPath.empty() && errorPath[0] == '/')
+			return (errorPath.substr(1));
+		return (errorPath);
+	}
+
+	std::string fullPath = root;
+	if (!fullPath.empty() && fullPath[fullPath.size() - 1] == '/' &&
+		!errorPath.empty() && errorPath[0] == '/')
+		fullPath.append(errorPath.begin() + 1, errorPath.end());
+	else if (!fullPath.empty() && fullPath[fullPath.size() - 1] != '/' &&
+		!errorPath.empty() && errorPath[0] != '/')
+	{
+		fullPath.push_back('/');
+		fullPath.append(errorPath);
+	}
+	else
+		fullPath.append(errorPath);
+	return (fullPath);
+}
+
+static bool readFileBody(const std::string &filePath, std::string &body)
+{
+	int fd = open(filePath.c_str(), O_RDONLY);
+	if (fd == -1)
+		return (false);
+
+	char buffer[4096];
+	size_t bytes;
+	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0)
+		body.append(buffer, bytes);
+
+	close(fd);
+	return (bytes != static_cast<size_t>(-1));
 }
 
 void	Router::addHandler(const std::string &method,
@@ -138,6 +186,32 @@ bool	Router::route(const HttpRequest &request,
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);
 
+	std::string finalRoot = config.root;
+	std::string finalIndex = config.index;
+	std::string bestMatchPath = "";
+	for (size_t i = 0; i < config.locations.size(); ++i)
+	{
+		const std::string &locPath = config.locations[i].path;
+		if (request.getUri().compare(0, locPath.size(), locPath) == 0)
+		{
+			Logger::info("Location encontrada: " + config.locations[i].path);
+			Logger::info("Root da location: " + config.locations[i].root);
+			Logger::info("Index configurado: " + config.locations[i].index);
+			if (locPath.size() > bestMatchPath.size())
+			{
+				bestMatchPath = locPath;
+				if (!config.locations[i].root.empty())
+				{
+					finalRoot = config.locations[i].root;
+				}
+				if (!config.locations[i].index.empty())
+				{
+					finalIndex = config.locations[i].index;
+				}
+			}
+		}
+	}
+
 	if (handler == NULL)
 	{
 		if (pathFound)
@@ -153,43 +227,35 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
-		// 1. Começa por assumir o root geral do bloco server (fallback)
-		std::string finalRoot = config.root;
-		std::string finalIndex = config.index;
-		std::string bestMatchPath = "";
-		// 2. Procura no vetor de locations qual delas melhor corresponde à URI (Longest Prefix Match)
-		for (size_t i = 0; i < config.locations.size(); ++i)
-		{
-			const std::string &locPath = config.locations[i].path;
-			
-			if (request.getUri().compare(0, locPath.size(), locPath) == 0)
-			{
-				Logger::info("Location encontrada: " + config.locations[i].path);
-				Logger::info("Root da location: " + config.locations[i].root);
-				Logger::info("Index configurado: " + config.locations[i].index);
-				if (locPath.size() > bestMatchPath.size())
-				{
-					bestMatchPath = locPath;
-					// Se a location tiver um root definido, ele tem prioridade absoluta!
-					if (!config.locations[i].root.empty())
-					{
-						finalRoot = config.locations[i].root;
-					}
-					if (!config.locations[i].index.empty())
-					{
-						finalIndex = config.locations[i].index;
-					}
-				}
-			}
-		}
-		
-
-		// 3. Aplica o root decidido e despacha para o handler
 		Logger::info("FINAL ROOT: " + finalRoot);
 		Logger::info("FINAL INDEX: " + finalIndex);
 		setRoot(finalRoot);
 		setIndex(finalIndex);
 		handler->handle(request, response);
+	}
+
+	if (response.getStatusCode() >= 400)
+	{
+		std::map<int, std::string>::const_iterator error_it;
+		error_it = config.errorPages.find(response.getStatusCode());
+		if (error_it != config.errorPages.end())
+		{
+			std::string errorPath = makeErrorPagePath(finalRoot,
+								error_it->second);
+			std::string body;
+			if (readFileBody(errorPath, body))
+			{
+				Logger::info("Serving custom error page: " + errorPath);
+				response.setBody(body);
+				std::string contentType = mimeType_resolve(errorPath);
+				if (!contentType.empty())
+					response.setHeaders("content-type", contentType);
+			}
+			else
+			{
+				Logger::warning("Unable to load error page file: " + errorPath);
+			}
+		}
 	}
 	return (true);
 }

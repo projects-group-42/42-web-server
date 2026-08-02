@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 01:19:31 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 01:24:26 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,6 +44,7 @@ class ConfigLoader
 		void			parse_names(const ConfigDirective &directive, ServerConfig &server);
 		void			parse_root(const ConfigDirective &directive, ServerConfig &server);
 		void			parse_index(const ConfigDirective &directive, ServerConfig &server);
+		void			parse_error_page(const ConfigDirective &directive, ServerConfig &server);
 		LocationConfig	parse_location(const ConfigBlock &block);
 };
 

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/24 18:23:26 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:23:10 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <cerrno>
+#include "utils/Logger.hpp"
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
@@ -180,7 +181,7 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 		HttpResponse &response)
 {
 	std::string		resolvedPath = rslv_req_realpath(request.getUri());
-
+	Logger::info("Tentando abrir caminho físico: " + resolvedPath);
 	if (resolvedPath.empty())
 	{
 		response.setStatusCode(403);

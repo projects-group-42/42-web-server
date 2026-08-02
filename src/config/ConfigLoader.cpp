@@ -79,10 +79,7 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 				parse_listen(*it, current_server);
 			else if (it->name == "root")
 			{
-				if (it->args.empty())
-					throw std::runtime_error("root directive requires an argument");
-				current_server.root = it->args[0];
-				std::cout << "[PARSER DEBUG] Achei o root: " << current_server.root << "\n";
+				parse_root(*it, current_server);
 			}
 			else if (it->name == "server_name")
 			{
@@ -124,6 +121,15 @@ void ConfigLoader::parse_names(
 	for (size_t i = 0; i < directive.args.size(); i++)
 	{
 		server.serverNames.push_back(directive.args[i]);
-		std::cout << "[PARSER DEBUG] Achei o server_name: " << directive.args[i] << "\n";
 	}
+}
+
+void ConfigLoader::parse_root(
+	const ConfigDirective &directive,
+	ServerConfig &server)
+{
+	if (directive.args.empty())
+		throw std::runtime_error("root directive requires an argument");
+	server.root = directive.args[0];
+
 }

@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 23:31:47 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:31:30 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -519,15 +519,9 @@ const ServerConfig& EventLoop::getServerConfigForRequest(int clientPort, const H
 	std::string hostHeader = cleanHostHeader(request.getHeaderValue("Host"));
 	const ServerConfig* defaultServer = NULL;
 
-
-	std::cout << "[MATCH DEBUG] Porta do cliente: " << clientPort << "\n";
-    std::cout << "[MATCH DEBUG] Host header recebido (limpo): '" << hostHeader << "'\n";
-
 	
 	for (size_t i = 0; i < _configs.size(); ++i)
 	{
-		std::cout << "[MATCH DEBUG] Verificando server config index " << i 
-                  << " na porta " << _configs[i].port << "\n";
 		// 1. Filtra para olhar apenas para servidores que estão nesta porta
 		if (_configs[i].port == clientPort)
 		{
@@ -538,10 +532,8 @@ const ServerConfig& EventLoop::getServerConfigForRequest(int clientPort, const H
 			// 2. Procura um match exato no array de server_names
 			for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
 			{
-				std::cout << "[MATCH DEBUG]   -> Comparando com serverName: '" << _configs[i].serverNames[j] << "'\n";
 				if (_configs[i].serverNames[j] == hostHeader)
 				{
-					std::cout << "[MATCH DEBUG]   ✅ MATCH EXATO ENCONTRADO!\n";
 					return _configs[i]; // Bingo! Encontrou o domínio exato.
 				}
 			}

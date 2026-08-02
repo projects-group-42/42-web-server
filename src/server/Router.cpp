@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 22:49:45 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:31:05 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -153,7 +153,32 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
-		setRoot(config.root);
+		// 1. Começa por assumir o root geral do bloco server (fallback)
+		std::string finalRoot = config.root;
+		std::string bestMatchPath = "";
+
+		// 2. Procura no vetor de locations qual delas melhor corresponde à URI (Longest Prefix Match)
+		for (size_t i = 0; i < config.locations.size(); ++i)
+		{
+			const std::string &locPath = config.locations[i].path;
+			
+			if (request.getUri().compare(0, locPath.size(), locPath) == 0)
+			{
+				if (locPath.size() > bestMatchPath.size())
+				{
+					bestMatchPath = locPath;
+					// Se a location tiver um root definido, ele tem prioridade absoluta!
+					if (!config.locations[i].root.empty())
+					{
+						finalRoot = config.locations[i].root;
+					}
+				}
+			}
+		}
+		
+
+		// 3. Aplica o root decidido e despacha para o handler
+		setRoot(finalRoot);
 		handler->handle(request, response);
 	}
 	return (true);

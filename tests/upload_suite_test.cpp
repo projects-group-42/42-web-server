@@ -15,6 +15,7 @@
 #include <string>
 #include <cstdio>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
 
 #include "http/HttpRequest.hpp"
@@ -50,6 +51,18 @@ static std::string	readFile(const std::string &path)
 			std::istreambuf_iterator<char>()));
 }
 
+/*
+ * Reports whether `path` currently exists on the filesystem. Distinguishes a
+ * missing file from an existing empty one, which readFile() cannot do because
+ * it returns an empty string for both.
+ */
+static bool	fileExists(const std::string &path)
+{
+	struct stat	st;
+
+	return (stat(path.c_str(), &st) == 0);
+}
+
 static std::string	generateBinaryContent(std::size_t size)
 {
 	std::string	result;
@@ -77,6 +90,9 @@ static void	destroyDirectoryTree(const std::string &root)
 	std::remove((root + "/uploads/overwrite.txt").c_str());
 	std::remove((root + "/uploads/a.txt").c_str());
 	std::remove((root + "/uploads/b.txt").c_str());
+	std::remove((root + "/uploads/readonly.txt").c_str());
+	std::remove((root + "/uploads/rejected.txt").c_str());
+	std::remove((root + "/uploads/field-only.txt").c_str());
 	rmdir((root + "/uploads/deep").c_str());
 	rmdir((root + "/uploads").c_str());
 	rmdir(root.c_str());
@@ -170,7 +186,6 @@ static void	test_multipart_preserves_binary_content(void)
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		payload = generateBinaryContent(512);
-	std::string		boundary = "BOUNDARY";
 	std::string		body =
 		"--BOUNDARY\r\n"
 		"Content-Disposition: form-data; name=\"file\"; filename=\"binary.bin\"\r\n"
@@ -270,7 +285,7 @@ static void	test_plain_post_rejects_oversized(void)
 
 	TEST(response.getStatusCode() == 413,
 		"oversized plain POST answers 413");
-	TEST(readFile("up_root/uploads/rejected.txt") == "",
+	TEST(!fileExists("up_root/uploads/rejected.txt"),
 		"oversized plain POST leaves no file behind");
 
 	destroyDirectoryTree("up_root");
@@ -313,7 +328,6 @@ static void	test_multipart_multiple_files(void)
 	StaticFileHandler	handler("up_root");
 	HttpRequest		request;
 	HttpResponse	response;
-	std::string		boundary = "BOUNDARY";
 	std::string		body =
 		"--BOUNDARY\r\n"
 		"Content-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\n"
@@ -358,7 +372,6 @@ static void	test_multipart_mixed_new_and_existing(void)
 	StaticFileHandler	handler("up_root");
 	HttpRequest		request;
 	HttpResponse	response;
-	std::string		boundary = "BOUNDARY";
 	std::string		body =
 		"--BOUNDARY\r\n"
 		"Content-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\n"
@@ -406,7 +419,6 @@ static void	test_multipart_all_existing(void)
 	StaticFileHandler	handler("up_root");
 	HttpRequest		request;
 	HttpResponse	response;
-	std::string		boundary = "BOUNDARY";
 	std::string		body =
 		"--BOUNDARY\r\n"
 		"Content-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\n"
@@ -447,10 +459,11 @@ static void	test_uploaded_file_exists_on_disk(void)
 	StaticFileHandler	handler("up_root");
 	HttpRequest		request;
 	HttpResponse	response;
+	std::string		body = "verify on disk";
 
 	request.setMethod("POST");
 	request.setUri("/uploads/plain.txt");
-	request.setBody("verify on disk");
+	request.setBody(body);
 
 	handler.handle(request, response);
 
@@ -458,9 +471,9 @@ static void	test_uploaded_file_exists_on_disk(void)
 	int			exists = (stat("up_root/uploads/plain.txt", &st) == 0);
 
 	TEST(exists, "uploaded file exists on filesystem");
-	TEST(S_ISREG(st.st_mode),
+	TEST(exists && S_ISREG(st.st_mode),
 		"uploaded file is a regular file");
-	TEST(st.st_size == static_cast<off_t>(14),
+	TEST(exists && st.st_size == static_cast<off_t>(body.size()),
 		"uploaded file has correct size");
 
 	destroyDirectoryTree("up_root");
@@ -470,7 +483,7 @@ static void	test_uploaded_file_exists_on_disk(void)
 /* Non-POST method does not trigger upload                              */
 /* ------------------------------------------------------------------ */
 
-static void	test_get_des_not_upload(void)
+static void	test_get_does_not_upload(void)
 {
 	createDirectoryTree("up_root");
 
@@ -525,6 +538,13 @@ static void	test_upload_to_missing_directory(void)
 
 static void	test_upload_to_readonly_parent(void)
 {
+	if (geteuid() == 0)
+	{
+		std::cout << "[SKIP] upload to read-only directory (running as root)"
+			<< std::endl;
+		return;
+	}
+
 	mkdir("up_ro", 0755);
 	mkdir("up_ro/nope", 0555);
 
@@ -545,6 +565,128 @@ static void	test_upload_to_readonly_parent(void)
 	rmdir("up_ro");
 }
 
+/* ------------------------------------------------------------------ */
+/* Malformed upload requests (400)                                      */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A plain POST whose target URI resolves to an existing directory cannot be
+ * written to, so saveFile() must report 400 instead of clobbering the tree.
+ */
+static void	test_post_to_directory_answers_400(void)
+{
+	createDirectoryTree("up_root");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads/deep");
+	request.setBody("into a directory");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 400,
+		"POST onto an existing directory answers 400");
+
+	destroyDirectoryTree("up_root");
+}
+
+/*
+ * multipart/form-data without a boundary parameter is unparseable, so the
+ * handler must answer 400 rather than treating the body as a raw upload.
+ */
+static void	test_multipart_without_boundary_answers_400(void)
+{
+	createDirectoryTree("up_root");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads");
+	request.setHeaders("Content-Type", "multipart/form-data");
+	request.setBody("--NOPE\r\nContent-Disposition: form-data\r\n\r\nx\r\n--NOPE--\r\n");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 400,
+		"multipart without a boundary parameter answers 400");
+
+	destroyDirectoryTree("up_root");
+}
+
+/*
+ * A multipart body carrying only form fields has no filename to save under,
+ * so the handler must answer 400 and leave the upload directory untouched.
+ */
+static void	test_multipart_without_file_part_answers_400(void)
+{
+	createDirectoryTree("up_root");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+	std::string		body =
+		"--BOUNDARY\r\n"
+		"Content-Disposition: form-data; name=\"field\"\r\n"
+		"\r\n"
+		"just-a-value"
+		"\r\n--BOUNDARY--\r\n";
+
+	request.setMethod("POST");
+	request.setUri("/uploads");
+	request.setHeaders("Content-Type",
+		"multipart/form-data; boundary=BOUNDARY");
+	request.setBody(body);
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 400,
+		"multipart with no file part answers 400");
+	TEST(!fileExists("up_root/uploads/field-only.txt"),
+		"multipart with no file part writes nothing");
+
+	destroyDirectoryTree("up_root");
+}
+
+/* ------------------------------------------------------------------ */
+/* Unwritable target (500)                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Routing an upload through a regular file makes open() fail with ENOTDIR,
+ * which is neither a permission nor a missing-directory error, so saveFile()
+ * must fall through to 500.
+ */
+static void	test_post_through_regular_file_answers_500(void)
+{
+	createDirectoryTree("up_root");
+
+	std::ofstream	blocker("up_root/uploads/plain.txt");
+	blocker << "not a directory";
+	blocker.close();
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads/plain.txt/nested.txt");
+	request.setBody("unreachable");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 500,
+		"POST through a regular file answers 500");
+	TEST(readFile("up_root/uploads/plain.txt") == "not a directory",
+		"failed upload leaves the blocking file untouched");
+
+	destroyDirectoryTree("up_root");
+}
+
 int	main(void)
 {
 	test_plain_post_creates_file();
@@ -559,9 +701,13 @@ int	main(void)
 	test_multipart_mixed_new_and_existing();
 	test_multipart_all_existing();
 	test_uploaded_file_exists_on_disk();
-	test_get_des_not_upload();
+	test_get_does_not_upload();
 	test_upload_to_missing_directory();
 	test_upload_to_readonly_parent();
+	test_post_to_directory_answers_400();
+	test_multipart_without_boundary_answers_400();
+	test_multipart_without_file_part_answers_400();
+	test_post_through_regular_file_answers_500();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

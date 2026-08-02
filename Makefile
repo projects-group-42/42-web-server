@@ -48,6 +48,15 @@ PARSER_TEST_BIN	= test_parser
 SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
 						  src/config/ServerConfig.cpp
 SERVER_CONFIG_TEST_BIN	= test_server_config
+
+CONFIG_LOADER_TEST_SRC	= tests/config_loader_test.cpp \
+						  src/config/Lexer.cpp \
+						  src/config/ConfigAST.cpp \
+						  src/config/ConfigParser.cpp \
+						  src/config/ConfigLoader.cpp \
+						  src/config/ServerConfig.cpp \
+						  src/utils/Logger.cpp
+CONFIG_LOADER_TEST_BIN	= test_config_loader
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/cgi/CgiHandler.cpp \
 				  src/cgi/CgiPipes.cpp \
@@ -85,11 +94,12 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
+	./$(CONFIG_LOADER_TEST_BIN)
 	./$(CGI_TEST_BIN)
 	./$(MULTIPART_TEST_BIN)
 
@@ -103,6 +113,9 @@ $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CONFIG_LOADER_TEST_BIN): $(CONFIG_LOADER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
@@ -120,6 +133,7 @@ fclean: clean
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
+	rm -f $(CONFIG_LOADER_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
 	rm -f $(MULTIPART_TEST_BIN)
 

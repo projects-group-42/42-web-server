@@ -119,6 +119,7 @@ ServerConfig ConfigLoader::loader(void)
 
 	_tree = parser.parse();
 	parse_listen();
+	parse_locations();
 	return (_config);
 }
 
@@ -235,4 +236,58 @@ void ConfigLoader::parse_listen(void)
 			<< _config.host << ":" << _config.port << ")";
 		Logger::warning(oss.str());
 	}
+}
+
+void ConfigLoader::parse_locations(void)
+{
+	std::vector<ConfigBlock>::const_iterator block_it;
+	for (block_it = _tree.children.begin();
+	     block_it != _tree.children.end(); ++block_it)
+	{
+		if (block_it->name != "server")
+			continue;
+
+		std::vector<ConfigBlock>::const_iterator it;
+		for (it = block_it->children.begin();
+		     it != block_it->children.end(); ++it)
+		{
+			if (it->name != "location")
+				continue;
+
+			if (it->args.empty())
+				throw std::runtime_error(
+				    "location block requires a path argument");
+
+			LocationConfig loc(it->args[0]);
+
+			std::vector<ConfigDirective>::const_iterator dit;
+			for (dit = it->directives.begin();
+			     dit != it->directives.end(); ++dit)
+			{
+				if (dit->name == "autoindex")
+					parseAutoindex(loc, *dit);
+			}
+
+			_config.locations.push_back(loc);
+		}
+	}
+}
+
+bool ConfigLoader::parseBool(const std::string &s)
+{
+	if (s == "on")
+		return (true);
+	if (s == "off")
+		return (false);
+	throw std::runtime_error(
+	    "expected 'on' or 'off', got: '" + s + "'");
+}
+
+void ConfigLoader::parseAutoindex(LocationConfig &loc,
+                                  const ConfigDirective &d)
+{
+	if (d.args.size() != 1)
+		throw std::runtime_error(
+		    "'autoindex' expects 'on' or 'off'");
+	loc.autoindex = parseBool(d.args[0]);
 }

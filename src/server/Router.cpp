@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 00:31:05 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 01:11:30 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -155,8 +155,8 @@ bool	Router::route(const HttpRequest &request,
 	{
 		// 1. Começa por assumir o root geral do bloco server (fallback)
 		std::string finalRoot = config.root;
+		std::string finalIndex = config.index;
 		std::string bestMatchPath = "";
-
 		// 2. Procura no vetor de locations qual delas melhor corresponde à URI (Longest Prefix Match)
 		for (size_t i = 0; i < config.locations.size(); ++i)
 		{
@@ -164,6 +164,9 @@ bool	Router::route(const HttpRequest &request,
 			
 			if (request.getUri().compare(0, locPath.size(), locPath) == 0)
 			{
+				Logger::info("Location encontrada: " + config.locations[i].path);
+				Logger::info("Root da location: " + config.locations[i].root);
+				Logger::info("Index configurado: " + config.locations[i].index);
 				if (locPath.size() > bestMatchPath.size())
 				{
 					bestMatchPath = locPath;
@@ -172,13 +175,20 @@ bool	Router::route(const HttpRequest &request,
 					{
 						finalRoot = config.locations[i].root;
 					}
+					if (!config.locations[i].index.empty())
+					{
+						finalIndex = config.locations[i].index;
+					}
 				}
 			}
 		}
 		
 
 		// 3. Aplica o root decidido e despacha para o handler
+		Logger::info("FINAL ROOT: " + finalRoot);
+		Logger::info("FINAL INDEX: " + finalIndex);
 		setRoot(finalRoot);
+		setIndex(finalIndex);
 		handler->handle(request, response);
 	}
 	return (true);

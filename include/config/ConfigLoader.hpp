@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 00:02:12 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 01:19:31 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,10 +39,12 @@ class ConfigLoader
 		std::vector<ServerConfig> loader(void);
 
 	private:
-		std::string	configPath(void);
-		void		parse_listen(const ConfigDirective &directive, ServerConfig &server);
-		void		parse_names(const ConfigDirective &directive, ServerConfig &server);
-		void		parse_root(const ConfigDirective &directive, ServerConfig &server);
+		std::string		configPath(void);
+		void			parse_listen(const ConfigDirective &directive, ServerConfig &server);
+		void			parse_names(const ConfigDirective &directive, ServerConfig &server);
+		void			parse_root(const ConfigDirective &directive, ServerConfig &server);
+		void			parse_index(const ConfigDirective &directive, ServerConfig &server);
+		LocationConfig	parse_location(const ConfigBlock &block);
 };
 
 #endif

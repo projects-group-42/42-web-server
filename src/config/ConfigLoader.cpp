@@ -85,6 +85,19 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 			{
 				parse_names(*it, current_server);
 			}
+			else if (it->name == "index")
+			{
+				parse_index(*it, current_server);
+			}
+		}
+		std::vector<ConfigBlock>::const_iterator child_it;
+		for (child_it = block_it->children.begin(); child_it != block_it->children.end(); ++child_it)
+		{
+			if (child_it->name == "location")
+			{
+				LocationConfig location = parse_location(*child_it);
+				current_server.locations.push_back(location);
+			}
 		}
 		_servers.push_back(current_server);
 	}
@@ -133,3 +146,35 @@ void ConfigLoader::parse_root(
 	server.root = directive.args[0];
 
 }
+
+void ConfigLoader::parse_index(
+	const ConfigDirective &directive,
+	ServerConfig &server)
+{
+	if (directive.args.empty())
+		throw std::runtime_error("index directive requires an argument");
+	server.index = directive.args[0];
+
+}
+
+LocationConfig ConfigLoader::parse_location(const ConfigBlock &block)
+{
+	if (block.args.empty())
+		throw std::runtime_error("location directive requires a path");
+
+	LocationConfig location(block.args[0]);
+
+	std::vector<ConfigDirective>::const_iterator it;
+	for (it = block.directives.begin();
+		 it != block.directives.end();
+		 ++it)
+	{
+		if (it->name == "root")
+			location.root = it->args[0];
+		else if (it->name == "index")
+			location.index = it->args[0];
+	}
+
+	return (location);
+}
+

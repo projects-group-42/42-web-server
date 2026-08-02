@@ -66,6 +66,23 @@ MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
 					  src/utils/Utils.cpp
 MULTIPART_TEST_BIN	= test_multipart
 
+UPLOAD_SUITE_TEST_SRC	= tests/upload_suite_test.cpp \
+						  src/http/MultipartParser.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/http/HttpResponse.cpp \
+						  src/http/MimeType.cpp \
+						  src/handlers/IRequestHandler.cpp \
+						  src/handlers/StaticFileHandler.cpp \
+						  src/utils/Utils.cpp
+UPLOAD_SUITE_TEST_BIN	= test_upload_suite
+
+REQUEST_PARSER_TEST_SRC	= tests/request_parser_test.cpp \
+						  src/http/RequestParser.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+REQUEST_PARSER_TEST_BIN	= test_request_parser
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -85,13 +102,15 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
 	./$(CGI_TEST_BIN)
 	./$(MULTIPART_TEST_BIN)
+	./$(UPLOAD_SUITE_TEST_BIN)
+	./$(REQUEST_PARSER_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -111,6 +130,12 @@ $(CGI_TEST_BIN): $(CGI_TEST_SRC)
 $(MULTIPART_TEST_BIN): $(MULTIPART_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(UPLOAD_SUITE_TEST_BIN): $(UPLOAD_SUITE_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(REQUEST_PARSER_TEST_BIN): $(REQUEST_PARSER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -122,6 +147,8 @@ fclean: clean
 	rm -f $(SERVER_CONFIG_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
 	rm -f $(MULTIPART_TEST_BIN)
+	rm -f $(UPLOAD_SUITE_TEST_BIN)
+	rm -f $(REQUEST_PARSER_TEST_BIN)
 
 re: fclean all
 

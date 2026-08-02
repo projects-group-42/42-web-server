@@ -22,22 +22,26 @@
 #include "config/Lexer.hpp"
 #include "config/ServerConfig.hpp"
 
-/* Maximum queue length specifiable by listen.  */
-#define SOMAXCONN	4096
+#define BACKLOG	128
 
 int main(int argc, char **argv)
 {
-	ConfigLoader config_file(argc == 2 ? argv[1] : "conf/simple.conf");
-	ServerConfig config = config_file.loader();
-	
+	if (argc > 2)
+	{
+		Logger::error("usage: ./webserv [config_file]");
+		return (1);
+	}
+
 	signal(SIGPIPE, SIG_IGN);
 	try
 	{
-		Socket sckt;
+		ConfigLoader	config_file(argc == 2 ? argv[1] : "conf/simple.conf");
+		ServerConfig	config = config_file.loader();
+		Socket			sckt;
 
 		sckt.create();
 		sckt.bind(config.host, config.port);
-		sckt.listen(SOMAXCONN);
+		sckt.listen(BACKLOG);
 		int flags = fcntl(sckt.getFd(), F_GETFL, 0);
 		if (flags != -1 && (flags & O_NONBLOCK))
 			Logger::info("Socket is non-blocking.");

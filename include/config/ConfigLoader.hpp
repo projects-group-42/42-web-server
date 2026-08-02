@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   ConfigLoader1.hpp                                  :+:      :+:    :+:   */
+/*   ConfigLoader.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
@@ -17,6 +17,7 @@
 # include <fstream>
 # include <sstream>
 # include <string>
+# include <vector>
 # include "config/Lexer.hpp"
 # include "config/ConfigParser.hpp"
 # include "config/ConfigAST.hpp"
@@ -38,9 +39,13 @@ class ConfigLoader
 
 		ServerConfig loader(void);
 
+		static int			parsePort(const std::string &token);
+		static std::string	parseHost(const std::string &token);
+
 	private:
 		std::string configPath(void);
 		void parse_listen(void);
+		void applyListen(const std::vector<std::string> &args);
 };
 
 #endif

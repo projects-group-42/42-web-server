@@ -208,10 +208,10 @@ bool RequestParser::prs_headers(void)
 			setErrorState(400);
 			return (false);
 		}
-		if (_buffer[0] == ' ')
+		if (!_buffer.empty() && _buffer[0] == ' ')
 			_buffer.erase(0, 1);
 		std::string str_value = str_extract("\r\n", 2);
-		if (_buffer[0] == ' ')
+		if (!_buffer.empty() && _buffer[0] == ' ')
 			_buffer.erase(0, 1);
 		_request.setHeaders(str_key, str_value);
 	}

@@ -48,23 +48,21 @@ PARSER_TEST_BIN	= test_parser
 SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
 						  src/config/ServerConfig.cpp
 SERVER_CONFIG_TEST_BIN	= test_server_config
-CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
-				  src/cgi/CgiHandler.cpp \
-				  src/cgi/CgiPipes.cpp \
-				  src/http/HttpRequest.cpp \
-				  src/http/HttpResponse.cpp \
-				  src/utils/Utils.cpp
-CGI_TEST_BIN	= test_cgi
 
-MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
-					  src/http/MultipartParser.cpp \
-					  src/http/HttpRequest.cpp \
-					  src/http/HttpResponse.cpp \
-					  src/http/MimeType.cpp \
-					  src/handlers/IRequestHandler.cpp \
-					  src/handlers/StaticFileHandler.cpp \
-					  src/utils/Utils.cpp
-MULTIPART_TEST_BIN	= test_multipart
+ERROR_PAGE_TEST_SRC	= tests/error_page_test.cpp \
+			   src/config/ConfigLoader.cpp \
+		       src/config/ConfigAST.cpp \
+		       src/config/ConfigParser.cpp \
+		       src/config/Lexer.cpp \
+		       src/config/ServerConfig.cpp \
+		       src/server/Router.cpp \
+		       src/handlers/IRequestHandler.cpp \
+		       src/handlers/StaticFileHandler.cpp \
+		       src/http/HttpRequest.cpp \
+		       src/http/HttpResponse.cpp \
+		       src/http/ResponseBuilder.cpp \
+		       src/http/MimeType.cpp \
+		       src/utils/Logger.cpp \
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -85,11 +83,12 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(ERROR_PAGE_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
+	./$(ERROR_PAGE_TEST_BIN)
 	./$(CGI_TEST_BIN)
 	./$(MULTIPART_TEST_BIN)
 
@@ -103,6 +102,9 @@ $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(ERROR_PAGE_TEST_BIN): $(ERROR_PAGE_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)

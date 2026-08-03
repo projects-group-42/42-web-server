@@ -15,6 +15,8 @@
 
 # include <string>
 # include <map>
+# include <vector>
+# include <utility>
 
 class HttpResponse
 {
@@ -24,7 +26,7 @@ class HttpResponse
 		//status code
 		int									_status_code;
 		//headers
-		std::map<std::string, std::string>	_headers;
+		std::vector<std::pair<std::string, std::string> >	_headers;
 		//body
 		std::string							_body;
 
@@ -36,14 +38,15 @@ class HttpResponse
 
 		const std::string&	getVersion(void) const;
 		int			getStatusCode(void) const;
-		const std::map<std::string,
-			std::string>&	getHeaders(void) const;
+		const std::vector<std::pair<std::string,
+			std::string> >&	getHeaders(void) const;
 		const std::string	getHeaderValue(const std::string &key) const;
 		const std::string&	getBody(void) const;
 
 		void				setVersion(const std::string &version);
 		void				setStatusCode(int status);
 		void				setHeaders(const std::string &key, const std::string &value);
+		void				addHeader(const std::string &key, const std::string &value);
 		void				setBody(const std::string &body);
 };
 

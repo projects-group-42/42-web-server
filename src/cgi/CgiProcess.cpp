@@ -55,7 +55,7 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 
 CgiProcess::CgiProcess(int clientFd, const std::string &body)
 	: _pid(-1), _clientFd(clientFd), _body(body), _sent(0),
-	  _writing(false), _reading(false), _reaped(true)
+	  _writing(false), _reading(false), _reaped(true), _deadlineMs(0)
 {
 }
 
@@ -186,6 +186,23 @@ void CgiProcess::terminate(void)
 		waitpid(_pid, NULL, 0);
 		_reaped = true;
 	}
+}
+
+/*
+ * Stores the absolute time in milliseconds after which the child is considered
+ * stuck and must be killed. Set by the event loop when the CGI starts.
+ */
+void CgiProcess::setDeadlineMs(long deadlineMs)
+{
+	_deadlineMs = deadlineMs;
+}
+
+/*
+ * Returns the absolute deadline in milliseconds set by setDeadlineMs.
+ */
+long CgiProcess::deadlineMs(void) const
+{
+	return (_deadlineMs);
 }
 
 bool CgiProcess::isReading(void) const

@@ -116,11 +116,11 @@ std::string ResponseBuilder::builder(
 {
 	std::string result;
 
-	if (response.getStatusCode() != 204 && response.getBody().empty())
+	if (response.getStatusCode() >= 400 && response.getBody().empty())
 		response.setBody(ErrorPage(response.getStatusCode()));
 	setDefaultHeaders(response);
 	result.append(getStatusLine(request, response));
-	std::map<std::string, std::string>::const_iterator it;
+	std::vector<std::pair<std::string, std::string> >::const_iterator it;
 	for (it = response.getHeaders().begin();
 		it != response.getHeaders().end(); ++it)
 	{
@@ -166,7 +166,7 @@ std::string ResponseBuilder::buildErrorResponse(int status_code) const
 	result.append(getStatusMessage(status_code));
 	result.append("\r\n");
 
-	std::map<std::string, std::string>::const_iterator it;
+	std::vector<std::pair<std::string, std::string> >::const_iterator it;
 	for (it = response.getHeaders().begin();
 		it != response.getHeaders().end(); ++it)
 	{

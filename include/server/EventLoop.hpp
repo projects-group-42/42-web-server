@@ -21,20 +21,26 @@
 #include "config/ServerConfig.hpp"
 #include <vector>
 #include <map>
+#include <string>
 #include <poll.h>
 
 class EventLoop
 {
 	private:
-		std::vector<Socket*>		_sckt;
-		std::vector<ServerConfig>	_configs;
-		std::vector<struct pollfd>	_fds;
-		std::map<int, Connection>	_clients;
-		Router						_router;
-		CgiHandler					_cgiHandler;
-		std::map<int, CgiProcess*>	_cgi;
-		std::map<int, int>			_pipeToClient;
+		std::vector<Socket*>					_sckt;
+		std::vector<int>						_boundPorts;
+		std::vector<ServerConfig>				_configs;
+		std::vector<struct pollfd>				_fds;
+		std::map<int, Connection>				_clients;
+		Router									_router;
+		CgiHandler								_cgiHandler;
+		std::map<int, CgiProcess*>				_cgi;
+		std::map<int, int>						_pipeToClient;
 
+		EventLoop(const EventLoop &copy);
+		EventLoop&	operator=(const EventLoop &other);
+
+		bool	isPortBound(int port) const;
 		bool	isMasterSocket(int fd) const;
 		void	acceptClients(int fd);
 		bool	handleClient(int fd);
@@ -50,6 +56,10 @@ class EventLoop
 		void	handleCgiIo(int fd, short revents);
 		void	finishCgi(int clientFd, CgiProcess *proc);
 		void	abortCgi(int clientFd);
+		void	unregisterCgiPipes(int clientFd);
+		void	timeoutCgi(int clientFd);
+		void	checkCgiTimeouts(void);
+		int		cgiPollTimeout(void);
 		void	sendCgiError(int fd, int status);
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;
@@ -59,11 +69,9 @@ class EventLoop
 
 	public:
 		EventLoop(void);
-		EventLoop(const std::vector<ServerConfig>& configs);
-		EventLoop(const EventLoop &copy);
-		EventLoop&	operator=(const EventLoop &other);
+		EventLoop(const std::vector<ServerConfig> &configs);
 		~EventLoop(void);
-		
+
 		void	setupSockets(void);
 		void	run(void);
 };

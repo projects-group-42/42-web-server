@@ -32,6 +32,8 @@ class Router
 		IRequestHandler	*resolveHandler(const std::string &method,
 				const std::string &uri, bool &pathFound,
 				std::string &allow);
+		std::string		resolveRoot(const std::string &uri,
+				const ServerConfig &config) const;
 
 	public:
 		Router(void);

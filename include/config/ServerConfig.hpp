@@ -17,6 +17,8 @@
 # include <vector>
 # include <map>
 
+# define DEFAULT_ROOT	"www"
+
 struct LocationConfig
 {
 	std::string					path;

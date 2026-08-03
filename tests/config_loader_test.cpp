@@ -232,6 +232,23 @@ static void	test_last_server_index_wins(void)
 	         "the last server index directive wins");
 }
 
+static void	test_index_is_shared_across_servers(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index first.html;\n"
+		"    location /x {\n    }\n}\n"
+		"server {\n    listen 8082;\n    index second.html;\n"
+		"    location /y {\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(2),
+	         "locations of every server block are loaded");
+	CHECK_EQ(config.locations[0].index, std::string("second.html"),
+	         "only one server is supported, so a location of the first server "
+	         "still inherits the last index");
+	CHECK_EQ(config.locations[1].index, std::string("second.html"),
+	         "a location of the last server inherits its index");
+}
+
 static void	test_malformed_index_throws(void)
 {
 	TEST(loadThrows("server {\n    index a.html b.html;\n}\n"),
@@ -308,6 +325,7 @@ int	main(void)
 	test_location_inherits_server_index();
 	test_location_index_overrides_server();
 	test_last_server_index_wins();
+	test_index_is_shared_across_servers();
 	test_malformed_index_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();

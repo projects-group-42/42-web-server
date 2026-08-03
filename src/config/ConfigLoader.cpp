@@ -241,13 +241,15 @@ void ConfigLoader::parse_listen(void)
 
 /**
  * @brief Walks the AST and applies every server-level index directive found.
- * The last declaration wins, and locations that omit their own index inherit
- * the value stored here.
+ * Only one server is supported today, so the last declaration wins and every
+ * location that omits its own index inherits it, whichever server block that
+ * location came from. A warning is emitted when several are declared.
  * @throw std::runtime_error when an index directive is malformed.
  */
 void ConfigLoader::parse_server_index(void)
 {
 	std::vector<ConfigBlock>::const_iterator	block_it;
+	int											found = 0;
 
 	for (block_it = _tree.children.begin();
 	     block_it != _tree.children.end(); ++block_it)
@@ -259,9 +261,19 @@ void ConfigLoader::parse_server_index(void)
 		for (it = block_it->directives.begin();
 		     it != block_it->directives.end(); ++it)
 		{
-			if (it->name == "index")
-				parseIndex(_config.index, *it);
+			if (it->name != "index")
+				continue;
+			parseIndex(_config.index, *it);
+			found++;
 		}
+	}
+
+	if (found > 1)
+	{
+		std::ostringstream	oss;
+		oss << found << " index directives found, only the last one is used ("
+			<< _config.index << ")";
+		Logger::warning(oss.str());
 	}
 }
 

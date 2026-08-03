@@ -33,6 +33,8 @@ static int	s_fail = 0;
 
 static const char	*ROOT_DIR = "tests/tmp_router";
 static const char	*DOCS_DIR = "tests/tmp_router/docs";
+static const char	*ALT_DIR = "tests/tmp_router/alt";
+static const char	*ALT_DOCS_DIR = "tests/tmp_router/alt/docs";
 
 /**
  * @brief Writes `content` into `path`, creating or truncating the file.
@@ -54,10 +56,13 @@ static void	setupFixture(void)
 {
 	mkdir(ROOT_DIR, 0755);
 	mkdir(DOCS_DIR, 0755);
+	mkdir(ALT_DIR, 0755);
+	mkdir(ALT_DOCS_DIR, 0755);
 	writeFile(std::string(ROOT_DIR) + "/home.html", "SERVER INDEX");
 	writeFile(std::string(ROOT_DIR) + "/index.html", "DEFAULT INDEX");
 	writeFile(std::string(DOCS_DIR) + "/manual.html", "LOCATION INDEX");
 	writeFile(std::string(DOCS_DIR) + "/home.html", "INHERITED INDEX");
+	writeFile(std::string(ALT_DOCS_DIR) + "/home.html", "LOCATION ROOT");
 }
 
 /**
@@ -65,10 +70,13 @@ static void	setupFixture(void)
  */
 static void	cleanupFixture(void)
 {
+	std::remove((std::string(ALT_DOCS_DIR) + "/home.html").c_str());
 	std::remove((std::string(DOCS_DIR) + "/manual.html").c_str());
 	std::remove((std::string(DOCS_DIR) + "/home.html").c_str());
 	std::remove((std::string(ROOT_DIR) + "/home.html").c_str());
 	std::remove((std::string(ROOT_DIR) + "/index.html").c_str());
+	rmdir(ALT_DOCS_DIR);
+	rmdir(ALT_DIR);
 	rmdir(DOCS_DIR);
 	rmdir(ROOT_DIR);
 }
@@ -154,6 +162,20 @@ int	main(void)
 		routeGet("/docs/", config, response);
 		TEST(response.getBody() == "INHERITED INDEX",
 			"a location without index falls back to the server index");
+	}
+
+	{
+		ServerConfig	config = makeServer("home.html");
+		LocationConfig	docs("/docs");
+
+		docs.root = ALT_DIR;
+		config.locations.push_back(docs);
+
+		HttpResponse	response;
+
+		routeGet("/docs/", config, response);
+		TEST(response.getBody() == "LOCATION ROOT",
+			"a location root overrides the server root");
 	}
 
 	{

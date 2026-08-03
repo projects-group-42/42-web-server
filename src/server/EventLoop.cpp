@@ -355,24 +355,20 @@ void EventLoop::handleCgiIo(int fd, short revents)
 }
 
 /*
- * Reaps the finished child, turns its collected output into an HTTP response
- * (502 when the script did not exit cleanly), arms the client for sending, and
- * releases the process.
+ * Reaps the finished child, turns its collected output into an HTTP response,
+ * arms the client for sending, and releases the process. Answers 502 when the
+ * script did not exit cleanly or when its output is not a valid CGI response.
  */
 void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 {
 	Connection		&conn = _clients[clientFd];
 	ResponseBuilder	builder;
+	HttpResponse	response;
 	int				status = proc->reap();
 
 	builder.setKeepAlive(conn.get_keep_alive());
-	if (status == 0)
-	{
-		HttpResponse	response;
-
-		_cgiHandler.parseCgiOutput(proc->output(), response);
+	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
-	}
 	else
 		conn.set_write_buffer(builder.buildErrorResponse(502));
 	setPollEvents(clientFd, POLLOUT);

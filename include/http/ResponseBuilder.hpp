@@ -50,6 +50,8 @@ class ResponseBuilder
 		std::string	builder(const HttpRequest &request, HttpResponse &response)
 	;
 		std::string	buildErrorResponse(int status_code) const;
+		std::string	buildErrorResponse(int status_code,
+			const std::string &body, const std::string &contentType) const;
 };
 
 #endif

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   error_page_test.cpp                                :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: copilot <copilot@assistant>                 +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/08/02 00:00:00 by copilot           #+#    #+#             */
-/*   Updated: 2026/08/02 00:00:00 by copilot          ###   ########.fr       */
+/*   Created: 2026/08/02 00:00:00 by jucoelho          #+#    #+#             */
+/*   Updated: 2026/08/03 03:40:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 # include <vector>
 # include <fstream>
 # include <cstdio>
+# include <stdexcept>
 # include <sys/stat.h>
 # include <unistd.h>
 
@@ -144,10 +145,160 @@ static void test_router_uses_configured_error_page(void)
 	cleanupDirectory(rootPath);
 }
 
+static void test_error_page_pointing_at_directory(void)
+{
+	const std::string rootPath = "tests/tmp_root";
+	const std::string dirPath = rootPath + "/adir";
+
+	createDirectory(rootPath);
+	createDirectory(dirPath);
+
+	ServerConfig config;
+	config.root = rootPath;
+	config.index = "index.html";
+	config.errorPages[404] = "/adir";
+
+	std::string body;
+	std::string contentType;
+	bool loaded = Router::loadErrorPage(config, config.root, 404, body,
+			contentType);
+
+	TEST(!loaded, "loadErrorPage refuses a directory instead of throwing");
+	TEST(body.empty(), "loadErrorPage leaves the body empty for a directory");
+
+	HttpRequest request;
+	request.setMethod("GET");
+	request.setUri("/missing-file");
+	request.setVersion("HTTP/1.1");
+	request.setHeaders("Host", "localhost");
+
+	HttpResponse response;
+	Router router;
+	router.route(request, response, config);
+
+	CHECK_EQ(response.getStatusCode(), 404,
+	         "Router keeps the 404 status when the error page is a directory");
+
+	cleanupDirectory(dirPath);
+	cleanupDirectory(rootPath);
+}
+
+static void test_error_page_missing_file_keeps_status(void)
+{
+	ServerConfig config;
+	config.root = "tests/tmp_root";
+	config.errorPages[404] = "/errors/does-not-exist.html";
+
+	std::string body;
+	std::string contentType;
+
+	TEST(!Router::loadErrorPage(config, config.root, 404, body, contentType),
+	     "loadErrorPage returns false for a missing file");
+	TEST(!Router::loadErrorPage(config, config.root, 500, body, contentType),
+	     "loadErrorPage returns false for an unconfigured status");
+}
+
+static void test_config_loader_rejects_invalid_error_page(void)
+{
+	const std::string configPath = "tests/tmp_invalid_error_page.conf";
+	bool threw;
+
+	std::ofstream badCode(configPath.c_str());
+	badCode << "server {\n    listen 8080;\n    error_page abc /x.html;\n}\n";
+	badCode.close();
+	threw = false;
+	try
+	{
+		ConfigLoader loader(configPath);
+		loader.loader();
+	}
+	catch (const std::exception &)
+	{
+		threw = true;
+	}
+	TEST(threw, "ConfigLoader rejects a non-numeric error_page status");
+
+	std::ofstream outOfRange(configPath.c_str());
+	outOfRange << "server {\n    listen 8080;\n    error_page 200 /x.html;\n}\n";
+	outOfRange.close();
+	threw = false;
+	try
+	{
+		ConfigLoader loader(configPath);
+		loader.loader();
+	}
+	catch (const std::exception &)
+	{
+		threw = true;
+	}
+	TEST(threw, "ConfigLoader rejects an error_page status outside 400-599");
+
+	std::ofstream missingPath(configPath.c_str());
+	missingPath << "server {\n    listen 8080;\n    error_page 404;\n}\n";
+	missingPath.close();
+	threw = false;
+	try
+	{
+		ConfigLoader loader(configPath);
+		loader.loader();
+	}
+	catch (const std::exception &)
+	{
+		threw = true;
+	}
+	TEST(threw, "ConfigLoader rejects error_page without a path");
+
+	cleanupFile(configPath);
+}
+
+static void test_config_loader_rejects_empty_location_directive(void)
+{
+	const std::string configPath = "tests/tmp_empty_location.conf";
+	bool threw;
+
+	std::ofstream rootFile(configPath.c_str());
+	rootFile << "server {\n    listen 8080;\n    location / {\n"
+		<< "        root;\n    }\n}\n";
+	rootFile.close();
+	threw = false;
+	try
+	{
+		ConfigLoader loader(configPath);
+		loader.loader();
+	}
+	catch (const std::exception &)
+	{
+		threw = true;
+	}
+	TEST(threw, "ConfigLoader rejects an argument-less root inside location");
+
+	std::ofstream indexFile(configPath.c_str());
+	indexFile << "server {\n    listen 8080;\n    location / {\n"
+		<< "        index;\n    }\n}\n";
+	indexFile.close();
+	threw = false;
+	try
+	{
+		ConfigLoader loader(configPath);
+		loader.loader();
+	}
+	catch (const std::exception &)
+	{
+		threw = true;
+	}
+	TEST(threw, "ConfigLoader rejects an argument-less index inside location");
+
+	cleanupFile(configPath);
+}
+
 int	main(void)
 {
 	test_config_loader_parses_error_page();
 	test_router_uses_configured_error_page();
+	test_error_page_pointing_at_directory();
+	test_error_page_missing_file_keeps_status();
+	test_config_loader_rejects_invalid_error_page();
+	test_config_loader_rejects_empty_location_directive();
 
 	std::cout << std::endl;
 	std::cout << s_pass << " passed, " << s_fail << " failed, "

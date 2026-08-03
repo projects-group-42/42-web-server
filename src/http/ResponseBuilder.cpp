@@ -150,12 +150,20 @@ std::string ResponseBuilder::ErrorPage(int status) const
 
 std::string ResponseBuilder::buildErrorResponse(int status_code) const
 {
+	return (buildErrorResponse(status_code, "", ""));
+}
+
+std::string ResponseBuilder::buildErrorResponse(int status_code,
+	const std::string &body, const std::string &contentType) const
+{
 	HttpResponse response;
 	std::ostringstream str_status;
 	std::string result;
 
 	response.setStatusCode(status_code);
-	response.setBody(ErrorPage(status_code));
+	response.setBody(body.empty() ? ErrorPage(status_code) : body);
+	if (!body.empty() && !contentType.empty())
+		response.setHeaders("content-type", contentType);
 
 	setDefaultHeaders(response);
 

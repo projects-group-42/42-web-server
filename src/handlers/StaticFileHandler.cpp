@@ -181,7 +181,6 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 		HttpResponse &response)
 {
 	std::string		resolvedPath = rslv_req_realpath(request.getUri());
-	Logger::info("Tentando abrir caminho físico: " + resolvedPath);
 	if (resolvedPath.empty())
 	{
 		response.setStatusCode(403);

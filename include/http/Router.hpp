@@ -43,6 +43,10 @@ class Router
 		bool	route(const HttpRequest &request,
 					HttpResponse &response, const ServerConfig &config);
 
+		static bool	loadErrorPage(const ServerConfig &config,
+					const std::string &root, int status,
+					std::string &body, std::string &contentType);
+
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);
 

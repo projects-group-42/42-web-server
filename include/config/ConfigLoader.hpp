@@ -57,6 +57,8 @@ class ConfigLoader
 		static bool			parseBool(const std::string &s);
 		static void			parseAutoindex(LocationConfig &loc,
 							const ConfigDirective &d);
+		static void			parseIndex(std::string &index,
+							const ConfigDirective &d);
 };
 
 #endif

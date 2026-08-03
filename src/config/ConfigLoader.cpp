@@ -254,8 +254,9 @@ std::string	ConfigLoader::parseRoot(const ConfigDirective &d)
 
 /**
  * @brief Applies every directive declared directly inside a server block.
- * Only one listening socket is supported per server today, so a warning is
- * emitted when several listen directives are declared or when none is present.
+ * Only one listening socket and one index are supported per server today, so a
+ * warning is emitted when several listen directives are declared, when none is
+ * present, or when several index directives are declared.
  * @param block The server block taken from the AST.
  * @param server The server block being filled.
  * @throw std::runtime_error when a directive is malformed.
@@ -265,6 +266,7 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 {
 	std::vector<ConfigDirective>::const_iterator	it;
 	int												found = 0;
+	int												indexes = 0;
 
 	for (it = block.directives.begin(); it != block.directives.end(); ++it)
 	{
@@ -277,6 +279,20 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			parse_names(*it, server);
 		else if (it->name == "root")
 			server.root = parseRoot(*it);
+		else if (it->name == "index")
+		{
+			parseIndex(server.index, *it);
+			indexes++;
+		}
+	}
+
+	if (indexes > 1)
+	{
+		std::ostringstream	idx;
+
+		idx << indexes << " index directives found, only the last one is used ("
+			<< server.index << ")";
+		Logger::warning(idx.str());
 	}
 
 	std::ostringstream	oss;
@@ -298,7 +314,8 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 /**
  * @brief Applies every location block declared inside a server block.
  * A location without its own root inherits the one of the server, which is
- * resolved at request time by the Router.
+ * resolved at request time by the Router. A location without its own index
+ * inherits the index of the server it was declared in.
  * @param block The server block taken from the AST.
  * @param server The server block being filled.
  * @throw std::runtime_error when a location block is malformed.
@@ -324,7 +341,12 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				parseAutoindex(loc, *dit);
 			else if (dit->name == "root")
 				loc.root = parseRoot(*dit);
+			else if (dit->name == "index")
+				parseIndex(loc.index, *dit);
 		}
+
+		if (loc.index.empty())
+			loc.index = server.index;
 		server.locations.push_back(loc);
 	}
 }
@@ -356,4 +378,24 @@ void	ConfigLoader::parseAutoindex(LocationConfig &loc,
 	if (d.args.size() != 1)
 		throw std::runtime_error("'autoindex' expects 'on' or 'off'");
 	loc.autoindex = parseBool(d.args[0]);
+}
+
+/**
+ * @brief Validates an index directive and stores its file name.
+ * Only one file name is supported, so a list of fallbacks is refused instead
+ * of being silently truncated to its first entry.
+ * @param index The destination holding the server or location index.
+ * @param d The index directive taken from the AST.
+ * @throw std::runtime_error when the directive carries anything other than a
+ * single non-empty file name.
+ */
+void ConfigLoader::parseIndex(std::string &index, const ConfigDirective &d)
+{
+	if (d.args.size() != 1)
+		throw std::runtime_error(
+		    "'index' expects a single file name");
+	if (d.args[0].empty())
+		throw std::runtime_error(
+		    "'index' expects a non-empty file name");
+	index = d.args[0];
 }

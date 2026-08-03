@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 22:48:49 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 21:42:10 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,7 +32,12 @@ class Router
 		IRequestHandler	*resolveHandler(const std::string &method,
 				const std::string &uri, bool &pathFound,
 				std::string &allow);
+		const LocationConfig
+						*matchLocation(const std::string &uri,
+				const ServerConfig &config) const;
 		std::string		resolveRoot(const std::string &uri,
+				const ServerConfig &config) const;
+		std::string		resolveIndex(const std::string &uri,
 				const ServerConfig &config) const;
 
 	public:

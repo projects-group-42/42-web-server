@@ -19,7 +19,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <iostream>
 
 Router::Router(void)
 	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
@@ -97,17 +96,54 @@ static std::string makeErrorPagePath(const std::string &root,
 
 static bool readFileBody(const std::string &filePath, std::string &body)
 {
+	struct stat	info;
+
+	if (stat(filePath.c_str(), &info) == -1 || !S_ISREG(info.st_mode))
+		return (false);
+
 	int fd = open(filePath.c_str(), O_RDONLY);
 	if (fd == -1)
 		return (false);
 
-	char buffer[4096];
-	size_t bytes;
+	char	buffer[4096];
+	ssize_t	bytes;
 	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0)
-		body.append(buffer, bytes);
+		body.append(buffer, static_cast<size_t>(bytes));
 
 	close(fd);
-	return (bytes != static_cast<size_t>(-1));
+	if (bytes == -1)
+	{
+		body.clear();
+		return (false);
+	}
+	return (true);
+}
+
+/*
+ * Loads the custom error page configured for a status code.
+ *
+ * Resolves the configured path against the given root, reads the file and
+ * returns its contents plus the matching MIME type. Returns false when no
+ * page is configured for the status or when the file cannot be read, so the
+ * caller keeps the built-in default body.
+ */
+bool	Router::loadErrorPage(const ServerConfig &config, const std::string &root,
+			int status, std::string &body, std::string &contentType)
+{
+	std::map<int, std::string>::const_iterator it = config.errorPages.find(status);
+
+	if (it == config.errorPages.end())
+		return (false);
+
+	std::string errorPath = makeErrorPagePath(root, it->second);
+	body.clear();
+	if (!readFileBody(errorPath, body))
+	{
+		Logger::warning("Unable to load error page file: " + errorPath);
+		return (false);
+	}
+	contentType = mimeType_resolve(errorPath);
+	return (true);
 }
 
 void	Router::addHandler(const std::string &method,
@@ -194,9 +230,6 @@ bool	Router::route(const HttpRequest &request,
 		const std::string &locPath = config.locations[i].path;
 		if (request.getUri().compare(0, locPath.size(), locPath) == 0)
 		{
-			Logger::info("Location encontrada: " + config.locations[i].path);
-			Logger::info("Root da location: " + config.locations[i].root);
-			Logger::info("Index configurado: " + config.locations[i].index);
 			if (locPath.size() > bestMatchPath.size())
 			{
 				bestMatchPath = locPath;
@@ -227,8 +260,6 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
-		Logger::info("FINAL ROOT: " + finalRoot);
-		Logger::info("FINAL INDEX: " + finalIndex);
 		setRoot(finalRoot);
 		setIndex(finalIndex);
 		handler->handle(request, response);
@@ -236,25 +267,14 @@ bool	Router::route(const HttpRequest &request,
 
 	if (response.getStatusCode() >= 400)
 	{
-		std::map<int, std::string>::const_iterator error_it;
-		error_it = config.errorPages.find(response.getStatusCode());
-		if (error_it != config.errorPages.end())
+		std::string body;
+		std::string contentType;
+		if (loadErrorPage(config, finalRoot, response.getStatusCode(),
+				body, contentType))
 		{
-			std::string errorPath = makeErrorPagePath(finalRoot,
-								error_it->second);
-			std::string body;
-			if (readFileBody(errorPath, body))
-			{
-				Logger::info("Serving custom error page: " + errorPath);
-				response.setBody(body);
-				std::string contentType = mimeType_resolve(errorPath);
-				if (!contentType.empty())
-					response.setHeaders("content-type", contentType);
-			}
-			else
-			{
-				Logger::warning("Unable to load error page file: " + errorPath);
-			}
+			response.setBody(body);
+			if (!contentType.empty())
+				response.setHeaders("content-type", contentType);
 		}
 	}
 	return (true);

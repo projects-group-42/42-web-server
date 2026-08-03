@@ -20,7 +20,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <cstdlib>
-#include <iostream>
 
 static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
 
@@ -154,10 +153,38 @@ void EventLoop::handleParseError(int fd)
 	if (error_code == 0)
 		error_code = 400;
 
-	std::string serialized = builder.buildErrorResponse(error_code);
+	std::string body;
+	std::string contentType;
+	resolveErrorPage(conn, error_code, body, contentType);
+
+	std::string serialized = builder.buildErrorResponse(error_code, body,
+			contentType);
 	conn.set_write_buffer(serialized);
 
 	setPollEvents(fd, POLLOUT);
+}
+
+/*
+ * Fills body/contentType with the error page configured for this status.
+ *
+ * Picks the server block matching the connection's port and Host header, then
+ * delegates to Router::loadErrorPage. Leaves both strings empty when no page
+ * is configured or it cannot be read, so the caller falls back to the
+ * built-in default body.
+ */
+void EventLoop::resolveErrorPage(const Connection &conn, int status,
+	std::string &body, std::string &contentType) const
+{
+	if (_configs.empty())
+		return ;
+
+	const ServerConfig &config = getServerConfigForRequest(conn.getLocalPort(),
+			conn.getRequest());
+	if (!Router::loadErrorPage(config, config.root, status, body, contentType))
+	{
+		body.clear();
+		contentType.clear();
+	}
 }
 
 /*
@@ -195,7 +222,7 @@ void EventLoop::handleRequest(int fd)
 {
 	Connection	&conn = _clients[fd];
 	ResponseBuilder	builder;
-	int clientPort = conn.getLocalPort(); // (Ou de onde você guarda a porta)
+	int clientPort = conn.getLocalPort();
 	const ServerConfig& chosenConfig = getServerConfigForRequest(clientPort, conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
@@ -310,8 +337,12 @@ void EventLoop::sendCgiError(int fd, int status)
 	Connection		&conn = _clients[fd];
 	ResponseBuilder	builder;
 
+	std::string body;
+	std::string contentType;
+	resolveErrorPage(conn, status, body, contentType);
+
 	builder.setKeepAlive(conn.get_keep_alive());
-	conn.set_write_buffer(builder.buildErrorResponse(status));
+	conn.set_write_buffer(builder.buildErrorResponse(status, body, contentType));
 	setPollEvents(fd, POLLOUT);
 }
 
@@ -504,7 +535,6 @@ void EventLoop::run(void)
 	}
 }
 
-// Remove a porta do cabeçalho Host (ex: "meu-site.com:8080" vira "meu-site.com")
 std::string EventLoop::cleanHostHeader(const std::string& rawHost) const
 {
 	size_t colon_pos = rawHost.find(':');
@@ -513,7 +543,6 @@ std::string EventLoop::cleanHostHeader(const std::string& rawHost) const
 	return rawHost;
 }
 
-// O Coração da Issue #44: Escolhe o servidor certo!
 const ServerConfig& EventLoop::getServerConfigForRequest(int clientPort, const HttpRequest& request) const
 {
 	std::string hostHeader = cleanHostHeader(request.getHeaderValue("Host"));
@@ -525,25 +554,21 @@ const ServerConfig& EventLoop::getServerConfigForRequest(int clientPort, const H
 		// 1. Filtra para olhar apenas para servidores que estão nesta porta
 		if (_configs[i].port == clientPort)
 		{
-			// O primeiro que encontrarmos nesta porta é o fallback (default server)
 			if (defaultServer == NULL)
 				defaultServer = &_configs[i];
 
-			// 2. Procura um match exato no array de server_names
 			for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
 			{
 				if (_configs[i].serverNames[j] == hostHeader)
 				{
-					return _configs[i]; // Bingo! Encontrou o domínio exato.
+					return _configs[i];
 				}
 			}
 		}
 	}
 
-	// 3. Se não houver match exato do nome, devolve o servidor padrão desta porta
 	if (defaultServer != NULL)
 		return *defaultServer;
 
-	// Caso extremo (segurança)
 	return _configs[0];
 }

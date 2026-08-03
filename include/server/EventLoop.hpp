@@ -53,9 +53,11 @@ class EventLoop
 		void	sendCgiError(int fd, int status);
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;
-		const ServerConfig& 
+		const ServerConfig&
 				getServerConfigForRequest(int clientPort,
 				const HttpRequest& request) const;
+		void	resolveErrorPage(const Connection &conn, int status,
+				std::string &body, std::string &contentType) const;
 
 	public:
 		EventLoop(void);

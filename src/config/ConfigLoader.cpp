@@ -12,7 +12,7 @@
 
 #include "config/ConfigLoader.hpp"
 #include <stdexcept>
-#include <iostream>
+#include <cctype>
 
 ConfigLoader::ConfigLoader(void) : _file_path("conf/default.conf")
 {
@@ -64,7 +64,6 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 	ConfigParser parser(tokens);
 	_tree = parser.parse();
 
-	// Limpa a lista antes de começar (boa prática caso chame o loader duas vezes)
 	_servers.clear();
 	std::vector<ConfigBlock>::const_iterator block_it;
 	for (block_it = _tree.children.begin(); block_it != _tree.children.end(); ++block_it)
@@ -178,7 +177,7 @@ void ConfigLoader::parse_error_page(
 
 		for (size_t i = 0; i < code_str.size(); ++i)
 		{
-			if (!std::isdigit(code_str[i]))
+			if (!std::isdigit(static_cast<unsigned char>(code_str[i])))
 				throw std::runtime_error("invalid error_page status code");
 		}
 
@@ -203,9 +202,17 @@ LocationConfig ConfigLoader::parse_location(const ConfigBlock &block)
 		 ++it)
 	{
 		if (it->name == "root")
+		{
+			if (it->args.empty())
+				throw std::runtime_error("root directive requires an argument");
 			location.root = it->args[0];
+		}
 		else if (it->name == "index")
+		{
+			if (it->args.empty())
+				throw std::runtime_error("index directive requires an argument");
 			location.index = it->args[0];
+		}
 	}
 
 	return (location);

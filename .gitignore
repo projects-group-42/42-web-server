@@ -6,6 +6,9 @@ test_lexer
 test_parser
 test_cgi
 test_cgi_process
+test_server_config
+test_multipart
+test_error_page
 # build artifacts
 obj/
 *.o

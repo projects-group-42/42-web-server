@@ -15,7 +15,6 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
-#include <iostream>
 #include "utils/Logger.hpp"
 #include "network/Socket.hpp"
 #include "server/EventLoop.hpp"

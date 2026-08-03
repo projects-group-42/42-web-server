@@ -192,6 +192,25 @@ std::string	Router::resolveIndex(const std::string &uri,
 	return (config.index);
 }
 
+/**
+ * @brief Tells whether a generated directory listing applies to a URI.
+ * ConfigLoader already copies the server flag into every location that
+ * declares none, so the server value is only reached when the URI matches no
+ * location at all.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return true when a directory without an index should be listed.
+ */
+bool	Router::resolveAutoindex(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	if (best != NULL)
+		return (best->autoindex);
+	return (config.autoindex);
+}
+
 bool	Router::route(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config)
 {
@@ -222,6 +241,8 @@ bool	Router::route(const HttpRequest &request,
 			setRoot(root);
 		if (!index.empty())
 			setIndex(index);
+		_staticHandler.setAutoindex(
+				resolveAutoindex(request.getUri(), config));
 		handler->handle(request, response);
 	}
 	return (true);

@@ -284,6 +284,8 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			parseIndex(server.index, *it);
 			indexes++;
 		}
+		else if (it->name == "autoindex")
+			parseAutoindex(server.autoindex, *it);
 	}
 
 	if (indexes > 1)
@@ -315,7 +317,7 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
  * @brief Applies every location block declared inside a server block.
  * A location without its own root inherits the one of the server, which is
  * resolved at request time by the Router. A location without its own index
- * inherits the index of the server it was declared in.
+ * or autoindex inherits the one of the server it was declared in.
  * @param block The server block taken from the AST.
  * @param server The server block being filled.
  * @throw std::runtime_error when a location block is malformed.
@@ -334,11 +336,13 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 
 		LocationConfig	loc(it->args[0]);
 
+		loc.autoindex = server.autoindex;
+
 		std::vector<ConfigDirective>::const_iterator	dit;
 		for (dit = it->directives.begin(); dit != it->directives.end(); ++dit)
 		{
 			if (dit->name == "autoindex")
-				parseAutoindex(loc, *dit);
+				parseAutoindex(loc.autoindex, *dit);
 			else if (dit->name == "root")
 				loc.root = parseRoot(*dit);
 			else if (dit->name == "index")
@@ -367,17 +371,17 @@ bool	ConfigLoader::parseBool(const std::string &s)
 }
 
 /**
- * @brief Applies an autoindex directive to a location.
- * @param loc The location being filled.
+ * @brief Applies an autoindex directive to a server or a location.
+ * @param autoindex The destination holding the server or location flag.
  * @param d The autoindex directive taken from the AST.
  * @throw std::runtime_error when the directive is malformed.
  */
-void	ConfigLoader::parseAutoindex(LocationConfig &loc,
+void	ConfigLoader::parseAutoindex(bool &autoindex,
 			const ConfigDirective &d)
 {
 	if (d.args.size() != 1)
 		throw std::runtime_error("'autoindex' expects 'on' or 'off'");
-	loc.autoindex = parseBool(d.args[0]);
+	autoindex = parseBool(d.args[0]);
 }
 
 /**

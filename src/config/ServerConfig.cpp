@@ -39,6 +39,7 @@ ServerConfig::ServerConfig(void):
 	serverNames(), 
 	root(""),
 	index("index.html"),
+	autoindex(false),
 	errorPages(),
 	clientMaxBodySize(1 * 1024 * 1024),
 	locations()

@@ -16,16 +16,20 @@
 #include "utils/Utils.hpp"
 #include <limits.h>
 #include <stdlib.h>
+#include <dirent.h>
+#include <algorithm>
 #include <vector>
 #include <cerrno>
 
 StaticFileHandler::StaticFileHandler(void)
-	: _root("www"), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
+	: _root("www"), _index("index.html"), _autoindex(false),
+	  _maxBodySize(1 * 1024 * 1024)
 {
 }
 
 StaticFileHandler::StaticFileHandler(const std::string &root)
-	: _root(root), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
+	: _root(root), _index("index.html"), _autoindex(false),
+	  _maxBodySize(1 * 1024 * 1024)
 {
 }
 
@@ -40,6 +44,7 @@ StaticFileHandler &StaticFileHandler::operator=(const StaticFileHandler &other)
 	{
 		_root = other._root;
 		_index = other._index;
+		_autoindex = other._autoindex;
 		_maxBodySize = other._maxBodySize;
 	}
 	return (*this);
@@ -57,6 +62,15 @@ void	StaticFileHandler::setRoot(const std::string &root)
 void	StaticFileHandler::setIndex(const std::string &index)
 {
 	_index = index;
+}
+
+/*
+ * Enables or disables the generated directory listing served when a directory
+ * holds no index file.
+ */
+void	StaticFileHandler::setAutoindex(bool autoindex)
+{
+	_autoindex = autoindex;
 }
 
 /*
@@ -96,10 +110,12 @@ int StaticFileHandler::serveRegularFile(const std::string &resolvedPath,
 }
 
 /*
- * Serve a directory, try index files.
+ * Serve a directory, try index files. When the directory holds no index and
+ * autoindex is enabled, a generated listing is served instead of 404.
  * Returns HTTP status code and fills body/contentType.
  */
 int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
+		const std::string &requestUri,
 		std::string &body, std::string &contentType)
 {
 	std::string indexPath = resolvedPath;
@@ -110,7 +126,101 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
 	struct stat	st;
 	if (stat(indexPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
 		return (serveRegularFile(indexPath, body, contentType));
-	return (404);
+	if (!_autoindex)
+		return (404);
+
+	int	status = serveDirectoryListing(resolvedPath, requestUri, body);
+	if (status == 200)
+		contentType = "text/html";
+	return (status);
+}
+
+/*
+ * Reads the names held by `resolvedPath`, dropping "." and "..", and appends a
+ * '/' to the names that denote a directory. stat() is used rather than
+ * dirent::d_type because the latter is not populated on every filesystem.
+ * Returns false when the directory cannot be opened.
+ */
+static bool readDirectoryEntries(const std::string &resolvedPath,
+		std::vector<std::string> &entries)
+{
+	DIR	*dir = opendir(resolvedPath.c_str());
+
+	if (dir == NULL)
+		return (false);
+
+	std::string	base = resolvedPath;
+	if (base.empty() || base[base.size() - 1] != '/')
+		base += '/';
+
+	struct dirent	*entry;
+	while ((entry = readdir(dir)) != NULL)
+	{
+		std::string	name = entry->d_name;
+
+		if (name == "." || name == "..")
+			continue;
+
+		struct stat	st;
+		if (stat((base + name).c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+			name += '/';
+		entries.push_back(name);
+	}
+	closedir(dir);
+	std::sort(entries.begin(), entries.end());
+	return (true);
+}
+
+/*
+ * Generate an HTML page listing the entries of a directory.
+ * Every entry becomes a link relative to the requested URI, and directories
+ * keep their trailing '/' so relative URLs inside them resolve correctly.
+ * The URI and the entry names are attacker-controlled, so they are
+ * percent-encoded before entering an href and HTML-escaped before entering
+ * the page. Returns 200, or 403 when the directory cannot be read.
+ */
+int StaticFileHandler::serveDirectoryListing(const std::string &resolvedPath,
+		const std::string &requestUri, std::string &body)
+{
+	std::vector<std::string>	entries;
+
+	if (!readDirectoryEntries(resolvedPath, entries))
+		return (403);
+
+	std::string	linkPrefix = urlEncodePath(requestUri);
+	if (linkPrefix.empty() || linkPrefix[linkPrefix.size() - 1] != '/')
+		linkPrefix += '/';
+
+	std::string	title = htmlEscape(requestUri);
+	std::string	listing;
+
+	listing += "<html>\r\n<head><title>Index of ";
+	listing += title;
+	listing += "</title></head>\r\n<body>\r\n<h1>Index of ";
+	listing += title;
+	listing += "</h1>\r\n<hr>\r\n<ul>\r\n";
+
+	for (size_t i = 0; i < entries.size(); ++i)
+	{
+		const std::string	&name = entries[i];
+		bool				isDir = (name[name.size() - 1] == '/');
+		std::string			target = linkPrefix
+								+ urlEncodeSegment(isDir
+									? name.substr(0, name.size() - 1) : name);
+
+		if (isDir)
+			target += '/';
+
+		listing += "<li><a href=\"";
+		listing += htmlEscape(target);
+		listing += "\">";
+		listing += htmlEscape(name);
+		listing += "</a></li>\r\n";
+	}
+
+	listing += "</ul>\r\n<hr>\r\n</body>\r\n</html>";
+	body = listing;
+	return (200);
 }
 
 /*
@@ -206,7 +316,8 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 	if (S_ISREG(pathStat.st_mode))
 		status = serveRegularFile(resolvedPath, body, contentType);
 	else if (S_ISDIR(pathStat.st_mode))
-		status = serveDirectory(resolvedPath, body, contentType);
+		status = serveDirectory(resolvedPath, request.getUri(), body,
+				contentType);
 	else
 		status = 403;
 

@@ -13,6 +13,7 @@ test_upload_suite
 test_request_parser
 test_config_loader
 test_router
+test_autoindex
 tests/tmp_router/
 # build artifacts
 obj/

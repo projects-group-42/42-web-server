@@ -106,6 +106,24 @@ ROUTER_TEST_SRC	= tests/router_test.cpp \
 				  src/utils/Utils.cpp
 ROUTER_TEST_BIN	= test_router
 
+AUTOINDEX_TEST_SRC	= tests/autoindex_test.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/server/Router.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/ResponseBuilder.cpp \
+					  src/config/Lexer.cpp \
+					  src/config/ConfigAST.cpp \
+					  src/config/ConfigParser.cpp \
+					  src/config/ConfigLoader.cpp \
+					  src/config/ServerConfig.cpp \
+					  src/utils/Logger.cpp \
+					  src/utils/Utils.cpp
+AUTOINDEX_TEST_BIN	= test_autoindex
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -125,7 +143,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
@@ -136,6 +154,7 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(UPLOAD_SUITE_TEST_BIN)
 	./$(REQUEST_PARSER_TEST_BIN)
 	./$(ROUTER_TEST_BIN)
+	./$(AUTOINDEX_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -167,6 +186,9 @@ $(REQUEST_PARSER_TEST_BIN): $(REQUEST_PARSER_TEST_SRC)
 $(ROUTER_TEST_BIN): $(ROUTER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(AUTOINDEX_TEST_BIN): $(AUTOINDEX_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -182,6 +204,7 @@ fclean: clean
 	rm -f $(UPLOAD_SUITE_TEST_BIN)
 	rm -f $(REQUEST_PARSER_TEST_BIN)
 	rm -f $(ROUTER_TEST_BIN)
+	rm -f $(AUTOINDEX_TEST_BIN)
 
 re: fclean all
 

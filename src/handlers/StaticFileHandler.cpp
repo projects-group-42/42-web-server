@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/24 18:23:26 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:23:10 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -132,6 +132,8 @@ static std::string canonicalPath(const std::string &path)
  * that would climb above the root returns an empty string so the caller can
  * answer 403. When the resolved target exists, its canonical path is checked
  * against the canonical root so symlinks cannot escape the document root.
+ * A root that cannot be canonicalised (empty or missing) is refused outright:
+ * without it there is nothing to confine the request to.
  */
 std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 {
@@ -164,8 +166,11 @@ std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 		path += "/" + segments[j];
 
 	std::string	root = canonicalPath(_root);
+	if (root.empty())
+		return ("");
+
 	std::string	resolved = canonicalPath(path);
-	if (!root.empty() && !resolved.empty() && resolved != root
+	if (!resolved.empty() && resolved != root
 		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
 		return ("");
 	return (path);

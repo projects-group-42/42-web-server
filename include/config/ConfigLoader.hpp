@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 17:15:26 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:02:12 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,7 +27,7 @@ class ConfigLoader
 {
 	private:
 		std::string					_file_path;
-		ServerConfig				_config;
+		std::vector<ServerConfig>	_servers;
 		ConfigBlock					_tree;
 
 	public:
@@ -37,23 +37,28 @@ class ConfigLoader
 		ConfigLoader &operator=(const ConfigLoader &other);
 		~ConfigLoader(void);
 
-		ServerConfig loader(void);
+		std::vector<ServerConfig> loader(void);
 
 		static int			parsePort(const std::string &token);
 		static std::string	parseHost(const std::string &token);
 
 	private:
-		std::string configPath(void);
-		void parse_listen(void);
-		void parse_server_index(void);
-		void parse_locations(void);
-		void applyListen(const std::vector<std::string> &args);
+		std::string	configPath(void);
+		void		parse_directives(const ConfigBlock &block,
+					ServerConfig &server);
+		void		parse_locations(const ConfigBlock &block,
+					ServerConfig &server);
+		void		applyListen(const std::vector<std::string> &args,
+					ServerConfig &server);
+		void		parse_names(const ConfigDirective &directive,
+					ServerConfig &server);
 
-		static bool	parseBool(const std::string &s);
-		static void	parseAutoindex(LocationConfig &loc,
-					const ConfigDirective &d);
-		static void	parseIndex(std::string &index,
-					const ConfigDirective &d);
+		static std::string	parseRoot(const ConfigDirective &d);
+		static bool			parseBool(const std::string &s);
+		static void			parseAutoindex(LocationConfig &loc,
+							const ConfigDirective &d);
+		static void			parseIndex(std::string &index,
+							const ConfigDirective &d);
 };
 
 #endif

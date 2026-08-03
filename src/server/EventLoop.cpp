@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/19 12:30:29 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:31:30 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,7 +14,6 @@
 #include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
-
 #include <unistd.h>
 #include <cerrno>
 #include <stdexcept>
@@ -25,6 +24,7 @@
 
 static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
 static const long			CGI_TIMEOUT_MS = 5000;
+static const int			BACKLOG = 128;
 
 /*
  * Returns the current wall-clock time in milliseconds.
@@ -37,45 +37,94 @@ static long nowMs(void)
 	return (static_cast<long>(tv.tv_sec) * 1000 + tv.tv_usec / 1000);
 }
 
-EventLoop::EventLoop(void) : _sckt(NULL), _router("www")
+EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT)
 {
 }
 
-EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _router("www")
-{
-}
-
-EventLoop::EventLoop(const EventLoop &copy)
-	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients),
-	  _router(copy._router), _cgiHandler(copy._cgiHandler),
-	  _cgi(copy._cgi), _pipeToClient(copy._pipeToClient)
+EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
+	: _configs(configs), _router(DEFAULT_ROOT)
 {
 }
 
 EventLoop::~EventLoop(void)
 {
+	for (size_t i = 0; i < _sckt.size(); i++)
+		delete _sckt[i];
 }
 
-EventLoop &EventLoop::operator=(const EventLoop &other)
+/*
+ * Reports whether a listening socket is already bound to `port`. Server blocks
+ * sharing a port share the socket, and the block serving a request is picked
+ * from its Host header, so the port alone identifies the socket to open.
+ */
+bool EventLoop::isPortBound(int port) const
 {
-	if (this != &other)
+	for (size_t i = 0; i < _boundPorts.size(); i++)
 	{
-		_sckt = other._sckt;
-		_fds = other._fds;
-		_clients = other._clients;
-		_router = other._router;
-		_cgiHandler = other._cgiHandler;
-		_cgi = other._cgi;
-		_pipeToClient = other._pipeToClient;
+		if (_boundPorts[i] == port)
+			return (true);
 	}
-	return (*this);
+	return (false);
 }
 
-void EventLoop::acceptClients(void)
+/*
+ * Opens one listening socket per distinct port declared in the config.
+ * The socket is registered before it is configured so a failure part way
+ * through still leaves it owned by the loop and freed by the destructor.
+ */
+void EventLoop::setupSockets(void)
+{
+	if (_configs.empty())
+		throw std::runtime_error("EventLoop: no server configuration");
+
+	for (size_t i = 0; i < _configs.size(); i++)
+	{
+		const std::string	&host = _configs[i].host;
+		int					port = _configs[i].port;
+
+		if (isPortBound(port))
+			continue;
+
+		_sckt.push_back(new Socket());
+
+		Socket	*sckt = _sckt.back();
+
+		sckt->create();
+		sckt->bind(host, port);
+		sckt->listen(BACKLOG);
+
+		int	flags = fcntl(sckt->getFd(), F_GETFL, 0);
+		if (flags != -1 && (flags & O_NONBLOCK))
+			Logger::info("Socket is non-blocking.");
+		else
+			Logger::warning("Socket is blocking.");
+
+		std::ostringstream	oss;
+		oss << "Listening on " << host << ":" << port;
+		Logger::info(oss.str());
+
+		_boundPorts.push_back(port);
+	}
+}
+
+/*
+ * Reports whether `fd` is one of the listening sockets rather than a client.
+ */
+bool EventLoop::isMasterSocket(int fd) const
+{
+	for (size_t i = 0; i < _sckt.size(); i++)
+	{
+		if (_sckt[i]->getFd() == fd)
+			return (true);
+	}
+	return (false);
+}
+
+void EventLoop::acceptClients(int fd)
 {
 	while (true)
 	{
-		int client = accept(_sckt->getFd(), NULL, NULL);
+		int client = accept(fd, NULL, NULL);
 		if (client == -1)
 			break;
 		setNonBlocking(client);
@@ -154,8 +203,10 @@ void EventLoop::setPollEvents(int fd, short events)
 
 void EventLoop::handleRequest(int fd)
 {
-	Connection	&conn = _clients[fd];
-	ResponseBuilder	builder;
+	Connection			&conn = _clients[fd];
+	ResponseBuilder		builder;
+	const ServerConfig	&chosenConfig = getServerConfigForRequest(
+								conn.getLocalPort(), conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))
@@ -168,9 +219,7 @@ void EventLoop::handleRequest(int fd)
 	try
 	{
 		HttpResponse response;
-
-		_router.route(conn.getRequest(), response);
-
+		_router.route(conn.getRequest(), response, chosenConfig);
 		std::string serialized = builder.builder(conn.getRequest(), response);
 		conn.set_write_buffer(serialized);
 	}
@@ -186,7 +235,6 @@ void EventLoop::handleRequest(int fd)
 		std::string serialized = builder.buildErrorResponse(500);
 		conn.set_write_buffer(serialized);
 	}
-
 	setPollEvents(fd, POLLOUT);
 }
 
@@ -475,15 +523,16 @@ int EventLoop::cgiPollTimeout(void)
 
 void EventLoop::run(void)
 {
-	if (!_sckt)
-		throw std::runtime_error("EventLoop: no socket set");
-
-	struct pollfd s_listening;
-	s_listening.fd = _sckt->getFd();
-	s_listening.events = POLLIN;
-	s_listening.revents = 0;
-	_fds.push_back(s_listening);
-
+	if (_sckt.empty())
+		throw std::runtime_error("EventLoop: no sockets initialized");
+	for (size_t i = 0; i < _sckt.size(); i++)
+	{
+		struct pollfd s_listening;
+		s_listening.fd = _sckt[i]->getFd();
+		s_listening.events = POLLIN;
+		s_listening.revents = 0;
+		_fds.push_back(s_listening);
+	}
 	while (true)
 	{
 		int ready = poll(_fds.data(), _fds.size(), cgiPollTimeout());
@@ -497,12 +546,11 @@ void EventLoop::run(void)
 		{
 			int		fd = _fds[i].fd;
 			short	revents = _fds[i].revents;
-
 			if (revents == 0 || fd == -1)
 				continue;
-			if (fd == _sckt->getFd())
+			if (isMasterSocket(fd))
 			{
-				acceptClients();
+				acceptClients(fd);
 				continue;
 			}
 			if (_pipeToClient.count(fd))
@@ -532,4 +580,47 @@ void EventLoop::run(void)
 		checkCgiTimeouts();
 		compactPollFds();
 	}
+}
+
+/*
+ * Strips the optional port from a Host header, so "site.com:8080" and
+ * "site.com" both match a server_name of "site.com".
+ */
+std::string EventLoop::cleanHostHeader(const std::string &rawHost) const
+{
+	size_t	colon = rawHost.find(':');
+
+	if (colon != std::string::npos)
+		return (rawHost.substr(0, colon));
+	return (rawHost);
+}
+
+/*
+ * Picks the server block that serves a request. Only blocks listening on the
+ * port the request arrived on are considered; the one declaring the requested
+ * Host as a server_name wins, and the first block on that port is the default
+ * when no name matches.
+ */
+const ServerConfig &EventLoop::getServerConfigForRequest(int clientPort,
+		const HttpRequest &request) const
+{
+	std::string			hostHeader = cleanHostHeader(
+							request.getHeaderValue("Host"));
+	const ServerConfig	*defaultServer = NULL;
+
+	for (size_t i = 0; i < _configs.size(); ++i)
+	{
+		if (_configs[i].port != clientPort)
+			continue;
+		if (defaultServer == NULL)
+			defaultServer = &_configs[i];
+		for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
+		{
+			if (_configs[i].serverNames[j] == hostHeader)
+				return (_configs[i]);
+		}
+	}
+	if (defaultServer != NULL)
+		return (*defaultServer);
+	return (_configs[0]);
 }

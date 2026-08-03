@@ -15,6 +15,7 @@
 # include <iostream>
 # include <stdexcept>
 # include <string>
+# include <vector>
 
 # include "config/ConfigLoader.hpp"
 
@@ -53,11 +54,27 @@ static ServerConfig	loadSource(const std::string &source)
 	out << source;
 	out.close();
 
-	ConfigLoader	loader(TMP_PATH);
-	ServerConfig	config = loader.loader();
+	ConfigLoader				loader(TMP_PATH);
+	std::vector<ServerConfig>	servers = loader.loader();
 
 	std::remove(TMP_PATH);
-	return (config);
+	if (servers.empty())
+		throw std::runtime_error("no server block parsed");
+	return (servers[0]);
+}
+
+static std::vector<ServerConfig>	loadAll(const std::string &source)
+{
+	std::ofstream	out(TMP_PATH);
+
+	out << source;
+	out.close();
+
+	ConfigLoader				loader(TMP_PATH);
+	std::vector<ServerConfig>	servers = loader.loader();
+
+	std::remove(TMP_PATH);
+	return (servers);
 }
 
 static bool	loadThrows(const std::string &source)
@@ -232,21 +249,28 @@ static void	test_last_server_index_wins(void)
 	         "the last server index directive wins");
 }
 
-static void	test_index_is_shared_across_servers(void)
+static void	test_index_is_per_server(void)
 {
-	ServerConfig	config = loadSource(
+	std::vector<ServerConfig>	servers = loadAll(
 		"server {\n    listen 8081;\n    index first.html;\n"
 		"    location /x {\n    }\n}\n"
 		"server {\n    listen 8082;\n    index second.html;\n"
 		"    location /y {\n    }\n}\n");
 
-	CHECK_EQ(config.locations.size(), static_cast<size_t>(2),
-	         "locations of every server block are loaded");
-	CHECK_EQ(config.locations[0].index, std::string("second.html"),
-	         "only one server is supported, so a location of the first server "
-	         "still inherits the last index");
-	CHECK_EQ(config.locations[1].index, std::string("second.html"),
-	         "a location of the last server inherits its index");
+	CHECK_EQ(servers.size(), static_cast<size_t>(2),
+	         "every server block yields its own config");
+	if (servers.size() != 2)
+		return ;
+	CHECK_EQ(servers[0].index, std::string("first.html"),
+	         "the first server keeps its own index");
+	CHECK_EQ(servers[1].index, std::string("second.html"),
+	         "the second server keeps its own index");
+	CHECK_EQ(servers[0].locations.size(), static_cast<size_t>(1),
+	         "a server only owns the locations declared inside it");
+	CHECK_EQ(servers[0].locations[0].index, std::string("first.html"),
+	         "a location inherits the index of its own server");
+	CHECK_EQ(servers[1].locations[0].index, std::string("second.html"),
+	         "a location of the second server inherits its own server index");
 }
 
 static void	test_malformed_index_throws(void)
@@ -292,9 +316,103 @@ static void	test_no_listen_uses_defaults(void)
 static void	test_last_listen_wins(void)
 {
 	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    listen 8082;\n}\n");
+
+	CHECK_EQ(config.port, 8082,
+	         "the last listen of a server block wins for now");
+}
+
+static void	test_each_server_block_is_kept(void)
+{
+	std::vector<ServerConfig>	servers = loadAll(
 		"server {\n    listen 8081;\n}\nserver {\n    listen 8082;\n}\n");
 
-	CHECK_EQ(config.port, 8082, "the last listen directive wins for now");
+	CHECK_EQ(servers.size(), static_cast<size_t>(2),
+	         "every server block yields its own config");
+	if (servers.size() != 2)
+		return ;
+	CHECK_EQ(servers[0].port, 8081, "the first server keeps its own port");
+	CHECK_EQ(servers[1].port, 8082, "the second server keeps its own port");
+}
+
+static void	test_no_server_block_throws(void)
+{
+	TEST(loadThrows("listen 8081;\n"),
+	     "a config without a server block throws");
+}
+
+/* ------------------------------------------------------------------ */
+/* root                                                                */
+/* ------------------------------------------------------------------ */
+
+static void	test_server_root(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www;\n}\n");
+
+	CHECK_EQ(config.root, std::string("www"),
+	         "a server level root is parsed");
+}
+
+static void	test_root_trailing_slash_is_trimmed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www/;\n}\n");
+
+	CHECK_EQ(config.root, std::string("www"),
+	         "a trailing slash is stripped from root");
+}
+
+static void	test_root_defaults_when_absent(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8081;\n}\n");
+
+	CHECK_EQ(config.root, std::string(DEFAULT_ROOT),
+	         "a server without root falls back to the default root");
+}
+
+static void	test_location_root_is_parsed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www;\n"
+		"    location /images/ {\n        root www/assets;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is kept");
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].path, std::string("/images/"),
+	         "the location path is kept");
+	CHECK_EQ(config.locations[0].root, std::string("www/assets"),
+	         "a location level root is parsed");
+}
+
+static void	test_location_without_root_inherits(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www;\n"
+		"    location /images/ {\n        autoindex on;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is kept");
+	if (config.locations.empty())
+		return ;
+	TEST(config.locations[0].root.empty(),
+	     "a location without root stays empty so it inherits the server root");
+	TEST(config.locations[0].autoindex,
+	     "autoindex is still parsed alongside root");
+}
+
+static void	test_root_without_argument_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8081;\n    root;\n}\n"),
+	     "root without an argument throws");
+}
+
+static void	test_root_with_extra_arguments_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8081;\n    root www extra;\n}\n"),
+	     "root with more than one argument throws");
 }
 
 static void	test_static_helpers(void)
@@ -325,11 +443,20 @@ int	main(void)
 	test_location_inherits_server_index();
 	test_location_index_overrides_server();
 	test_last_server_index_wins();
-	test_index_is_shared_across_servers();
+	test_index_is_per_server();
 	test_malformed_index_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();
+	test_each_server_block_is_kept();
+	test_no_server_block_throws();
+	test_server_root();
+	test_root_trailing_slash_is_trimmed();
+	test_root_defaults_when_absent();
+	test_location_root_is_parsed();
+	test_location_without_root_inherits();
+	test_root_without_argument_throws();
+	test_root_with_extra_arguments_throws();
 	test_static_helpers();
 
 	std::cout << std::endl;

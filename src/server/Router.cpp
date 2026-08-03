@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:56:45 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/02 00:31:05 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -130,8 +130,35 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 	return (NULL);
 }
 
+/**
+ * @brief Picks the document root that applies to a URI in a server block.
+ * The location whose path is the longest matching prefix of the URI wins; when
+ * that location declares no root of its own it inherits the server root.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The document root to serve the request from.
+ */
+std::string	Router::resolveRoot(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = NULL;
+
+	for (size_t i = 0; i < config.locations.size(); ++i)
+	{
+		const std::string	&locPath = config.locations[i].path;
+
+		if (uri.compare(0, locPath.size(), locPath) != 0)
+			continue;
+		if (best == NULL || locPath.size() > best->path.size())
+			best = &config.locations[i];
+	}
+	if (best != NULL && !best->root.empty())
+		return (best->root);
+	return (config.root);
+}
+
 bool	Router::route(const HttpRequest &request,
-				HttpResponse &response)
+				HttpResponse &response, const ServerConfig &config)
 {
 	bool pathFound = false;
 	std::string allow;
@@ -153,6 +180,10 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
+		std::string	root = resolveRoot(request.getUri(), config);
+
+		if (!root.empty())
+			setRoot(root);
 		handler->handle(request, response);
 	}
 	return (true);

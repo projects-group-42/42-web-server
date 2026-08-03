@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 14:40:32 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:48:49 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,7 @@
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/ResponseBuilder.hpp"
+# include "config/ServerConfig.hpp"
 
 class Router
 {
@@ -31,6 +32,8 @@ class Router
 		IRequestHandler	*resolveHandler(const std::string &method,
 				const std::string &uri, bool &pathFound,
 				std::string &allow);
+		std::string		resolveRoot(const std::string &uri,
+				const ServerConfig &config) const;
 
 	public:
 		Router(void);
@@ -40,7 +43,7 @@ class Router
 		~Router(void);
 
 		bool	route(const HttpRequest &request,
-					HttpResponse &response);
+					HttpResponse &response, const ServerConfig &config);
 
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);

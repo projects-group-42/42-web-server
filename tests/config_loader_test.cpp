@@ -173,6 +173,77 @@ static void	test_unresolvable_host_throws(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* index directive                                                     */
+/* ------------------------------------------------------------------ */
+
+static void	test_default_index(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    location / {\n    }\n}\n");
+
+	CHECK_EQ(config.index, std::string("index.html"),
+	         "a config without index keeps the default index");
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is loaded");
+	CHECK_EQ(config.locations[0].index, std::string("index.html"),
+	         "a location without index inherits the default index");
+}
+
+static void	test_server_index_is_parsed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index custom.html;\n}\n");
+
+	CHECK_EQ(config.index, std::string("custom.html"),
+	         "a server-level index is parsed");
+}
+
+static void	test_location_inherits_server_index(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index custom.html;\n"
+		"    location / {\n        autoindex off;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is loaded");
+	CHECK_EQ(config.locations[0].index, std::string("custom.html"),
+	         "a location without index inherits the server index");
+}
+
+static void	test_location_index_overrides_server(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index custom.html;\n"
+		"    location / {\n        index location.html;\n    }\n}\n");
+
+	CHECK_EQ(config.index, std::string("custom.html"),
+	         "the server index is left untouched by the location");
+	CHECK_EQ(config.locations[0].index, std::string("location.html"),
+	         "a location index overrides the server index");
+}
+
+static void	test_last_server_index_wins(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index first.html;\n"
+		"    index second.html;\n}\n");
+
+	CHECK_EQ(config.index, std::string("second.html"),
+	         "the last server index directive wins");
+}
+
+static void	test_malformed_index_throws(void)
+{
+	TEST(loadThrows("server {\n    index a.html b.html;\n}\n"),
+	     "an index list is rejected instead of keeping only the first entry");
+	TEST(loadThrows("server {\n    index;\n}\n"),
+	     "an index without an argument is rejected");
+	TEST(loadThrows(
+		"server {\n    location / {\n        index a.html b.html;\n    }\n}\n"),
+	     "an index list inside a location is rejected");
+}
+
+/* ------------------------------------------------------------------ */
 /* Loader behaviour                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -232,6 +303,12 @@ int	main(void)
 	test_extra_arguments_throw();
 	test_malformed_host_port_throws();
 	test_unresolvable_host_throws();
+	test_default_index();
+	test_server_index_is_parsed();
+	test_location_inherits_server_index();
+	test_location_index_overrides_server();
+	test_last_server_index_wins();
+	test_malformed_index_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();

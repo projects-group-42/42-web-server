@@ -119,6 +119,7 @@ ServerConfig ConfigLoader::loader(void)
 
 	_tree = parser.parse();
 	parse_listen();
+	parse_server_index();
 	parse_locations();
 	return (_config);
 }
@@ -238,6 +239,32 @@ void ConfigLoader::parse_listen(void)
 	}
 }
 
+/**
+ * @brief Walks the AST and applies every server-level index directive found.
+ * The last declaration wins, and locations that omit their own index inherit
+ * the value stored here.
+ * @throw std::runtime_error when an index directive is malformed.
+ */
+void ConfigLoader::parse_server_index(void)
+{
+	std::vector<ConfigBlock>::const_iterator	block_it;
+
+	for (block_it = _tree.children.begin();
+	     block_it != _tree.children.end(); ++block_it)
+	{
+		if (block_it->name != "server")
+			continue;
+
+		std::vector<ConfigDirective>::const_iterator	it;
+		for (it = block_it->directives.begin();
+		     it != block_it->directives.end(); ++it)
+		{
+			if (it->name == "index")
+				parseIndex(_config.index, *it);
+		}
+	}
+}
+
 void ConfigLoader::parse_locations(void)
 {
 	std::vector<ConfigBlock>::const_iterator block_it;
@@ -266,7 +293,12 @@ void ConfigLoader::parse_locations(void)
 			{
 				if (dit->name == "autoindex")
 					parseAutoindex(loc, *dit);
+				else if (dit->name == "index")
+					parseIndex(loc.index, *dit);
 			}
+
+			if (loc.index.empty())
+				loc.index = _config.index;
 
 			_config.locations.push_back(loc);
 		}
@@ -290,4 +322,24 @@ void ConfigLoader::parseAutoindex(LocationConfig &loc,
 		throw std::runtime_error(
 		    "'autoindex' expects 'on' or 'off'");
 	loc.autoindex = parseBool(d.args[0]);
+}
+
+/**
+ * @brief Validates an index directive and stores its file name.
+ * Only one file name is supported, so a list of fallbacks is refused instead
+ * of being silently truncated to its first entry.
+ * @param index The destination holding the server or location index.
+ * @param d The index directive taken from the AST.
+ * @throw std::runtime_error when the directive carries anything other than a
+ * single non-empty file name.
+ */
+void ConfigLoader::parseIndex(std::string &index, const ConfigDirective &d)
+{
+	if (d.args.size() != 1)
+		throw std::runtime_error(
+		    "'index' expects a single file name");
+	if (d.args[0].empty())
+		throw std::runtime_error(
+		    "'index' expects a non-empty file name");
+	index = d.args[0];
 }

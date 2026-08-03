@@ -143,17 +143,17 @@ const HttpRequest& Connection::getRequest(void) const
 	return _parser.getRequest();
 }
 
+/*
+ * Returns the local port this connection was accepted on, so the request can
+ * be matched against the server blocks listening on it. Returns 0 when the
+ * socket cannot be queried.
+ */
 int Connection::getLocalPort(void) const
 {
-	struct sockaddr_in address;
-	socklen_t len = sizeof(address);
+	struct sockaddr_in	address;
+	socklen_t			len = sizeof(address);
 
-	// Pergunta ao kernel qual o endereço/porta amarrado a este socket
 	if (getsockname(_client_fd, (struct sockaddr *)&address, &len) == -1)
-	{
-		return 0;
-	}
-
-	// Retorna a porta convertida para o formato legível (Host Byte Order)
-	return ntohs(address.sin_port);
+		return (0);
+	return (ntohs(address.sin_port));
 }

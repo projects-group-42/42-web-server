@@ -17,6 +17,7 @@
 # include <fstream>
 # include <sstream>
 # include <string>
+# include <vector>
 # include "config/Lexer.hpp"
 # include "config/ConfigParser.hpp"
 # include "config/ConfigAST.hpp"
@@ -38,11 +39,24 @@ class ConfigLoader
 
 		std::vector<ServerConfig> loader(void);
 
+		static int			parsePort(const std::string &token);
+		static std::string	parseHost(const std::string &token);
+
 	private:
 		std::string	configPath(void);
-		void		parse_listen(const ConfigDirective &directive, ServerConfig &server);
-		void		parse_names(const ConfigDirective &directive, ServerConfig &server);
-		void		parse_root(const ConfigDirective &directive, ServerConfig &server);
+		void		parse_directives(const ConfigBlock &block,
+					ServerConfig &server);
+		void		parse_locations(const ConfigBlock &block,
+					ServerConfig &server);
+		void		applyListen(const std::vector<std::string> &args,
+					ServerConfig &server);
+		void		parse_names(const ConfigDirective &directive,
+					ServerConfig &server);
+
+		static std::string	parseRoot(const ConfigDirective &d);
+		static bool			parseBool(const std::string &s);
+		static void			parseAutoindex(LocationConfig &loc,
+							const ConfigDirective &d);
 };
 
 #endif

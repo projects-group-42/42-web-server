@@ -11,29 +11,29 @@
 /* ************************************************************************** */
 
 #include <csignal>
-#include <fcntl.h>
-#include <sstream>
 #include <string>
-#include <unistd.h>
-#include <iostream>
+#include <vector>
 #include "utils/Logger.hpp"
-#include "network/Socket.hpp"
 #include "server/EventLoop.hpp"
 #include "config/ConfigLoader.hpp"
-#include "config/Lexer.hpp"
 #include "config/ServerConfig.hpp"
-
-/* Maximum queue length specifiable by listen.  */
-#define SOMAXCONN	4096
 
 int main(int argc, char **argv)
 {
+	if (argc > 2)
+	{
+		Logger::error("usage: ./webserv [config_file]");
+		return (1);
+	}
+
 	signal(SIGPIPE, SIG_IGN);
 	try
 	{
-		ConfigLoader config_file(argc == 2 ? argv[1] : "conf/simple.conf");
-		std::vector<ServerConfig> configs = config_file.loader();
-		EventLoop loop(configs);
+		ConfigLoader				config_file(argc == 2
+										? argv[1] : "conf/simple.conf");
+		std::vector<ServerConfig>	configs = config_file.loader();
+		EventLoop					loop(configs);
+
 		loop.setupSockets();
 		loop.run();
 	}

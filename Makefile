@@ -48,6 +48,15 @@ PARSER_TEST_BIN	= test_parser
 SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
 						  src/config/ServerConfig.cpp
 SERVER_CONFIG_TEST_BIN	= test_server_config
+
+CONFIG_LOADER_TEST_SRC	= tests/config_loader_test.cpp \
+						  src/config/Lexer.cpp \
+						  src/config/ConfigAST.cpp \
+						  src/config/ConfigParser.cpp \
+						  src/config/ConfigLoader.cpp \
+						  src/config/ServerConfig.cpp \
+						  src/utils/Logger.cpp
+CONFIG_LOADER_TEST_BIN	= test_config_loader
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/cgi/CgiHandler.cpp \
 				  src/cgi/CgiPipes.cpp \
@@ -65,6 +74,23 @@ MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
 					  src/handlers/StaticFileHandler.cpp \
 					  src/utils/Utils.cpp
 MULTIPART_TEST_BIN	= test_multipart
+
+UPLOAD_SUITE_TEST_SRC	= tests/upload_suite_test.cpp \
+						  src/http/MultipartParser.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/http/HttpResponse.cpp \
+						  src/http/MimeType.cpp \
+						  src/handlers/IRequestHandler.cpp \
+						  src/handlers/StaticFileHandler.cpp \
+						  src/utils/Utils.cpp
+UPLOAD_SUITE_TEST_BIN	= test_upload_suite
+
+REQUEST_PARSER_TEST_SRC	= tests/request_parser_test.cpp \
+						  src/http/RequestParser.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+REQUEST_PARSER_TEST_BIN	= test_request_parser
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -85,13 +111,16 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
+	./$(CONFIG_LOADER_TEST_BIN)
 	./$(CGI_TEST_BIN)
 	./$(MULTIPART_TEST_BIN)
+	./$(UPLOAD_SUITE_TEST_BIN)
+	./$(REQUEST_PARSER_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -105,10 +134,19 @@ $(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
 $(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(CONFIG_LOADER_TEST_BIN): $(CONFIG_LOADER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(MULTIPART_TEST_BIN): $(MULTIPART_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(UPLOAD_SUITE_TEST_BIN): $(UPLOAD_SUITE_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(REQUEST_PARSER_TEST_BIN): $(REQUEST_PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
@@ -120,8 +158,11 @@ fclean: clean
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
+	rm -f $(CONFIG_LOADER_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
 	rm -f $(MULTIPART_TEST_BIN)
+	rm -f $(UPLOAD_SUITE_TEST_BIN)
+	rm -f $(REQUEST_PARSER_TEST_BIN)
 
 re: fclean all
 

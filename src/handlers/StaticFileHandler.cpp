@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <vector>
 #include <cerrno>
-#include "utils/Logger.hpp"
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
@@ -133,6 +132,8 @@ static std::string canonicalPath(const std::string &path)
  * that would climb above the root returns an empty string so the caller can
  * answer 403. When the resolved target exists, its canonical path is checked
  * against the canonical root so symlinks cannot escape the document root.
+ * A root that cannot be canonicalised (empty or missing) is refused outright:
+ * without it there is nothing to confine the request to.
  */
 std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 {
@@ -165,8 +166,11 @@ std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 		path += "/" + segments[j];
 
 	std::string	root = canonicalPath(_root);
+	if (root.empty())
+		return ("");
+
 	std::string	resolved = canonicalPath(path);
-	if (!root.empty() && !resolved.empty() && resolved != root
+	if (!resolved.empty() && resolved != root
 		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
 		return ("");
 	return (path);
@@ -181,7 +185,7 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 		HttpResponse &response)
 {
 	std::string		resolvedPath = rslv_req_realpath(request.getUri());
-	Logger::info("Tentando abrir caminho físico: " + resolvedPath);
+
 	if (resolvedPath.empty())
 	{
 		response.setStatusCode(403);

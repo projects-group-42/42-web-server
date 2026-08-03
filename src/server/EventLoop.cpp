@@ -19,24 +19,30 @@
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <cstdlib>
-#include <iostream>
 
 static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
+static const long			CGI_TIMEOUT_MS = 5000;
+static const int			BACKLOG = 128;
 
-EventLoop::EventLoop(void) : _configs(), _router("www")
+/*
+ * Returns the current wall-clock time in milliseconds.
+ */
+static long nowMs(void)
+{
+	struct timeval	tv;
+
+	gettimeofday(&tv, NULL);
+	return (static_cast<long>(tv.tv_sec) * 1000 + tv.tv_usec / 1000);
+}
+
+EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT)
 {
 }
 
-EventLoop::EventLoop(const std::vector<ServerConfig>& configs) : _configs(configs), _router("www")
-{
-}
-
-EventLoop::EventLoop(const EventLoop &copy)
-	:  _sckt(copy._sckt), _configs(copy. _configs),
-	  _fds(copy._fds), _clients(copy._clients),
-	  _router(copy._router), _cgiHandler(copy._cgiHandler),
-	  _cgi(copy._cgi), _pipeToClient(copy._pipeToClient)
+EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
+	: _configs(configs), _router(DEFAULT_ROOT)
 {
 }
 
@@ -46,68 +52,73 @@ EventLoop::~EventLoop(void)
 		delete _sckt[i];
 }
 
-EventLoop &EventLoop::operator=(const EventLoop &other)
+/*
+ * Reports whether a listening socket is already bound to `host`:`port`.
+ * Several server blocks may share an endpoint to serve different names, in
+ * which case a single socket is opened and the name is resolved per request.
+ */
+bool EventLoop::isBound(const std::string &host, int port) const
 {
-	if (this != &other)
+	for (size_t i = 0; i < _boundEndpoints.size(); i++)
 	{
-		_sckt = other._sckt;
-		_configs = other._configs;
-		_fds = other._fds;
-		_clients = other._clients;
-		_router = other._router;
-		_cgiHandler = other._cgiHandler;
-		_cgi = other._cgi;
-		_pipeToClient = other._pipeToClient;
+		if (_boundEndpoints[i].first == host
+			&& _boundEndpoints[i].second == port)
+			return (true);
 	}
-	return (*this);
+	return (false);
 }
 
+/*
+ * Opens one listening socket per distinct host:port declared in the config.
+ * The socket is registered before it is configured so a failure part way
+ * through still leaves it owned by the loop and freed by the destructor.
+ */
 void EventLoop::setupSockets(void)
 {
-	std::vector<int> bound_ports;
+	if (_configs.empty())
+		throw std::runtime_error("EventLoop: no server configuration");
 
 	for (size_t i = 0; i < _configs.size(); i++)
 	{
-		int current_port = _configs[i].port;
-		bool already_bound = false;
+		const std::string	&host = _configs[i].host;
+		int					port = _configs[i].port;
 
-		for (size_t j = 0; j < bound_ports.size(); j++) {
-			if (bound_ports[j] == current_port) {
-				already_bound = true;
-				break;
-			}
-		}
+		if (isBound(host, port))
+			continue;
 
-		if (!already_bound)
-		{
-			Socket* sckt = new Socket();
-			sckt->create();
-			sckt->bind(_configs[i].host, current_port);
-			sckt->listen(SOMAXCONN);
-			
-			int flags = fcntl(sckt->getFd(), F_GETFL, 0);
-			if (flags != -1 && (flags & O_NONBLOCK))
-				Logger::info("Socket is non-blocking.");
-			else
-				Logger::warning("Socket is blocking.");
+		_sckt.push_back(new Socket());
 
-			std::ostringstream oss;
-			oss << "Listening on " << _configs[i].host << ":" << current_port;
-			Logger::info(oss.str());
+		Socket	*sckt = _sckt.back();
 
-			_sckt.push_back(sckt);
-			bound_ports.push_back(current_port);
-		}
+		sckt->create();
+		sckt->bind(host, port);
+		sckt->listen(BACKLOG);
+
+		int	flags = fcntl(sckt->getFd(), F_GETFL, 0);
+		if (flags != -1 && (flags & O_NONBLOCK))
+			Logger::info("Socket is non-blocking.");
+		else
+			Logger::warning("Socket is blocking.");
+
+		std::ostringstream	oss;
+		oss << "Listening on " << host << ":" << port;
+		Logger::info(oss.str());
+
+		_boundEndpoints.push_back(std::make_pair(host, port));
 	}
 }
 
+/*
+ * Reports whether `fd` is one of the listening sockets rather than a client.
+ */
 bool EventLoop::isMasterSocket(int fd) const
 {
-	for (size_t i = 0; i < _sckt.size(); i++) {
+	for (size_t i = 0; i < _sckt.size(); i++)
+	{
 		if (_sckt[i]->getFd() == fd)
-			return true;
+			return (true);
 	}
-	return false;
+	return (false);
 }
 
 void EventLoop::acceptClients(int fd)
@@ -193,10 +204,10 @@ void EventLoop::setPollEvents(int fd, short events)
 
 void EventLoop::handleRequest(int fd)
 {
-	Connection	&conn = _clients[fd];
-	ResponseBuilder	builder;
-	int clientPort = conn.getLocalPort(); // (Ou de onde você guarda a porta)
-	const ServerConfig& chosenConfig = getServerConfigForRequest(clientPort, conn.getRequest());
+	Connection			&conn = _clients[fd];
+	ResponseBuilder		builder;
+	const ServerConfig	&chosenConfig = getServerConfigForRequest(
+								conn.getLocalPort(), conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))
@@ -342,6 +353,7 @@ void EventLoop::startCgi(int fd)
 		sendCgiError(fd, 500);
 		return ;
 	}
+	proc->setDeadlineMs(nowMs() + CGI_TIMEOUT_MS);
 	_cgi[fd] = proc;
 	_pipeToClient[proc->outputReadFd()] = fd;
 	addPollFd(proc->outputReadFd(), POLLIN);
@@ -392,25 +404,20 @@ void EventLoop::handleCgiIo(int fd, short revents)
 }
 
 /*
- * Reaps the finished child, turns its collected output into an HTTP response
- * (502 when the script did not exit cleanly), arms the client for sending, and
- * releases the process.
+ * Reaps the finished child, turns its collected output into an HTTP response,
+ * arms the client for sending, and releases the process. Answers 502 when the
+ * script did not exit cleanly or when its output is not a valid CGI response.
  */
 void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 {
 	Connection		&conn = _clients[clientFd];
 	ResponseBuilder	builder;
+	HttpResponse	response;
 	int				status = proc->reap();
 
 	builder.setKeepAlive(conn.get_keep_alive());
-	if (status == 0)
-	{
-		HttpResponse	response;
-
-		response.setStatusCode(200);
-		response.setBody(proc->output());
+	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
-	}
 	else
 		conn.set_write_buffer(builder.buildErrorResponse(502));
 	setPollEvents(clientFd, POLLOUT);
@@ -420,13 +427,10 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 }
 
 /*
- * Tears down a CGI whose client disconnected mid-execution: unregisters its
- * pipe fds, kills and reaps the child, and drops the client connection.
+ * Removes every poll entry and mapping for the CGI pipes owned by clientFd.
  */
-void EventLoop::abortCgi(int clientFd)
+void EventLoop::unregisterCgiPipes(int clientFd)
 {
-	CgiProcess	*proc = _cgi[clientFd];
-
 	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); )
 	{
 		if (it->second == clientFd)
@@ -437,11 +441,85 @@ void EventLoop::abortCgi(int clientFd)
 		else
 			++it;
 	}
+}
+
+/*
+ * Tears down a CGI whose client disconnected mid-execution: unregisters its
+ * pipe fds, kills and reaps the child, and drops the client connection.
+ */
+void EventLoop::abortCgi(int clientFd)
+{
+	CgiProcess	*proc = _cgi[clientFd];
+
+	unregisterCgiPipes(clientFd);
 	_cgi.erase(clientFd);
 	delete proc;
 	disablePollFd(clientFd);
 	_clients.erase(clientFd);
 	Logger::info("Client disconnected during CGI, process terminated.");
+}
+
+/*
+ * Kills a CGI that ran past its deadline: unregisters its pipe fds, reaps the
+ * child (through the CgiProcess destructor), queues a 504 Gateway Timeout, and
+ * arms the client for sending.
+ */
+void EventLoop::timeoutCgi(int clientFd)
+{
+	Connection		&conn = _clients[clientFd];
+	CgiProcess		*proc = _cgi[clientFd];
+	ResponseBuilder	builder;
+
+	unregisterCgiPipes(clientFd);
+	_cgi.erase(clientFd);
+	delete proc;
+	builder.setKeepAlive(conn.get_keep_alive());
+	conn.set_write_buffer(builder.buildErrorResponse(504));
+	setPollEvents(clientFd, POLLOUT);
+	Logger::info("CGI timed out, 504 queued.");
+}
+
+/*
+ * Kills every CGI whose deadline has passed. Deadlines are collected before
+ * killing so the map is not modified while it is being iterated.
+ */
+void EventLoop::checkCgiTimeouts(void)
+{
+	long				now = nowMs();
+	std::vector<int>	expired;
+
+	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin(); it != _cgi.end(); ++it)
+	{
+		if (now >= it->second->deadlineMs())
+			expired.push_back(it->first);
+	}
+	for (size_t i = 0; i < expired.size(); ++i)
+		timeoutCgi(expired[i]);
+}
+
+/*
+ * Returns the poll timeout in milliseconds: infinite when no CGI is running,
+ * otherwise the time left until the nearest CGI deadline (never negative) so
+ * poll wakes in time to kill a stuck child.
+ */
+int EventLoop::cgiPollTimeout(void)
+{
+	long	now;
+	long	soonest = -1;
+
+	if (_cgi.empty())
+		return (-1);
+	now = nowMs();
+	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin(); it != _cgi.end(); ++it)
+	{
+		long	remaining = it->second->deadlineMs() - now;
+
+		if (remaining < 0)
+			remaining = 0;
+		if (soonest == -1 || remaining < soonest)
+			soonest = remaining;
+	}
+	return (static_cast<int>(soonest));
 }
 
 void EventLoop::run(void)
@@ -458,7 +536,7 @@ void EventLoop::run(void)
 	}
 	while (true)
 	{
-		int ready = poll(_fds.data(), _fds.size(), -1);
+		int ready = poll(_fds.data(), _fds.size(), cgiPollTimeout());
 		if (ready == -1)
 		{
 			if (errno == EINTR)
@@ -500,50 +578,50 @@ void EventLoop::run(void)
 				i--;
 			}
 		}
+		checkCgiTimeouts();
 		compactPollFds();
 	}
 }
 
-// Remove a porta do cabeçalho Host (ex: "meu-site.com:8080" vira "meu-site.com")
-std::string EventLoop::cleanHostHeader(const std::string& rawHost) const
+/*
+ * Strips the optional port from a Host header, so "site.com:8080" and
+ * "site.com" both match a server_name of "site.com".
+ */
+std::string EventLoop::cleanHostHeader(const std::string &rawHost) const
 {
-	size_t colon_pos = rawHost.find(':');
-	if (colon_pos != std::string::npos)
-		return rawHost.substr(0, colon_pos);
-	return rawHost;
+	size_t	colon = rawHost.find(':');
+
+	if (colon != std::string::npos)
+		return (rawHost.substr(0, colon));
+	return (rawHost);
 }
 
-// O Coração da Issue #44: Escolhe o servidor certo!
-const ServerConfig& EventLoop::getServerConfigForRequest(int clientPort, const HttpRequest& request) const
+/*
+ * Picks the server block that serves a request. Only blocks listening on the
+ * port the request arrived on are considered; the one declaring the requested
+ * Host as a server_name wins, and the first block on that port is the default
+ * when no name matches.
+ */
+const ServerConfig &EventLoop::getServerConfigForRequest(int clientPort,
+		const HttpRequest &request) const
 {
-	std::string hostHeader = cleanHostHeader(request.getHeaderValue("Host"));
-	const ServerConfig* defaultServer = NULL;
+	std::string			hostHeader = cleanHostHeader(
+							request.getHeaderValue("Host"));
+	const ServerConfig	*defaultServer = NULL;
 
-	
 	for (size_t i = 0; i < _configs.size(); ++i)
 	{
-		// 1. Filtra para olhar apenas para servidores que estão nesta porta
-		if (_configs[i].port == clientPort)
+		if (_configs[i].port != clientPort)
+			continue;
+		if (defaultServer == NULL)
+			defaultServer = &_configs[i];
+		for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
 		{
-			// O primeiro que encontrarmos nesta porta é o fallback (default server)
-			if (defaultServer == NULL)
-				defaultServer = &_configs[i];
-
-			// 2. Procura um match exato no array de server_names
-			for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
-			{
-				if (_configs[i].serverNames[j] == hostHeader)
-				{
-					return _configs[i]; // Bingo! Encontrou o domínio exato.
-				}
-			}
+			if (_configs[i].serverNames[j] == hostHeader)
+				return (_configs[i]);
 		}
 	}
-
-	// 3. Se não houver match exato do nome, devolve o servidor padrão desta porta
 	if (defaultServer != NULL)
-		return *defaultServer;
-
-	// Caso extremo (segurança)
-	return _configs[0];
+		return (*defaultServer);
+	return (_configs[0]);
 }

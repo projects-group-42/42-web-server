@@ -130,6 +130,33 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 	return (NULL);
 }
 
+/**
+ * @brief Picks the document root that applies to a URI in a server block.
+ * The location whose path is the longest matching prefix of the URI wins; when
+ * that location declares no root of its own it inherits the server root.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The document root to serve the request from.
+ */
+std::string	Router::resolveRoot(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = NULL;
+
+	for (size_t i = 0; i < config.locations.size(); ++i)
+	{
+		const std::string	&locPath = config.locations[i].path;
+
+		if (uri.compare(0, locPath.size(), locPath) != 0)
+			continue;
+		if (best == NULL || locPath.size() > best->path.size())
+			best = &config.locations[i];
+	}
+	if (best != NULL && !best->root.empty())
+		return (best->root);
+	return (config.root);
+}
+
 bool	Router::route(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config)
 {
@@ -153,32 +180,10 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
-		// 1. Começa por assumir o root geral do bloco server (fallback)
-		std::string finalRoot = config.root;
-		std::string bestMatchPath = "";
+		std::string	root = resolveRoot(request.getUri(), config);
 
-		// 2. Procura no vetor de locations qual delas melhor corresponde à URI (Longest Prefix Match)
-		for (size_t i = 0; i < config.locations.size(); ++i)
-		{
-			const std::string &locPath = config.locations[i].path;
-			
-			if (request.getUri().compare(0, locPath.size(), locPath) == 0)
-			{
-				if (locPath.size() > bestMatchPath.size())
-				{
-					bestMatchPath = locPath;
-					// Se a location tiver um root definido, ele tem prioridade absoluta!
-					if (!config.locations[i].root.empty())
-					{
-						finalRoot = config.locations[i].root;
-					}
-				}
-			}
-		}
-		
-
-		// 3. Aplica o root decidido e despacha para o handler
-		setRoot(finalRoot);
+		if (!root.empty())
+			setRoot(root);
 		handler->handle(request, response);
 	}
 	return (true);

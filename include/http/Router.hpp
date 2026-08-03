@@ -15,11 +15,13 @@
 
 # include <string>
 # include <map>
+# include <vector>
 # include "handlers/IRequestHandler.hpp"
 # include "handlers/StaticFileHandler.hpp"
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/ResponseBuilder.hpp"
+# include "config/ServerConfig.hpp"
 
 class Router
 {
@@ -27,10 +29,15 @@ class Router
 		StaticFileHandler						_staticHandler;
 		std::map<std::string, IRequestHandler*>	_handlers;
 		ResponseBuilder							_responseBuilder;
+		std::vector<LocationConfig>				_locations;
+		std::string								_serverRoot;
+		std::string								_serverIndex;
 
 		IRequestHandler	*resolveHandler(const std::string &method,
 				const std::string &uri, bool &pathFound,
 				std::string &allow);
+
+		void			applyLocationConfig(const std::string &uri);
 
 	public:
 		Router(void);
@@ -44,6 +51,8 @@ class Router
 
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);
+
+		void	setLocations(const std::vector<LocationConfig> &locations);
 
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);

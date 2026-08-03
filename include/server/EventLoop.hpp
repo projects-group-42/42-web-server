@@ -16,6 +16,7 @@
 #include "network/Socket.hpp"
 #include "network/Connection.hpp"
 #include "http/Router.hpp"
+#include "config/ServerConfig.hpp"
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiProcess.hpp"
 #include <vector>
@@ -56,6 +57,7 @@ class EventLoop
 	public:
 		EventLoop(void);
 		EventLoop(Socket *sckt);
+		EventLoop(Socket *sckt, const ServerConfig &config);
 		EventLoop(const EventLoop &copy);
 		~EventLoop(void);
 

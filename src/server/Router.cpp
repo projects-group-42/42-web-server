@@ -16,7 +16,8 @@
 #include "utils/Logger.hpp"
 
 Router::Router(void)
-	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
+	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false),
+	  _serverRoot("www"), _serverIndex("index.html")
 {
 	_handlers["GET:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
@@ -24,7 +25,8 @@ Router::Router(void)
 }
 
 Router::Router(const std::string &root)
-	: _staticHandler(root), _responseBuilder("Webserv/1.0", false)
+	: _staticHandler(root), _responseBuilder("Webserv/1.0", false),
+	  _serverRoot(root), _serverIndex("index.html")
 {
 	_handlers["GET:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
@@ -32,7 +34,9 @@ Router::Router(const std::string &root)
 }
 
 Router::Router(const Router &copy)
-	: _staticHandler(copy._staticHandler), _handlers(copy._handlers), _responseBuilder(copy._responseBuilder)
+	: _staticHandler(copy._staticHandler), _handlers(copy._handlers),
+	  _responseBuilder(copy._responseBuilder), _locations(copy._locations),
+	  _serverRoot(copy._serverRoot), _serverIndex(copy._serverIndex)
 {
 	_handlers["GET:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
@@ -46,6 +50,9 @@ Router &Router::operator=(const Router &other)
 		_staticHandler = other._staticHandler;
 		_handlers = other._handlers;
 		_responseBuilder = other._responseBuilder;
+		_locations = other._locations;
+		_serverRoot = other._serverRoot;
+		_serverIndex = other._serverIndex;
 		_handlers["GET:/"] = &_staticHandler;
 		_handlers["POST:/"] = &_staticHandler;
 		_handlers["DELETE:/"] = &_staticHandler;
@@ -70,12 +77,54 @@ void	Router::addHandler(const std::string &method,
 
 void	Router::setRoot(const std::string &root)
 {
+	_serverRoot = root;
 	_staticHandler.setRoot(root);
 }
 
 void	Router::setIndex(const std::string &index)
 {
+	_serverIndex = index;
 	_staticHandler.setIndex(index);
+}
+
+void	Router::setLocations(const std::vector<LocationConfig> &locations)
+{
+	_locations = locations;
+}
+
+/*
+ * Find the best-matching LocationConfig for a URI and apply its
+ * settings (root, index, autoindex) to the static file handler.
+ * Follows nginx-style longest-prefix matching.
+ */
+void	Router::applyLocationConfig(const std::string &uri)
+{
+	const LocationConfig	*best = NULL;
+	size_t					bestLen = 0;
+
+	_staticHandler.setRoot(_serverRoot);
+	_staticHandler.setIndex(_serverIndex);
+	_staticHandler.setAutoindex(false);
+
+	for (size_t i = 0; i < _locations.size(); ++i)
+	{
+		const std::string	&locPath = _locations[i].path;
+		if (uri.compare(0, locPath.size(), locPath) == 0
+			&& locPath.size() > bestLen)
+		{
+			best = &_locations[i];
+			bestLen = locPath.size();
+		}
+	}
+
+	if (best != NULL)
+	{
+		if (!best->root.empty())
+			_staticHandler.setRoot(best->root);
+		if (!best->index.empty())
+			_staticHandler.setIndex(best->index);
+		_staticHandler.setAutoindex(best->autoindex);
+	}
 }
 
 const std::string &Router::getRoot(void) const
@@ -135,6 +184,8 @@ bool	Router::route(const HttpRequest &request,
 {
 	bool pathFound = false;
 	std::string allow;
+
+	applyLocationConfig(request.getUri());
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);
 

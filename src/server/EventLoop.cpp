@@ -45,6 +45,14 @@ EventLoop::EventLoop(Socket *sckt) : _sckt(sckt), _router("www")
 {
 }
 
+EventLoop::EventLoop(Socket *sckt, const ServerConfig &config)
+	: _sckt(sckt), _router(config.root.empty() ? "www" : config.root)
+{
+	if (!config.index.empty())
+		_router.setIndex(config.index);
+	_router.setLocations(config.locations);
+}
+
 EventLoop::EventLoop(const EventLoop &copy)
 	: _sckt(copy._sckt), _fds(copy._fds), _clients(copy._clients),
 	  _router(copy._router), _cgiHandler(copy._cgiHandler),

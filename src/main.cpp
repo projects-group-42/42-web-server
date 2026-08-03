@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 		std::ostringstream oss;
 		oss << "Listening on " << config.host << ":" << config.port;
 		Logger::info(oss.str());
-		EventLoop loop(&sckt);
+		EventLoop loop(&sckt, config);
 		loop.run();
 	}
 	catch (const std::exception &e)

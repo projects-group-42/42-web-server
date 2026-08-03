@@ -16,16 +16,17 @@
 #include "utils/Utils.hpp"
 #include <limits.h>
 #include <stdlib.h>
+#include <dirent.h>
 #include <vector>
 #include <cerrno>
 
 StaticFileHandler::StaticFileHandler(void)
-	: _root("www"), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
+	: _root("www"), _index("index.html"), _autoindex(false), _maxBodySize(1 * 1024 * 1024)
 {
 }
 
 StaticFileHandler::StaticFileHandler(const std::string &root)
-	: _root(root), _index("index.html"), _maxBodySize(1 * 1024 * 1024)
+	: _root(root), _index("index.html"), _autoindex(false), _maxBodySize(1 * 1024 * 1024)
 {
 }
 
@@ -40,6 +41,7 @@ StaticFileHandler &StaticFileHandler::operator=(const StaticFileHandler &other)
 	{
 		_root = other._root;
 		_index = other._index;
+		_autoindex = other._autoindex;
 		_maxBodySize = other._maxBodySize;
 	}
 	return (*this);
@@ -59,6 +61,11 @@ void	StaticFileHandler::setIndex(const std::string &index)
 	_index = index;
 }
 
+void	StaticFileHandler::setAutoindex(bool autoindex)
+{
+	_autoindex = autoindex;
+}
+
 /*
  * Sets the maximum accepted request body size in bytes. A negative value
  * disables the limit; the default mirrors the server's client_max_body_size.
@@ -71,6 +78,11 @@ void	StaticFileHandler::setMaxBodySize(long maxBodySize)
 const std::string &StaticFileHandler::getRoot(void) const
 {
 	return (_root);
+}
+
+bool	StaticFileHandler::getAutoindex(void) const
+{
+	return (_autoindex);
 }
 
 /*
@@ -100,7 +112,8 @@ int StaticFileHandler::serveRegularFile(const std::string &resolvedPath,
  * Returns HTTP status code and fills body/contentType.
  */
 int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
-		std::string &body, std::string &contentType)
+		std::string &body, std::string &contentType,
+		const std::string &requestUri)
 {
 	std::string indexPath = resolvedPath;
 	if (indexPath[indexPath.size() - 1] != '/')
@@ -110,7 +123,58 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
 	struct stat	st;
 	if (stat(indexPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
 		return (serveRegularFile(indexPath, body, contentType));
+	if (_autoindex)
+	{
+		contentType = "text/html";
+		return (serveDirectoryListing(resolvedPath, requestUri, body));
+	}
 	return (404);
+}
+
+/*
+ * Generate an HTML page listing the entries of a directory.
+ * Each entry is a clickable link relative to the requested URI.
+ * "." and ".." are filtered out from the listing.
+ */
+int StaticFileHandler::serveDirectoryListing(const std::string &resolvedPath,
+		const std::string &requestUri, std::string &body)
+{
+	DIR	*dir = opendir(resolvedPath.c_str());
+
+	if (dir == NULL)
+		return (403);
+
+	std::string listing;
+	listing += "<html>\r\n<head><title>Index of ";
+	listing += requestUri;
+	listing += "</title></head>\r\n<body>\r\n<h1>Index of ";
+	listing += requestUri;
+	listing += "</h1>\r\n<hr>\r\n<ul>\r\n";
+
+	std::string	linkPrefix = requestUri;
+	if (!linkPrefix.empty() && linkPrefix[linkPrefix.size() - 1] != '/')
+		linkPrefix += '/';
+
+	struct dirent	*entry;
+	while ((entry = readdir(dir)) != NULL)
+	{
+		std::string	name = entry->d_name;
+		if (name == "." || name == "..")
+			continue;
+
+		listing += "<li><a href=\"";
+		listing += linkPrefix;
+		listing += name;
+		listing += "\">";
+		listing += name;
+		listing += "</a></li>\r\n";
+	}
+
+	listing += "</ul>\r\n<hr>\r\n</body>\r\n</html>";
+	closedir(dir);
+
+	body = listing;
+	return (200);
 }
 
 /*
@@ -201,7 +265,7 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 	if (S_ISREG(pathStat.st_mode))
 		status = serveRegularFile(resolvedPath, body, contentType);
 	else if (S_ISDIR(pathStat.st_mode))
-		status = serveDirectory(resolvedPath, body, contentType);
+		status = serveDirectory(resolvedPath, body, contentType, request.getUri());
 	else
 		status = 403;
 

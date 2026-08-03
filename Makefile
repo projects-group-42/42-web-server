@@ -55,7 +55,8 @@ CONFIG_LOADER_TEST_SRC	= tests/config_loader_test.cpp \
 						  src/config/ConfigParser.cpp \
 						  src/config/ConfigLoader.cpp \
 						  src/config/ServerConfig.cpp \
-						  src/utils/Logger.cpp
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
 CONFIG_LOADER_TEST_BIN	= test_config_loader
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/cgi/CgiHandler.cpp \

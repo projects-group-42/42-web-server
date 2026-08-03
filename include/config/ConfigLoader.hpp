@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ConfigLoader.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 17:15:26 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 10:24:11 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,8 +45,10 @@ class ConfigLoader
 	private:
 		std::string configPath(void);
 		void parse_listen(void);
+		void parse_server_names(void);
 		void parse_locations(void);
 		void applyListen(const std::vector<std::string> &args);
+		void applyServerName(const std::vector<std::string> &args);
 
 		static bool	parseBool(const std::string &s);
 		static void	parseAutoindex(LocationConfig &loc,

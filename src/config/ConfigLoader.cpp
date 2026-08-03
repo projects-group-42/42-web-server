@@ -3,15 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   ConfigLoader.cpp                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:25:05 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 15:37:53 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 10:24:11 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "config/ConfigLoader.hpp"
 #include "utils/Logger.hpp"
+#include "utils/Utils.hpp"
 #include <stdexcept>
 
 /**
@@ -106,8 +107,8 @@ std::string ConfigLoader::configPath(void)
 
 /**
  * @brief Loads the configuration file and builds the ServerConfig.
- * Reads the raw file, tokenizes it, builds the AST and extracts the listen
- * directive from it.
+ * Reads the raw file, tokenizes it, builds the AST and extracts the listen and
+ * server_name directives from it.
  * @return The populated ServerConfig.
  * @throw std::runtime_error when the file cannot be read or is invalid.
  */
@@ -119,6 +120,7 @@ ServerConfig ConfigLoader::loader(void)
 
 	_tree = parser.parse();
 	parse_listen();
+	parse_server_names();
 	parse_locations();
 	return (_config);
 }
@@ -234,6 +236,66 @@ void ConfigLoader::parse_listen(void)
 	{
 		oss << found << " listen directives found, only the last one is used ("
 			<< _config.host << ":" << _config.port << ")";
+		Logger::warning(oss.str());
+	}
+}
+
+/**
+ * @brief Applies the arguments of a single server_name directive to the config.
+ * Names are stored lowercased because the Host header is case-insensitive, so
+ * the match done at request time can compare them directly.
+ * @param args The argument list of the server_name directive.
+ * @throw std::runtime_error when the directive carries no usable name.
+ */
+void	ConfigLoader::applyServerName(const std::vector<std::string> &args)
+{
+	std::vector<std::string>::const_iterator	it;
+
+	if (args.empty())
+		throw std::runtime_error("server_name directive requires an argument");
+	for (it = args.begin(); it != args.end(); ++it)
+	{
+		if (it->empty())
+			throw std::runtime_error("server_name: empty name");
+		_config.serverNames.push_back(toLower(*it));
+	}
+}
+
+/**
+ * @brief Walks the AST and collects every server_name declared in a server
+ * block. Repeated directives accumulate, mirroring NGINX. Only one server is
+ * supported today, so a warning is emitted when several blocks declare names
+ * and they end up merged into a single list.
+ * @throw std::runtime_error when a server_name directive is malformed.
+ */
+void ConfigLoader::parse_server_names(void)
+{
+	std::vector<ConfigBlock>::const_iterator	block_it;
+	int											blocks = 0;
+
+	for (block_it = _tree.children.begin(); block_it != _tree.children.end(); ++block_it)
+	{
+		if (block_it->name != "server")
+			continue;
+
+		std::vector<ConfigDirective>::const_iterator	it;
+		bool										declared = false;
+		for (it = block_it->directives.begin(); it != block_it->directives.end(); ++it)
+		{
+			if (it->name != "server_name")
+				continue;
+			applyServerName(it->args);
+			declared = true;
+		}
+		if (declared)
+			blocks++;
+	}
+
+	if (blocks > 1)
+	{
+		std::ostringstream	oss;
+		oss << blocks << " server blocks declare server_name, but only one "
+			<< "server is supported, so every name was merged into one list";
 		Logger::warning(oss.str());
 	}
 }

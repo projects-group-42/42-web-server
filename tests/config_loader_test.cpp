@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   config_loader_test.cpp                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/01 18:00:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 18:00:00 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 10:24:11 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -173,6 +173,75 @@ static void	test_unresolvable_host_throws(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* server_name                                                         */
+/* ------------------------------------------------------------------ */
+
+static void	test_single_server_name(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8080;\n    server_name example.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(1),
+	         "a single server_name yields one entry");
+	CHECK_EQ(config.serverNames[0], std::string("example.com"),
+	         "the declared name is stored");
+}
+
+static void	test_multiple_names_in_one_directive(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name example.com www.example.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "server_name accepts several names in one directive");
+	CHECK_EQ(config.serverNames[1], std::string("www.example.com"),
+	         "every name of the directive is kept, in order");
+}
+
+static void	test_repeated_directives_accumulate(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name a.com;\n    server_name b.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "repeated server_name directives accumulate");
+}
+
+static void	test_server_name_is_lowercased(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name EXAMPLE.COM;\n}\n");
+
+	CHECK_EQ(config.serverNames[0], std::string("example.com"),
+	         "names are lowercased because Host is case-insensitive");
+}
+
+static void	test_no_server_name_leaves_list_empty(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8080;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(0),
+	         "a server without server_name keeps an empty name list");
+}
+
+static void	test_names_of_several_blocks_are_merged(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name a.com;\n}\n"
+		"server {\n    server_name b.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "names of several server blocks are merged while one server "
+	         "is supported");
+}
+
+static void	test_server_name_without_argument_throws(void)
+{
+	TEST(loadThrows("server {\n    server_name;\n}\n"),
+	     "server_name without an argument is rejected");
+}
+
+/* ------------------------------------------------------------------ */
 /* Loader behaviour                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -232,6 +301,13 @@ int	main(void)
 	test_extra_arguments_throw();
 	test_malformed_host_port_throws();
 	test_unresolvable_host_throws();
+	test_single_server_name();
+	test_multiple_names_in_one_directive();
+	test_repeated_directives_accumulate();
+	test_server_name_is_lowercased();
+	test_no_server_name_leaves_list_empty();
+	test_names_of_several_blocks_are_merged();
+	test_server_name_without_argument_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();

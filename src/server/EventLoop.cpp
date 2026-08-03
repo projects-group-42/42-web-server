@@ -53,23 +53,22 @@ EventLoop::~EventLoop(void)
 }
 
 /*
- * Reports whether a listening socket is already bound to `host`:`port`.
- * Several server blocks may share an endpoint to serve different names, in
- * which case a single socket is opened and the name is resolved per request.
+ * Reports whether a listening socket is already bound to `port`. Server blocks
+ * sharing a port share the socket, and the block serving a request is picked
+ * from its Host header, so the port alone identifies the socket to open.
  */
-bool EventLoop::isBound(const std::string &host, int port) const
+bool EventLoop::isPortBound(int port) const
 {
-	for (size_t i = 0; i < _boundEndpoints.size(); i++)
+	for (size_t i = 0; i < _boundPorts.size(); i++)
 	{
-		if (_boundEndpoints[i].first == host
-			&& _boundEndpoints[i].second == port)
+		if (_boundPorts[i] == port)
 			return (true);
 	}
 	return (false);
 }
 
 /*
- * Opens one listening socket per distinct host:port declared in the config.
+ * Opens one listening socket per distinct port declared in the config.
  * The socket is registered before it is configured so a failure part way
  * through still leaves it owned by the loop and freed by the destructor.
  */
@@ -83,7 +82,7 @@ void EventLoop::setupSockets(void)
 		const std::string	&host = _configs[i].host;
 		int					port = _configs[i].port;
 
-		if (isBound(host, port))
+		if (isPortBound(port))
 			continue;
 
 		_sckt.push_back(new Socket());
@@ -104,7 +103,7 @@ void EventLoop::setupSockets(void)
 		oss << "Listening on " << host << ":" << port;
 		Logger::info(oss.str());
 
-		_boundEndpoints.push_back(std::make_pair(host, port));
+		_boundPorts.push_back(port);
 	}
 }
 

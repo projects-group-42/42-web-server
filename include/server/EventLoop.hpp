@@ -22,14 +22,13 @@
 #include <vector>
 #include <map>
 #include <string>
-#include <utility>
 #include <poll.h>
 
 class EventLoop
 {
 	private:
 		std::vector<Socket*>					_sckt;
-		std::vector<std::pair<std::string, int> >	_boundEndpoints;
+		std::vector<int>						_boundPorts;
 		std::vector<ServerConfig>				_configs;
 		std::vector<struct pollfd>				_fds;
 		std::map<int, Connection>				_clients;
@@ -41,7 +40,7 @@ class EventLoop
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
 
-		bool	isBound(const std::string &host, int port) const;
+		bool	isPortBound(int port) const;
 		bool	isMasterSocket(int fd) const;
 		void	acceptClients(int fd);
 		bool	handleClient(int fd);

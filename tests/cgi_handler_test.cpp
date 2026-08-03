@@ -18,6 +18,7 @@
 
 #include "cgi/CgiHandler.hpp"
 #include "http/HttpRequest.hpp"
+#include "http/HttpResponse.hpp"
 
 static int	s_pass = 0;
 static int	s_fail = 0;
@@ -158,6 +159,175 @@ static void	test_env_reaches_script(void)
 	std::remove("cgi_env.sh");
 }
 
+/*
+ * Checks parseCgiOutput consumes the Status header into the status code and
+ * forwards the other headers and the body of a CRLF-delimited CGI response.
+ */
+static void	test_parse_status_and_headers(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(handler.parseCgiOutput(
+		"Status: 201 Created\r\nContent-Type: text/plain\r\nX-Foo: bar\r\n\r\nhello body",
+		response), "parseCgiOutput accepts a well-formed CGI response");
+	TEST(response.getStatusCode() == 201, "parseCgiOutput reads Status code");
+	TEST(response.getHeaderValue("Content-Type") == "text/plain", "parseCgiOutput forwards Content-Type");
+	TEST(response.getHeaderValue("X-Foo") == "bar", "parseCgiOutput forwards custom headers");
+	TEST(response.getBody() == "hello body", "parseCgiOutput extracts the body");
+}
+
+/*
+ * Checks the status defaults to 200 when the CGI output has no Status header.
+ */
+static void	test_parse_default_status(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(handler.parseCgiOutput("Content-Type: text/html\r\n\r\n<h1>hi</h1>", response),
+		"parseCgiOutput accepts a response without Status");
+	TEST(response.getStatusCode() == 200, "parseCgiOutput defaults to 200 without Status");
+	TEST(response.getHeaderValue("Content-Type") == "text/html", "parseCgiOutput keeps Content-Type without Status");
+	TEST(response.getBody() == "<h1>hi</h1>", "parseCgiOutput extracts body without Status");
+}
+
+/*
+ * Checks a redirect Status code is applied and the Location header is kept.
+ */
+static void	test_parse_redirect(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(handler.parseCgiOutput("Status: 302 Found\r\nLocation: /next\r\n\r\n", response),
+		"parseCgiOutput accepts a redirect response");
+	TEST(response.getStatusCode() == 302, "parseCgiOutput reads redirect Status");
+	TEST(response.getHeaderValue("Location") == "/next", "parseCgiOutput forwards Location");
+	TEST(response.getBody() == "", "parseCgiOutput accepts an empty body with headers");
+}
+
+/*
+ * Checks a CGI response delimited by a bare LF blank line is parsed too.
+ */
+static void	test_parse_lf_separator(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(handler.parseCgiOutput("Content-Type: text/plain\nStatus: 404 Not Found\n\nmissing", response),
+		"parseCgiOutput accepts an LF-delimited response");
+	TEST(response.getStatusCode() == 404, "parseCgiOutput reads Status with LF separator");
+	TEST(response.getHeaderValue("Content-Type") == "text/plain", "parseCgiOutput forwards header with LF separator");
+	TEST(response.getBody() == "missing", "parseCgiOutput extracts body with LF separator");
+}
+
+/*
+ * Checks output without a header separator is rejected instead of being served
+ * as a 200 body, so the caller answers 502.
+ */
+static void	test_parse_missing_separator(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(!handler.parseCgiOutput("just a plain body\n", response),
+		"parseCgiOutput rejects output without a header separator");
+	TEST(!handler.parseCgiOutput("Content-Type: text/plain\r\n", response),
+		"parseCgiOutput rejects headers that are not terminated by a blank line");
+}
+
+/*
+ * Checks a script that dies without writing anything is rejected.
+ */
+static void	test_parse_empty_output(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(!handler.parseCgiOutput("", response),
+		"parseCgiOutput rejects empty output");
+	TEST(!handler.parseCgiOutput("\r\n\r\nbody", response),
+		"parseCgiOutput rejects an empty header section");
+}
+
+/*
+ * Checks a header block holding a line that is not a header aborts the parsing
+ * instead of being skipped.
+ */
+static void	test_parse_malformed_headers(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(!handler.parseCgiOutput("Content-Type: text/plain\r\ngarbage line\r\n\r\nbody", response),
+		"parseCgiOutput rejects a header line without a colon");
+	TEST(!handler.parseCgiOutput("Traceback (most recent call last):\r\n\r\nbody", response),
+		"parseCgiOutput rejects a header name that is not a token");
+	TEST(!handler.parseCgiOutput(": nokey\r\n\r\nbody", response),
+		"parseCgiOutput rejects an empty header name");
+}
+
+/*
+ * Checks a Status header the script did not format properly is rejected
+ * instead of silently falling back to 200.
+ */
+static void	test_parse_invalid_status(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+
+	TEST(!handler.parseCgiOutput("Status: not-a-code\r\n\r\nbody", response),
+		"parseCgiOutput rejects a non-numeric Status");
+	TEST(!handler.parseCgiOutput("Status: 99\r\n\r\nbody", response),
+		"parseCgiOutput rejects a Status below 100");
+	TEST(!handler.parseCgiOutput("Status: 700 Nope\r\n\r\nbody", response),
+		"parseCgiOutput rejects a Status above 599");
+}
+
+/*
+ * Checks a script is resolved both through the mount prefix "/cgi-bin/x.py"
+ * and directly as "/x.py", so the CGI root name is not doubled in the path.
+ */
+static void	test_validate_mount_prefix(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+	std::string		prefixed;
+	std::string		bare;
+
+	writeScript("cgi-bin/probe_cgi.py", "print()\n");
+	TEST(handler.validate("/cgi-bin/probe_cgi.py", prefixed, response),
+		"validate accepts the /cgi-bin prefixed URI");
+	TEST(prefixed == "cgi-bin/probe_cgi.py", "validate resolves prefixed URI without doubling the root");
+	TEST(handler.validate("/probe_cgi.py", bare, response),
+		"validate accepts the bare URI");
+	TEST(bare == "cgi-bin/probe_cgi.py", "validate resolves the bare URI to the same path");
+	std::remove("cgi-bin/probe_cgi.py");
+}
+
+/*
+ * Checks parseCgiOutput keeps every occurrence of a repeated header instead of
+ * collapsing them, so multiple Set-Cookie lines survive.
+ */
+static void	test_parse_duplicate_headers(void)
+{
+	CgiHandler		handler;
+	HttpResponse	response;
+	int				cookies = 0;
+
+	TEST(handler.parseCgiOutput(
+		"Content-Type: text/html\r\nSet-Cookie: a=1\r\nSet-Cookie: b=2\r\n\r\nbody",
+		response), "parseCgiOutput accepts a response with repeated headers");
+	const std::vector<std::pair<std::string, std::string> >	&headers = response.getHeaders();
+	for (size_t i = 0; i < headers.size(); ++i)
+	{
+		if (headers[i].first == "set-cookie")
+			++cookies;
+	}
+	TEST(cookies == 2, "parseCgiOutput preserves duplicate Set-Cookie headers");
+}
+
 int	main(void)
 {
 	test_stdout_redirect();
@@ -165,6 +335,16 @@ int	main(void)
 	test_large_body();
 	test_build_env();
 	test_env_reaches_script();
+	test_parse_status_and_headers();
+	test_parse_default_status();
+	test_parse_redirect();
+	test_parse_lf_separator();
+	test_parse_missing_separator();
+	test_parse_empty_output();
+	test_parse_malformed_headers();
+	test_parse_invalid_status();
+	test_validate_mount_prefix();
+	test_parse_duplicate_headers();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

@@ -20,9 +20,22 @@
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <cstdlib>
 
 static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
+static const long			CGI_TIMEOUT_MS = 5000;
+
+/*
+ * Returns the current wall-clock time in milliseconds.
+ */
+static long nowMs(void)
+{
+	struct timeval	tv;
+
+	gettimeofday(&tv, NULL);
+	return (static_cast<long>(tv.tv_sec) * 1000 + tv.tv_usec / 1000);
+}
 
 EventLoop::EventLoop(void) : _sckt(NULL), _router("www")
 {
@@ -291,6 +304,7 @@ void EventLoop::startCgi(int fd)
 		sendCgiError(fd, 500);
 		return ;
 	}
+	proc->setDeadlineMs(nowMs() + CGI_TIMEOUT_MS);
 	_cgi[fd] = proc;
 	_pipeToClient[proc->outputReadFd()] = fd;
 	addPollFd(proc->outputReadFd(), POLLIN);
@@ -341,25 +355,20 @@ void EventLoop::handleCgiIo(int fd, short revents)
 }
 
 /*
- * Reaps the finished child, turns its collected output into an HTTP response
- * (502 when the script did not exit cleanly), arms the client for sending, and
- * releases the process.
+ * Reaps the finished child, turns its collected output into an HTTP response,
+ * arms the client for sending, and releases the process. Answers 502 when the
+ * script did not exit cleanly or when its output is not a valid CGI response.
  */
 void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 {
 	Connection		&conn = _clients[clientFd];
 	ResponseBuilder	builder;
+	HttpResponse	response;
 	int				status = proc->reap();
 
 	builder.setKeepAlive(conn.get_keep_alive());
-	if (status == 0)
-	{
-		HttpResponse	response;
-
-		response.setStatusCode(200);
-		response.setBody(proc->output());
+	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
-	}
 	else
 		conn.set_write_buffer(builder.buildErrorResponse(502));
 	setPollEvents(clientFd, POLLOUT);
@@ -369,13 +378,10 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 }
 
 /*
- * Tears down a CGI whose client disconnected mid-execution: unregisters its
- * pipe fds, kills and reaps the child, and drops the client connection.
+ * Removes every poll entry and mapping for the CGI pipes owned by clientFd.
  */
-void EventLoop::abortCgi(int clientFd)
+void EventLoop::unregisterCgiPipes(int clientFd)
 {
-	CgiProcess	*proc = _cgi[clientFd];
-
 	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); )
 	{
 		if (it->second == clientFd)
@@ -386,11 +392,85 @@ void EventLoop::abortCgi(int clientFd)
 		else
 			++it;
 	}
+}
+
+/*
+ * Tears down a CGI whose client disconnected mid-execution: unregisters its
+ * pipe fds, kills and reaps the child, and drops the client connection.
+ */
+void EventLoop::abortCgi(int clientFd)
+{
+	CgiProcess	*proc = _cgi[clientFd];
+
+	unregisterCgiPipes(clientFd);
 	_cgi.erase(clientFd);
 	delete proc;
 	disablePollFd(clientFd);
 	_clients.erase(clientFd);
 	Logger::info("Client disconnected during CGI, process terminated.");
+}
+
+/*
+ * Kills a CGI that ran past its deadline: unregisters its pipe fds, reaps the
+ * child (through the CgiProcess destructor), queues a 504 Gateway Timeout, and
+ * arms the client for sending.
+ */
+void EventLoop::timeoutCgi(int clientFd)
+{
+	Connection		&conn = _clients[clientFd];
+	CgiProcess		*proc = _cgi[clientFd];
+	ResponseBuilder	builder;
+
+	unregisterCgiPipes(clientFd);
+	_cgi.erase(clientFd);
+	delete proc;
+	builder.setKeepAlive(conn.get_keep_alive());
+	conn.set_write_buffer(builder.buildErrorResponse(504));
+	setPollEvents(clientFd, POLLOUT);
+	Logger::info("CGI timed out, 504 queued.");
+}
+
+/*
+ * Kills every CGI whose deadline has passed. Deadlines are collected before
+ * killing so the map is not modified while it is being iterated.
+ */
+void EventLoop::checkCgiTimeouts(void)
+{
+	long				now = nowMs();
+	std::vector<int>	expired;
+
+	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin(); it != _cgi.end(); ++it)
+	{
+		if (now >= it->second->deadlineMs())
+			expired.push_back(it->first);
+	}
+	for (size_t i = 0; i < expired.size(); ++i)
+		timeoutCgi(expired[i]);
+}
+
+/*
+ * Returns the poll timeout in milliseconds: infinite when no CGI is running,
+ * otherwise the time left until the nearest CGI deadline (never negative) so
+ * poll wakes in time to kill a stuck child.
+ */
+int EventLoop::cgiPollTimeout(void)
+{
+	long	now;
+	long	soonest = -1;
+
+	if (_cgi.empty())
+		return (-1);
+	now = nowMs();
+	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin(); it != _cgi.end(); ++it)
+	{
+		long	remaining = it->second->deadlineMs() - now;
+
+		if (remaining < 0)
+			remaining = 0;
+		if (soonest == -1 || remaining < soonest)
+			soonest = remaining;
+	}
+	return (static_cast<int>(soonest));
 }
 
 void EventLoop::run(void)
@@ -406,7 +486,7 @@ void EventLoop::run(void)
 
 	while (true)
 	{
-		int ready = poll(_fds.data(), _fds.size(), -1);
+		int ready = poll(_fds.data(), _fds.size(), cgiPollTimeout());
 		if (ready == -1)
 		{
 			if (errno == EINTR)
@@ -449,6 +529,7 @@ void EventLoop::run(void)
 				i--;
 			}
 		}
+		checkCgiTimeouts();
 		compactPollFds();
 	}
 }

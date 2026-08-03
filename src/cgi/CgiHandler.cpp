@@ -149,9 +149,26 @@ static bool isWithinRoot(const std::string &root, const std::string &path)
 }
 
 /*
+ * Returns the last path component of path, ignoring trailing slashes.
+ */
+static std::string baseName(const std::string &path)
+{
+	std::string	trimmed = path;
+
+	while (trimmed.size() > 1 && trimmed[trimmed.size() - 1] == '/')
+		trimmed.erase(trimmed.size() - 1);
+	std::string::size_type	slash = trimmed.rfind('/');
+	if (slash == std::string::npos)
+		return (trimmed);
+	return (trimmed.substr(slash + 1));
+}
+
+/*
  * Resolves the script path for a URI under the CGI root. The URI is
- * normalized, joined onto the root, and checked so symlinks cannot escape it.
- * Returns an empty string on escape.
+ * normalized, its leading mount segment (matching the CGI root name) is
+ * dropped so "/cgi-bin/x.py" maps to "<root>/x.py", the rest is joined onto
+ * the root, and the result is checked so symlinks cannot escape it. Returns an
+ * empty string on escape.
  */
 std::string CgiHandler::resolvePath(const std::string &uri) const
 {
@@ -159,6 +176,8 @@ std::string CgiHandler::resolvePath(const std::string &uri) const
 
 	if (!normalizeSegments(uri, segments))
 		return ("");
+	if (!segments.empty() && segments.front() == baseName(_cgiRoot))
+		segments.erase(segments.begin());
 	std::string	path = joinPath(_cgiRoot, segments);
 	if (!isWithinRoot(_cgiRoot, path))
 		return ("");
@@ -400,6 +419,159 @@ std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request, const 
         env.push_back(headerToMetaVar(it->first) + "=" + it->second);
     }
     return (env);
+}
+
+/*
+ * Strips leading and trailing spaces, tabs and a trailing carriage return from
+ * a CGI header value.
+ */
+static std::string trimHeaderValue(const std::string &value)
+{
+    size_t  start = 0;
+    size_t  end = value.size();
+
+    while (start < end && (value[start] == ' ' || value[start] == '\t'))
+        ++start;
+    while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t'
+            || value[end - 1] == '\r'))
+        --end;
+    return (value.substr(start, end - start));
+}
+
+/*
+ * Case-insensitive check for the CGI "Status" header name.
+ */
+static bool isStatusHeader(const std::string &key)
+{
+    static const char   name[] = "status";
+
+    if (key.size() != sizeof(name) - 1)
+        return (false);
+    for (size_t i = 0; i < key.size(); ++i)
+    {
+        char    c = key[i];
+        if (c >= 'A' && c <= 'Z')
+            c = static_cast<char>(c - 'A' + 'a');
+        if (c != name[i])
+            return (false);
+    }
+    return (true);
+}
+
+/*
+ * Returns true when c is a valid HTTP token character, the only characters
+ * allowed in a header field name.
+ */
+static bool isTokenChar(char c)
+{
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+            || (c >= '0' && c <= '9'))
+        return (true);
+    return (std::string("!#$%&'*+-.^_`|~").find(c) != std::string::npos);
+}
+
+/*
+ * Returns true when key is a non-empty, well-formed header field name, so a
+ * line of script noise that happens to contain a colon is not taken as a
+ * header.
+ */
+static bool isValidHeaderName(const std::string &key)
+{
+    if (key.empty())
+        return (false);
+    for (size_t i = 0; i < key.size(); ++i)
+    {
+        if (!isTokenChar(key[i]))
+            return (false);
+    }
+    return (true);
+}
+
+/*
+ * Reads a CGI "Status" value: exactly three digits in the 100-599 range,
+ * optionally followed by a reason phrase. Writes the code into status and
+ * returns true on success, false when the value is malformed.
+ */
+static bool parseStatusValue(const std::string &value, int &status)
+{
+    size_t  i = 0;
+    int     code = 0;
+
+    while (i < value.size() && value[i] >= '0' && value[i] <= '9')
+    {
+        code = code * 10 + (value[i] - '0');
+        ++i;
+    }
+    if (i != 3)
+        return (false);
+    if (i < value.size() && value[i] != ' ' && value[i] != '\t')
+        return (false);
+    if (code < 100 || code > 599)
+        return (false);
+    status = code;
+    return (true);
+}
+
+/*
+ * Converts the raw CGI output into an HttpResponse: splits the header block
+ * from the body at the first blank line, maps each "Key: Value" line into a
+ * response header, consumes the "Status" header into the status code (default
+ * 200), and stores the remaining bytes as the body. Returns false and leaves
+ * response untouched when the script produced no output, no header separator,
+ * an empty header section, a line that is not a valid header, or a malformed
+ * Status value, so the caller can answer 502 instead of serving the garbage.
+ */
+bool CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) const
+{
+    std::string::size_type  sep = raw.find("\r\n\r\n");
+    std::string::size_type  sepLen = 4;
+
+    if (raw.empty())
+        return (false);
+    if (sep == std::string::npos)
+    {
+        sep = raw.find("\n\n");
+        sepLen = 2;
+    }
+    if (sep == std::string::npos)
+        return (false);
+
+    std::istringstream                                  headers(raw.substr(0, sep));
+    std::string                                         line;
+    std::vector<std::pair<std::string, std::string> >   parsed;
+    int                                                 statusCode = 200;
+    bool                                                hasHeader = false;
+
+    while (std::getline(headers, line))
+    {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+
+        std::string::size_type  colon = line.find(':');
+        if (colon == std::string::npos)
+            return (false);
+
+        std::string key = line.substr(0, colon);
+        std::string value = trimHeaderValue(line.substr(colon + 1));
+        if (!isValidHeaderName(key))
+            return (false);
+        if (isStatusHeader(key))
+        {
+            if (!parseStatusValue(value, statusCode))
+                return (false);
+        }
+        else
+            parsed.push_back(std::make_pair(key, value));
+        hasHeader = true;
+    }
+    if (!hasHeader)
+        return (false);
+
+    response.setStatusCode(statusCode);
+    for (size_t i = 0; i < parsed.size(); ++i)
+        response.addHeader(parsed[i].first, parsed[i].second);
+    response.setBody(raw.substr(sep + sepLen));
+    return (true);
 }
 
 /*

@@ -52,16 +52,20 @@ int HttpResponse::getStatusCode(void) const
 	return (_status_code);
 }
 
-const std::map<std::string, std::string>& HttpResponse::getHeaders(void) const
+const std::vector<std::pair<std::string, std::string> >& HttpResponse::getHeaders(void) const
 {
 	return (_headers);
 }
 
 const std::string HttpResponse::getHeaderValue(const std::string &key) const
 {
-	std::map<std::string, std::string>::const_iterator it = _headers.find(toLower(key));
-	if (it != _headers.end())
-		return (it->second);
+	std::string	lowered = toLower(key);
+
+	for (size_t i = 0; i < _headers.size(); ++i)
+	{
+		if (_headers[i].first == lowered)
+			return (_headers[i].second);
+	}
 	return ("");
 }
 
@@ -82,7 +86,22 @@ void	HttpResponse::setStatusCode(int status)
 }
 void	HttpResponse::setHeaders(const std::string &key, const std::string &value)
 {
-	_headers[toLower(key)] = value;
+	std::string	lowered = toLower(key);
+
+	for (size_t i = 0; i < _headers.size(); ++i)
+	{
+		if (_headers[i].first == lowered)
+		{
+			_headers[i].second = value;
+			return ;
+		}
+	}
+	_headers.push_back(std::make_pair(lowered, value));
+}
+
+void	HttpResponse::addHeader(const std::string &key, const std::string &value)
+{
+	_headers.push_back(std::make_pair(toLower(key), value));
 }
 
 void	HttpResponse::setBody(const std::string &body)

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 00:31:05 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 21:44:02 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -131,14 +131,14 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 }
 
 /**
- * @brief Picks the document root that applies to a URI in a server block.
- * The location whose path is the longest matching prefix of the URI wins; when
- * that location declares no root of its own it inherits the server root.
+ * @brief Finds the location block that applies to a URI in a server block.
+ * The location whose path is the longest matching prefix of the URI wins, the
+ * same literal prefix rule nginx uses, so "/test" also matches "/testing.html".
  * @param uri The request target.
  * @param config The server block serving the request.
- * @return The document root to serve the request from.
+ * @return The winning location, or NULL when no location matches.
  */
-std::string	Router::resolveRoot(const std::string &uri,
+const LocationConfig	*Router::matchLocation(const std::string &uri,
 			const ServerConfig &config) const
 {
 	const LocationConfig	*best = NULL;
@@ -152,9 +152,44 @@ std::string	Router::resolveRoot(const std::string &uri,
 		if (best == NULL || locPath.size() > best->path.size())
 			best = &config.locations[i];
 	}
+	return (best);
+}
+
+/**
+ * @brief Picks the document root that applies to a URI in a server block.
+ * When the matching location declares no root of its own it inherits the
+ * server root.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The document root to serve the request from.
+ */
+std::string	Router::resolveRoot(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
 	if (best != NULL && !best->root.empty())
 		return (best->root);
 	return (config.root);
+}
+
+/**
+ * @brief Picks the index file that applies to a URI in a server block.
+ * ConfigLoader already copies the server index into every location that
+ * declares none, so an empty location index only happens when the server
+ * declares none either, and the server value is used as the fallback.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The index file name to serve directories with.
+ */
+std::string	Router::resolveIndex(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	if (best != NULL && !best->index.empty())
+		return (best->index);
+	return (config.index);
 }
 
 bool	Router::route(const HttpRequest &request,
@@ -181,9 +216,12 @@ bool	Router::route(const HttpRequest &request,
 	else
 	{
 		std::string	root = resolveRoot(request.getUri(), config);
+		std::string	index = resolveIndex(request.getUri(), config);
 
 		if (!root.empty())
 			setRoot(root);
+		if (!index.empty())
+			setIndex(index);
 		handler->handle(request, response);
 	}
 	return (true);

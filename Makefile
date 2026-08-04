@@ -92,6 +92,20 @@ REQUEST_PARSER_TEST_SRC	= tests/request_parser_test.cpp \
 						  src/utils/Utils.cpp
 REQUEST_PARSER_TEST_BIN	= test_request_parser
 
+ROUTER_TEST_SRC	= tests/router_test.cpp \
+				  src/server/Router.cpp \
+				  src/handlers/IRequestHandler.cpp \
+				  src/handlers/StaticFileHandler.cpp \
+				  src/http/HttpRequest.cpp \
+				  src/http/HttpResponse.cpp \
+				  src/http/MimeType.cpp \
+				  src/http/MultipartParser.cpp \
+				  src/http/ResponseBuilder.cpp \
+				  src/config/ServerConfig.cpp \
+				  src/utils/Logger.cpp \
+				  src/utils/Utils.cpp
+ROUTER_TEST_BIN	= test_router
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -111,7 +125,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
@@ -121,6 +135,7 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(MULTIPART_TEST_BIN)
 	./$(UPLOAD_SUITE_TEST_BIN)
 	./$(REQUEST_PARSER_TEST_BIN)
+	./$(ROUTER_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -149,6 +164,9 @@ $(UPLOAD_SUITE_TEST_BIN): $(UPLOAD_SUITE_TEST_SRC)
 $(REQUEST_PARSER_TEST_BIN): $(REQUEST_PARSER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(ROUTER_TEST_BIN): $(ROUTER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -163,6 +181,7 @@ fclean: clean
 	rm -f $(MULTIPART_TEST_BIN)
 	rm -f $(UPLOAD_SUITE_TEST_BIN)
 	rm -f $(REQUEST_PARSER_TEST_BIN)
+	rm -f $(ROUTER_TEST_BIN)
 
 re: fclean all
 

@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/04 18:37:53 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/04 19:34:31 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -337,9 +337,13 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 
 /*
  * Creates or overwrites the file at `resolvedPath` with `content`.
- * Returns the HTTP status code describing the outcome: 201 when the file
- * did not exist yet, 200 when an existing file was overwritten, 400 when
- * the target is a directory, 403/404/500 on the matching write failures.
+ * Writes in a loop so a short write() (large body, signal interruption)
+ * does not truncate the content; on a real write failure, the partial
+ * file is removed before reporting 500 so no truncated file is left on
+ * disk. Returns the HTTP status code describing the outcome: 201 when
+ * the file did not exist yet, 200 when an existing file was overwritten,
+ * 400 when the target is a directory, 403/404/500 on the matching write
+ * failures.
  */
 int StaticFileHandler::saveFile(const std::string &resolvedPath,
 		const std::string &content)
@@ -360,11 +364,24 @@ int StaticFileHandler::saveFile(const std::string &resolvedPath,
 		return (500);
 	}
 
-	ssize_t	written = write(fd, content.c_str(), content.size());
-	close(fd);
+	const char	*data = content.c_str();
+	size_t		total = content.size();
+	size_t		offset = 0;
 
-	if (written == -1 || static_cast<size_t>(written) != content.size())
-		return (500);
+	while (offset < total)
+	{
+		ssize_t	written = write(fd, data + offset, total - offset);
+		if (written == -1)
+		{
+			if (errno == EINTR)
+				continue;
+			close(fd);
+			unlink(resolvedPath.c_str());
+			return (500);
+		}
+		offset += static_cast<size_t>(written);
+	}
+	close(fd);
 	return (exists ? 200 : 201);
 }
 

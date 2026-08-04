@@ -293,6 +293,8 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			parseAutoindex(server.autoindex, *it);
 		else if (it->name == "client_max_body_size")
 			server.clientMaxBodySize = parseBodySize(*it);
+		else if (it->name == "error_page")
+			parseErrorPage(server.errorPages, *it);
 	}
 
 	if (indexes > 1)
@@ -459,4 +461,52 @@ long ConfigLoader::parseBodySize(const ConfigDirective &d)
 		throw std::runtime_error(
 		    "'client_max_body_size' value is too large: '" + d.args[0] + "'");
 	return (value * multiplier);
+}
+
+/**
+ * @brief Validates a single error_page status code and converts it to an int.
+ * Only client and server error codes are accepted, so a typo such as "200" or
+ * "4o4" is refused at load time instead of silently never matching a response.
+ * @param token The raw status code taken from the error_page directive.
+ * @return The status code as an int.
+ * @throw std::runtime_error when the token is not a code within 400-599.
+ */
+int	ConfigLoader::parseErrorCode(const std::string &token)
+{
+	if (!isAllDigits(token) || token.size() != 3)
+		throw std::runtime_error("error_page: invalid status code '"
+			+ token + "'");
+
+	std::istringstream	iss(token);
+	int					code = 0;
+
+	iss >> code;
+	if (iss.fail() || code < 400 || code > 599)
+		throw std::runtime_error("error_page: status code out of range "
+			"(400-599): '" + token + "'");
+	return (code);
+}
+
+/**
+ * @brief Applies an error_page directive to the map of a server block.
+ * Every argument but the last is a status code, so a single directive can map
+ * several codes to the same page. A code declared twice keeps the last page,
+ * which mirrors how the other directives resolve duplicates.
+ * @param pages The destination holding the error pages of the server.
+ * @param d The error_page directive taken from the AST.
+ * @throw std::runtime_error when a code or the page path is malformed.
+ */
+void	ConfigLoader::parseErrorPage(std::map<int, std::string> &pages,
+			const ConfigDirective &d)
+{
+	if (d.args.size() < 2)
+		throw std::runtime_error(
+			"'error_page' expects at least one status code and a path");
+
+	const std::string	&path = d.args[d.args.size() - 1];
+
+	if (path.empty())
+		throw std::runtime_error("error_page: path cannot be empty");
+	for (size_t i = 0; i + 1 < d.args.size(); i++)
+		pages[parseErrorCode(d.args[i])] = path;
 }

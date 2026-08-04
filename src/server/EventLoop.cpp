@@ -155,6 +155,37 @@ bool EventLoop::handleClient(int fd)
 	return false;
 }
 
+/**
+ * @brief Serialises an error response using the configured error page.
+ * Picks the server block matching the port and Host header of the connection
+ * and resolves its error_page for the status. Falls back to the built-in body
+ * when no page is configured or the file cannot be read.
+ * @param conn The connection being answered.
+ * @param builder The builder carrying the keep-alive state of the connection.
+ * @param status The status to answer with.
+ * @return The serialised response, headers included.
+ */
+std::string EventLoop::buildError(const Connection &conn,
+	const ResponseBuilder &builder, int status) const
+{
+	std::string	body;
+	std::string	contentType;
+
+	if (!_configs.empty())
+	{
+		const ServerConfig	&config = getServerConfigForRequest(
+									conn.getLocalPort(), conn.getRequest());
+
+		if (!Router::loadErrorPage(config, config.root, status, body,
+				contentType))
+		{
+			body.clear();
+			contentType.clear();
+		}
+	}
+	return (builder.buildErrorResponse(status, body, contentType));
+}
+
 void EventLoop::handleParseError(int fd)
 {
 	Connection		&conn = _clients[fd];
@@ -164,8 +195,7 @@ void EventLoop::handleParseError(int fd)
 	if (error_code == 0)
 		error_code = 400;
 
-	std::string serialized = builder.buildErrorResponse(error_code);
-	conn.set_write_buffer(serialized);
+	conn.set_write_buffer(buildError(conn, builder, error_code));
 
 	setPollEvents(fd, POLLOUT);
 }
@@ -226,14 +256,12 @@ void EventLoop::handleRequest(int fd)
 	catch (std::exception &e)
 	{
 		Logger::error(std::string("Internal Server Error: ") + e.what());
-		std::string serialized = builder.buildErrorResponse(500);
-		conn.set_write_buffer(serialized);
+		conn.set_write_buffer(buildError(conn, builder, 500));
 	}
 	catch (...)
 	{
 		Logger::error("Internal Server Error: unknown exception");
-		std::string serialized = builder.buildErrorResponse(500);
-		conn.set_write_buffer(serialized);
+		conn.set_write_buffer(buildError(conn, builder, 500));
 	}
 	setPollEvents(fd, POLLOUT);
 }
@@ -321,7 +349,7 @@ void EventLoop::sendCgiError(int fd, int status)
 	ResponseBuilder	builder;
 
 	builder.setKeepAlive(conn.get_keep_alive());
-	conn.set_write_buffer(builder.buildErrorResponse(status));
+	conn.set_write_buffer(buildError(conn, builder, status));
 	setPollEvents(fd, POLLOUT);
 }
 
@@ -418,7 +446,7 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
 	else
-		conn.set_write_buffer(builder.buildErrorResponse(502));
+		conn.set_write_buffer(buildError(conn, builder, 502));
 	setPollEvents(clientFd, POLLOUT);
 	_cgi.erase(clientFd);
 	delete proc;
@@ -473,7 +501,7 @@ void EventLoop::timeoutCgi(int clientFd)
 	_cgi.erase(clientFd);
 	delete proc;
 	builder.setKeepAlive(conn.get_keep_alive());
-	conn.set_write_buffer(builder.buildErrorResponse(504));
+	conn.set_write_buffer(buildError(conn, builder, 504));
 	setPollEvents(clientFd, POLLOUT);
 	Logger::info("CGI timed out, 504 queued.");
 }

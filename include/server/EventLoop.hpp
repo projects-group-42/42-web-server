@@ -61,6 +61,9 @@ class EventLoop
 		void	checkCgiTimeouts(void);
 		int		cgiPollTimeout(void);
 		void	sendCgiError(int fd, int status);
+		std::string
+				buildError(const Connection &conn,
+				const ResponseBuilder &builder, int status) const;
 
 	public:
 		EventLoop(void);

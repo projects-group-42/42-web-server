@@ -15,6 +15,7 @@ test_config_loader
 test_router
 test_autoindex
 test_host_selection
+test_error_page
 tests/tmp_router/
 # build artifacts
 obj/

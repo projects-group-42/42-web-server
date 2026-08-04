@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Connection.hpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:20:37 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:11 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:41:35 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,5 +46,6 @@ class Connection
 		t_psr_state			get_psr_state(void) const;
 		int					get_error_code(void) const;
 		const HttpRequest&	getRequest(void) const;
+		int					getLocalPort(void) const;
 };
 #endif

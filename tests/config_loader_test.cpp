@@ -15,6 +15,7 @@
 # include <iostream>
 # include <stdexcept>
 # include <string>
+# include <vector>
 
 # include "config/ConfigLoader.hpp"
 
@@ -53,11 +54,27 @@ static ServerConfig	loadSource(const std::string &source)
 	out << source;
 	out.close();
 
-	ConfigLoader	loader(TMP_PATH);
-	ServerConfig	config = loader.loader();
+	ConfigLoader				loader(TMP_PATH);
+	std::vector<ServerConfig>	servers = loader.loader();
 
 	std::remove(TMP_PATH);
-	return (config);
+	if (servers.empty())
+		throw std::runtime_error("no server block parsed");
+	return (servers[0]);
+}
+
+static std::vector<ServerConfig>	loadAll(const std::string &source)
+{
+	std::ofstream	out(TMP_PATH);
+
+	out << source;
+	out.close();
+
+	ConfigLoader				loader(TMP_PATH);
+	std::vector<ServerConfig>	servers = loader.loader();
+
+	std::remove(TMP_PATH);
+	return (servers);
 }
 
 static bool	loadThrows(const std::string &source)
@@ -173,6 +190,101 @@ static void	test_unresolvable_host_throws(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* index directive                                                     */
+/* ------------------------------------------------------------------ */
+
+static void	test_default_index(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    location / {\n    }\n}\n");
+
+	CHECK_EQ(config.index, std::string("index.html"),
+	         "a config without index keeps the default index");
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is loaded");
+	CHECK_EQ(config.locations[0].index, std::string("index.html"),
+	         "a location without index inherits the default index");
+}
+
+static void	test_server_index_is_parsed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index custom.html;\n}\n");
+
+	CHECK_EQ(config.index, std::string("custom.html"),
+	         "a server-level index is parsed");
+}
+
+static void	test_location_inherits_server_index(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index custom.html;\n"
+		"    location / {\n        autoindex off;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is loaded");
+	CHECK_EQ(config.locations[0].index, std::string("custom.html"),
+	         "a location without index inherits the server index");
+}
+
+static void	test_location_index_overrides_server(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index custom.html;\n"
+		"    location / {\n        index location.html;\n    }\n}\n");
+
+	CHECK_EQ(config.index, std::string("custom.html"),
+	         "the server index is left untouched by the location");
+	CHECK_EQ(config.locations[0].index, std::string("location.html"),
+	         "a location index overrides the server index");
+}
+
+static void	test_last_server_index_wins(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    index first.html;\n"
+		"    index second.html;\n}\n");
+
+	CHECK_EQ(config.index, std::string("second.html"),
+	         "the last server index directive wins");
+}
+
+static void	test_index_is_per_server(void)
+{
+	std::vector<ServerConfig>	servers = loadAll(
+		"server {\n    listen 8081;\n    index first.html;\n"
+		"    location /x {\n    }\n}\n"
+		"server {\n    listen 8082;\n    index second.html;\n"
+		"    location /y {\n    }\n}\n");
+
+	CHECK_EQ(servers.size(), static_cast<size_t>(2),
+	         "every server block yields its own config");
+	if (servers.size() != 2)
+		return ;
+	CHECK_EQ(servers[0].index, std::string("first.html"),
+	         "the first server keeps its own index");
+	CHECK_EQ(servers[1].index, std::string("second.html"),
+	         "the second server keeps its own index");
+	CHECK_EQ(servers[0].locations.size(), static_cast<size_t>(1),
+	         "a server only owns the locations declared inside it");
+	CHECK_EQ(servers[0].locations[0].index, std::string("first.html"),
+	         "a location inherits the index of its own server");
+	CHECK_EQ(servers[1].locations[0].index, std::string("second.html"),
+	         "a location of the second server inherits its own server index");
+}
+
+static void	test_malformed_index_throws(void)
+{
+	TEST(loadThrows("server {\n    index a.html b.html;\n}\n"),
+	     "an index list is rejected instead of keeping only the first entry");
+	TEST(loadThrows("server {\n    index;\n}\n"),
+	     "an index without an argument is rejected");
+	TEST(loadThrows(
+		"server {\n    location / {\n        index a.html b.html;\n    }\n}\n"),
+	     "an index list inside a location is rejected");
+}
+
+/* ------------------------------------------------------------------ */
 /* Loader behaviour                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -204,9 +316,286 @@ static void	test_no_listen_uses_defaults(void)
 static void	test_last_listen_wins(void)
 {
 	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    listen 8082;\n}\n");
+
+	CHECK_EQ(config.port, 8082,
+	         "the last listen of a server block wins for now");
+}
+
+static void	test_each_server_block_is_kept(void)
+{
+	std::vector<ServerConfig>	servers = loadAll(
 		"server {\n    listen 8081;\n}\nserver {\n    listen 8082;\n}\n");
 
-	CHECK_EQ(config.port, 8082, "the last listen directive wins for now");
+	CHECK_EQ(servers.size(), static_cast<size_t>(2),
+	         "every server block yields its own config");
+	if (servers.size() != 2)
+		return ;
+	CHECK_EQ(servers[0].port, 8081, "the first server keeps its own port");
+	CHECK_EQ(servers[1].port, 8082, "the second server keeps its own port");
+}
+
+static void	test_no_server_block_throws(void)
+{
+	TEST(loadThrows("listen 8081;\n"),
+	     "a config without a server block throws");
+}
+
+/* ------------------------------------------------------------------ */
+/* root                                                                */
+/* ------------------------------------------------------------------ */
+
+static void	test_server_root(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www;\n}\n");
+
+	CHECK_EQ(config.root, std::string("www"),
+	         "a server level root is parsed");
+}
+
+static void	test_root_trailing_slash_is_trimmed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www/;\n}\n");
+
+	CHECK_EQ(config.root, std::string("www"),
+	         "a trailing slash is stripped from root");
+}
+
+static void	test_root_defaults_when_absent(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8081;\n}\n");
+
+	CHECK_EQ(config.root, std::string(DEFAULT_ROOT),
+	         "a server without root falls back to the default root");
+}
+
+static void	test_location_root_is_parsed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www;\n"
+		"    location /images/ {\n        root www/assets;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is kept");
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].path, std::string("/images/"),
+	         "the location path is kept");
+	CHECK_EQ(config.locations[0].root, std::string("www/assets"),
+	         "a location level root is parsed");
+}
+
+static void	test_location_without_root_inherits(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    root www;\n"
+		"    location /images/ {\n        autoindex on;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is kept");
+	if (config.locations.empty())
+		return ;
+	TEST(config.locations[0].root.empty(),
+	     "a location without root stays empty so it inherits the server root");
+	TEST(config.locations[0].autoindex,
+	     "autoindex is still parsed alongside root");
+}
+
+static void	test_root_without_argument_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8081;\n    root;\n}\n"),
+	     "root without an argument throws");
+}
+
+static void	test_root_with_extra_arguments_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8081;\n    root www extra;\n}\n"),
+	     "root with more than one argument throws");
+}
+
+/**
+ * @brief A single server_name yields one stored name.
+ */
+static void	test_single_server_name(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8080;\n    server_name example.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(1),
+	         "a single server_name yields one entry");
+	CHECK_EQ(config.serverNames[0], std::string("example.com"),
+	         "the declared name is stored");
+}
+
+/**
+ * @brief One directive may carry several names.
+ */
+static void	test_several_names_in_one_directive(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name example.com www.example.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "server_name accepts several names in one directive");
+	CHECK_EQ(config.serverNames[1], std::string("www.example.com"),
+	         "every name of the directive is stored");
+}
+
+/**
+ * @brief Repeated directives add to the list instead of replacing it.
+ */
+static void	test_repeated_server_name_directives_accumulate(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name a.com;\n    server_name b.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "repeated server_name directives accumulate");
+}
+
+/**
+ * @brief Names are stored lowercased so the Host match is case-insensitive.
+ */
+static void	test_server_name_is_lowercased(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name EXAMPLE.COM;\n}\n");
+
+	CHECK_EQ(config.serverNames[0], std::string("example.com"),
+	         "a server_name is stored lowercased");
+}
+
+/**
+ * @brief A server without the directive keeps an empty name list.
+ */
+static void	test_no_server_name_leaves_list_empty(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8080;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(0),
+	         "a server without server_name keeps an empty name list");
+}
+
+/**
+ * @brief Each server block keeps the names it declared.
+ */
+static void	test_server_names_are_per_server(void)
+{
+	std::vector<ServerConfig>	servers = loadAll(
+		"server {\n    listen 8080;\n    server_name first.com;\n}\n"
+		"server {\n    listen 8081;\n    server_name second.com;\n}\n");
+
+	CHECK_EQ(servers.size(), static_cast<size_t>(2),
+	         "both server blocks are kept");
+	CHECK_EQ(servers[0].serverNames[0], std::string("first.com"),
+	         "the first block keeps its own name");
+	CHECK_EQ(servers[1].serverNames[0], std::string("second.com"),
+	         "the second block keeps its own name");
+}
+
+/**
+ * @brief A server_name carrying no name is rejected.
+ */
+static void	test_server_name_without_argument_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8080;\n    server_name;\n}\n"),
+	     "server_name without an argument throws");
+}
+
+/**
+ * @brief Without the directive the server keeps the 1 MiB default.
+ */
+static void	test_default_body_size(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8080;\n}\n");
+
+	CHECK_EQ(config.clientMaxBodySize, 1L * 1024L * 1024L,
+	         "a server without client_max_body_size keeps the 1 MiB default");
+}
+
+/**
+ * @brief A plain number is read as a byte count.
+ */
+static void	test_body_size_in_bytes(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    client_max_body_size 4096;\n}\n");
+
+	CHECK_EQ(config.clientMaxBodySize, 4096L,
+	         "a bare client_max_body_size is a byte count");
+}
+
+/**
+ * @brief The k, m and g suffixes scale the value, in either case.
+ */
+static void	test_body_size_suffixes(void)
+{
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 10M;\n}\n").clientMaxBodySize,
+		10L * 1024L * 1024L, "the M suffix means mebibytes");
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 512k;\n}\n").clientMaxBodySize,
+		512L * 1024L, "the k suffix means kibibytes");
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 1g;\n}\n").clientMaxBodySize,
+		1024L * 1024L * 1024L, "the g suffix means gibibytes");
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 10m;\n}\n").clientMaxBodySize,
+		10L * 1024L * 1024L, "a lowercase suffix is accepted too");
+}
+
+/**
+ * @brief A location declaring a size of its own keeps it.
+ */
+static void	test_location_body_size_overrides_server(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    client_max_body_size 10M;\n"
+		"    location /upload {\n        client_max_body_size 1M;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is parsed");
+	CHECK_EQ(config.locations[0].clientMaxBodySize, 1L * 1024L * 1024L,
+	         "a location client_max_body_size is parsed");
+}
+
+/**
+ * @brief A location declaring no size keeps the sentinel so it can inherit.
+ */
+static void	test_location_without_body_size_inherits(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    client_max_body_size 10M;\n"
+		"    location /upload {\n        autoindex on;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations[0].clientMaxBodySize, -1L,
+	         "a location without client_max_body_size keeps the -1 sentinel");
+}
+
+/**
+ * @brief Malformed sizes are rejected instead of silently defaulting.
+ */
+static void	test_malformed_body_size_throws(void)
+{
+	TEST(loadThrows("server {\n    client_max_body_size;\n}\n"),
+	     "client_max_body_size without an argument throws");
+	TEST(loadThrows("server {\n    client_max_body_size 10M 20M;\n}\n"),
+	     "client_max_body_size with more than one argument throws");
+	TEST(loadThrows("server {\n    client_max_body_size ten;\n}\n"),
+	     "a non-numeric client_max_body_size throws");
+	TEST(loadThrows("server {\n    client_max_body_size 10X;\n}\n"),
+	     "an unknown client_max_body_size suffix throws");
+	TEST(loadThrows("server {\n    client_max_body_size -1;\n}\n"),
+	     "a negative client_max_body_size throws");
+	TEST(loadThrows(
+		"server {\n    client_max_body_size 999999999999999999999;\n}\n"),
+	     "an out-of-range client_max_body_size throws");
 }
 
 static void	test_static_helpers(void)
@@ -232,9 +621,38 @@ int	main(void)
 	test_extra_arguments_throw();
 	test_malformed_host_port_throws();
 	test_unresolvable_host_throws();
+	test_default_index();
+	test_server_index_is_parsed();
+	test_location_inherits_server_index();
+	test_location_index_overrides_server();
+	test_last_server_index_wins();
+	test_index_is_per_server();
+	test_malformed_index_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();
+	test_each_server_block_is_kept();
+	test_no_server_block_throws();
+	test_server_root();
+	test_root_trailing_slash_is_trimmed();
+	test_root_defaults_when_absent();
+	test_location_root_is_parsed();
+	test_location_without_root_inherits();
+	test_root_without_argument_throws();
+	test_root_with_extra_arguments_throws();
+	test_single_server_name();
+	test_several_names_in_one_directive();
+	test_repeated_server_name_directives_accumulate();
+	test_server_name_is_lowercased();
+	test_no_server_name_leaves_list_empty();
+	test_server_names_are_per_server();
+	test_server_name_without_argument_throws();
+	test_default_body_size();
+	test_body_size_in_bytes();
+	test_body_size_suffixes();
+	test_location_body_size_overrides_server();
+	test_location_without_body_size_inherits();
+	test_malformed_body_size_throws();
 	test_static_helpers();
 
 	std::cout << std::endl;

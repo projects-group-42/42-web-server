@@ -150,12 +150,30 @@ std::string ResponseBuilder::ErrorPage(int status) const
 
 std::string ResponseBuilder::buildErrorResponse(int status_code) const
 {
+	return (buildErrorResponse(status_code, "", ""));
+}
+
+/**
+ * @brief Serialises a standalone error response carrying a custom body.
+ * Used on the paths that answer before a response object exists, so the page
+ * configured by error_page still reaches the client. An empty body falls back
+ * to the built-in one.
+ * @param status_code The status to answer with.
+ * @param body The error page contents, or an empty string for the default.
+ * @param contentType The MIME type of the page, ignored when body is empty.
+ * @return The serialised response, headers included.
+ */
+std::string ResponseBuilder::buildErrorResponse(int status_code,
+	const std::string &body, const std::string &contentType) const
+{
 	HttpResponse response;
 	std::ostringstream str_status;
 	std::string result;
 
 	response.setStatusCode(status_code);
-	response.setBody(ErrorPage(status_code));
+	response.setBody(body.empty() ? ErrorPage(status_code) : body);
+	if (!body.empty() && !contentType.empty())
+		response.setHeaders("content-type", contentType);
 
 	setDefaultHeaders(response);
 

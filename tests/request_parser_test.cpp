@@ -309,6 +309,280 @@ static void	test_simple_get_with_headers(void)
 		"a plain GET keeps its last header");
 }
 
+/* ------------------------------------------------------------------ */
+/* Buffer growth must be bounded (memory exhaustion)                    */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A Content-Length far larger than anything the server accepts must be
+ * refused as soon as the headers are read, while the body is still unsent.
+ */
+static void	test_absurd_content_length_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: 99999999999999\r\n\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(256);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"an absurd Content-Length is rejected");
+	TEST(parser.get_error_code() == 413,
+		"an absurd Content-Length answers 413");
+}
+
+/*
+ * A Content-Length of more digits than a size_t can hold must not wrap into a
+ * small number that the parser would then honour.
+ */
+static void	test_content_length_overflow_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: " + std::string(40, '9') + "\r\n\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(-1);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"a Content-Length that overflows size_t is rejected");
+	TEST(parser.get_error_code() == 413,
+		"a Content-Length that overflows size_t answers 413");
+}
+
+/*
+ * "Content-Length: -1" is not a decimal number. strtoul used to wrap it to a
+ * huge value; it is malformed and must answer 400, not be buffered.
+ */
+static void	test_negative_content_length_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: -1\r\n\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(256);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"a negative Content-Length is rejected");
+	TEST(parser.get_error_code() == 400,
+		"a negative Content-Length answers 400");
+}
+
+/*
+ * A Content-Length that is representable but over the configured limit must
+ * still be refused before the body is buffered.
+ */
+static void	test_content_length_over_limit_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: 4096\r\n\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(256);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"a Content-Length over the limit is rejected");
+	TEST(parser.get_error_code() == 413,
+		"a Content-Length over the limit answers 413");
+}
+
+/*
+ * A body within the configured limit must keep parsing normally, so the guard
+ * does not turn every upload into a 413.
+ */
+static void	test_content_length_within_limit_accepted(void)
+{
+	std::string		body(200, 'B');
+	std::string		raw = buildPost("/u", body);
+	RequestParser	parser;
+
+	parser.setMaxBodySize(256);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == COMPLETE,
+		"a body within the limit parses to COMPLETE");
+	TEST(parser.getRequest().getBody() == body,
+		"a body within the limit arrives complete");
+}
+
+/*
+ * A header block that never gets its "\r\n\r\n" must be cut off once it passes
+ * MAX_HEADER_SIZE instead of buffering whatever the client keeps sending.
+ */
+static void	test_unterminated_header_block_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n";
+	RequestParser	parser;
+
+	while (raw.size() <= MAX_REQUEST_LINE_SIZE + MAX_HEADER_SIZE)
+		raw += "X-Padding: " + std::string(60, 'v') + "\r\n";
+
+	feedInChunks(parser, raw, 512);
+
+	TEST(parser.get_psr_state() == ERROR,
+		"an unterminated header block is rejected");
+	TEST(parser.get_error_code() == 431,
+		"an unterminated header block answers 431");
+}
+
+/*
+ * A header value may be padded with spaces and tabs. prs_headers only strips
+ * one leading space, so the length check has to tolerate the rest instead of
+ * calling a legal request malformed.
+ */
+static void	test_padded_content_length_accepted(void)
+{
+	std::string	bodies[3] = {"5 ", " 5", "\t5"};
+
+	for (std::size_t i = 0; i < 3; ++i)
+	{
+		std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\nContent-Length: "
+			+ bodies[i] + "\r\n\r\nHELLO";
+		RequestParser	parser;
+
+		parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+		TEST(parser.get_psr_state() == COMPLETE
+			&& parser.getRequest().getBody() == "HELLO",
+			"a padded Content-Length is read as its number (case "
+			+ toDecimal(i) + ")");
+	}
+}
+
+/*
+ * A header block just under MAX_HEADER_SIZE is legal however it arrives. The
+ * buffer still holds the request line while the block is being read, so a cap
+ * that counted it would reject the request only on the split path.
+ */
+static void	test_large_legal_header_block_survives_splitting(void)
+{
+	std::string	line = "GET /" + std::string(MAX_URI_LENGTH - 48, 'u')
+		+ " HTTP/1.1\r\n";
+	std::string	raw = line + "Host: x\r\n";
+	std::size_t	sizes[2] = {512, 65536};
+
+	while (raw.size() - line.size() < MAX_HEADER_SIZE - 100)
+		raw += "X-Pad: " + std::string(60, 'v') + "\r\n";
+	raw += "\r\n";
+	for (std::size_t i = 0; i < 2; ++i)
+	{
+		RequestParser	parser;
+
+		feedInChunks(parser, raw, sizes[i]);
+
+		TEST(parser.get_psr_state() == COMPLETE,
+			"a large legal header block parses to COMPLETE (chunk "
+			+ toDecimal(sizes[i]) + ")");
+	}
+}
+
+/*
+ * A header block still under MAX_HEADER_SIZE is merely incomplete: the parser
+ * must keep waiting for the rest instead of answering 431.
+ */
+static void	test_incomplete_header_block_keeps_waiting(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\n";
+	RequestParser	parser;
+
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() != ERROR,
+		"an incomplete header block is not rejected early");
+
+	std::string	rest = "\r\nabc";
+
+	parser.feed(rest.data(), static_cast<ssize_t>(rest.size()));
+
+	TEST(parser.get_psr_state() == COMPLETE,
+		"an incomplete header block completes when the rest arrives");
+}
+
+/*
+ * A chunk announcing more bytes than the limit allows must be refused when its
+ * size line is read, before the parser waits for those bytes.
+ */
+static void	test_oversized_chunk_rejected(void)
+{
+	std::string		raw = "POST /c HTTP/1.1\r\nHost: x\r\n"
+		"Transfer-Encoding: chunked\r\n\r\n3e8\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(64);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"a chunk larger than the limit is rejected");
+	TEST(parser.get_error_code() == 413,
+		"a chunk larger than the limit answers 413");
+}
+
+/*
+ * Chunks that each fit the limit must not add up past it either.
+ */
+static void	test_chunked_total_over_limit_rejected(void)
+{
+	std::string		raw = "POST /c HTTP/1.1\r\nHost: x\r\n"
+		"Transfer-Encoding: chunked\r\n\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(64);
+	for (std::size_t i = 0; i < 4; ++i)
+		raw += "20\r\n" + std::string(32, 'C') + "\r\n";
+
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"chunks adding up past the limit are rejected");
+	TEST(parser.get_error_code() == 413,
+		"chunks adding up past the limit answer 413");
+}
+
+/*
+ * A chunk size line that never gets its "\r\n" leaves the parser waiting, so
+ * the buffer ceiling is what has to stop the client from filling memory.
+ */
+static void	test_unterminated_chunk_size_line_rejected(void)
+{
+	std::string		raw = "POST /c HTTP/1.1\r\nHost: x\r\n"
+		"Transfer-Encoding: chunked\r\n\r\n";
+	RequestParser	parser;
+
+	parser.setMaxBodySize(64);
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	std::string	flood(MAX_HEADER_SIZE + 512, 'a');
+
+	feedInChunks(parser, flood, 512);
+
+	TEST(parser.get_psr_state() == ERROR,
+		"an unterminated chunk size line is cut off");
+	TEST(parser.get_error_code() == 413,
+		"an unterminated chunk size line answers 413");
+}
+
+/*
+ * The limit travels with the parser through a copy, since every connection is
+ * stored by assigning it into the client map.
+ */
+static void	test_limit_survives_assignment(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: 4096\r\n\r\n";
+	RequestParser	source;
+	RequestParser	parser;
+
+	source.setMaxBodySize(256);
+	parser = source;
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_error_code() == 413,
+		"the body limit survives parser assignment");
+}
+
 int	main(void)
 {
 	test_binary_body_is_not_scanned_as_headers();
@@ -321,6 +595,19 @@ int	main(void)
 	test_conflicting_length_headers_rejected();
 	test_missing_host_header_rejected();
 	test_simple_get_with_headers();
+	test_absurd_content_length_rejected();
+	test_content_length_overflow_rejected();
+	test_negative_content_length_rejected();
+	test_content_length_over_limit_rejected();
+	test_content_length_within_limit_accepted();
+	test_unterminated_header_block_rejected();
+	test_padded_content_length_accepted();
+	test_large_legal_header_block_survives_splitting();
+	test_incomplete_header_block_keeps_waiting();
+	test_oversized_chunk_rejected();
+	test_chunked_total_over_limit_rejected();
+	test_unterminated_chunk_size_line_rejected();
+	test_limit_survives_assignment();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

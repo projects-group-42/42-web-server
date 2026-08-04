@@ -68,6 +68,39 @@ bool EventLoop::isPortBound(int port) const
 }
 
 /*
+ * Returns the widest client_max_body_size any server block or location on
+ * `port` allows. The block and location serving a request are only known once
+ * its headers have been read, so the parser is armed with the most permissive
+ * value on the port: it is the largest body that could possibly be accepted
+ * there, and anything past it can be refused while it is still being read.
+ * A port of 0, which is what getLocalPort() reports when it cannot query the
+ * socket, matches no block and widens the search to every block instead, so an
+ * unreadable socket cannot narrow the limit into a spurious 413.
+ */
+long EventLoop::maxBodySizeForPort(int port) const
+{
+	long	widest = -1;
+
+	for (size_t i = 0; i < _configs.size(); i++)
+	{
+		const ServerConfig	&config = _configs[i];
+
+		if (port != 0 && config.port != port)
+			continue;
+		if (config.clientMaxBodySize > widest)
+			widest = config.clientMaxBodySize;
+		for (size_t j = 0; j < config.locations.size(); j++)
+		{
+			if (config.locations[j].clientMaxBodySize > widest)
+				widest = config.locations[j].clientMaxBodySize;
+		}
+	}
+	if (widest < 0)
+		return (DEFAULT_MAX_BODY_SIZE);
+	return (widest);
+}
+
+/*
  * Opens one listening socket per distinct port declared in the config.
  * The socket is registered before it is configured so a failure part way
  * through still leaves it owned by the loop and freed by the destructor.
@@ -134,6 +167,8 @@ void EventLoop::acceptClients(int fd)
 		pfd.revents = 0;
 		_fds.push_back(pfd);
 		_clients[client] = Connection(client);
+		_clients[client].setMaxBodySize(
+			maxBodySizeForPort(_clients[client].getLocalPort()));
 		Logger::info("New client connected.");
 	}
 }

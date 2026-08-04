@@ -12,8 +12,12 @@
 
 #include "http/Router.hpp"
 #include "http/HttpResponse.hpp"
+#include "http/MimeType.hpp"
 #include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 Router::Router(void)
 	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
@@ -211,6 +215,96 @@ bool	Router::resolveAutoindex(const std::string &uri,
 	return (config.autoindex);
 }
 
+/**
+ * @brief Joins a document root and a configured error page path.
+ * The page path is written root-relative in the config file, so exactly one
+ * separator is kept between the two halves.
+ * @param root The document root the page is resolved against.
+ * @param page The path declared by the error_page directive.
+ * @return The path of the error page on disk.
+ */
+static std::string	joinErrorPagePath(const std::string &root,
+			const std::string &page)
+{
+	std::string	path = root;
+
+	if (path.empty())
+		return (page[0] == '/' ? page.substr(1) : page);
+	if (path[path.size() - 1] == '/')
+		path.erase(path.size() - 1);
+	if (page[0] != '/')
+		path.push_back('/');
+	path.append(page);
+	return (path);
+}
+
+/**
+ * @brief Reads a regular file into a string.
+ * Directories and special files are refused so a misconfigured error page
+ * never turns into an unreadable body.
+ * @param path The file to read.
+ * @param body The destination holding the file contents.
+ * @return true when the whole file could be read.
+ */
+static bool	readErrorPageFile(const std::string &path, std::string &body)
+{
+	struct stat	info;
+	char		buffer[4096];
+	ssize_t		bytes;
+
+	if (stat(path.c_str(), &info) == -1 || !S_ISREG(info.st_mode))
+		return (false);
+
+	int	fd = open(path.c_str(), O_RDONLY);
+
+	if (fd == -1)
+		return (false);
+	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0)
+		body.append(buffer, static_cast<size_t>(bytes));
+	close(fd);
+	if (bytes == -1)
+	{
+		body.clear();
+		return (false);
+	}
+	return (true);
+}
+
+/**
+ * @brief Loads the error page a server block configured for a status code.
+ * Resolves the configured path against the given root, reads the file and
+ * reports the MIME type that matches it. Returns false when the status has no
+ * page or the file cannot be read, so the caller keeps the built-in body
+ * instead of answering an empty one.
+ * @param config The server block serving the request.
+ * @param root The document root the page is resolved against.
+ * @param status The status code being answered.
+ * @param body The destination holding the page contents.
+ * @param contentType The destination holding the MIME type of the page.
+ * @return true when a configured page was read.
+ */
+bool	Router::loadErrorPage(const ServerConfig &config,
+			const std::string &root, int status, std::string &body,
+			std::string &contentType)
+{
+	std::map<int, std::string>::const_iterator	it
+		= config.errorPages.find(status);
+
+	if (it == config.errorPages.end() || it->second.empty())
+		return (false);
+
+	std::string	path = joinErrorPagePath(root, it->second);
+
+	body.clear();
+	if (!readErrorPageFile(path, body))
+	{
+		Logger::warning("error_page: cannot read '" + path + "'");
+		return (false);
+	}
+	contentType = mimeType_resolve(path);
+	return (true);
+}
+
 bool	Router::route(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config)
 {
@@ -245,5 +339,31 @@ bool	Router::route(const HttpRequest &request,
 				resolveAutoindex(request.getUri(), config));
 		handler->handle(request, response);
 	}
+	applyErrorPage(request, response, config);
 	return (true);
+}
+
+/**
+ * @brief Replaces the body of an error response with its configured page.
+ * The page is resolved against the root of the location that matched the URI,
+ * so a location with its own root keeps serving its own error pages. Responses
+ * below 400 and statuses without a configured page are left untouched.
+ * @param request The request being answered.
+ * @param response The response to rewrite in place.
+ * @param config The server block serving the request.
+ */
+void	Router::applyErrorPage(const HttpRequest &request,
+			HttpResponse &response, const ServerConfig &config) const
+{
+	std::string	body;
+	std::string	contentType;
+
+	if (response.getStatusCode() < 400)
+		return ;
+	if (!loadErrorPage(config, resolveRoot(request.getUri(), config),
+			response.getStatusCode(), body, contentType))
+		return ;
+	response.setBody(body);
+	if (!contentType.empty())
+		response.setHeaders("content-type", contentType);
 }

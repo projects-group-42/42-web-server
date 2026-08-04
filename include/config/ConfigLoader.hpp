@@ -55,7 +55,7 @@ class ConfigLoader
 
 		static std::string	parseRoot(const ConfigDirective &d);
 		static bool			parseBool(const std::string &s);
-		static void			parseAutoindex(LocationConfig &loc,
+		static void			parseAutoindex(bool &autoindex,
 							const ConfigDirective &d);
 		static void			parseIndex(std::string &index,
 							const ConfigDirective &d);

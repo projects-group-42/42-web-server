@@ -35,12 +35,16 @@ class StaticFileHandler : public IRequestHandler
 	private:
 		std::string	_root;
 		std::string	_index;
+		bool		_autoindex;
 		long		_maxBodySize;
 
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
+						const std::string &requestUri,
 						std::string &body, std::string &contentType);
+		int			serveDirectoryListing(const std::string &resolvedPath,
+						const std::string &requestUri, std::string &body);
 		std::string	rslv_req_realpath(const std::string &uri);
 		int			saveFile(const std::string &resolvedPath,
 						const std::string &content);
@@ -78,6 +82,7 @@ class StaticFileHandler : public IRequestHandler
 
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
+		void				setAutoindex(bool autoindex);
 		void				setMaxBodySize(long maxBodySize);
 		const std::string	&getRoot(void) const;
 };

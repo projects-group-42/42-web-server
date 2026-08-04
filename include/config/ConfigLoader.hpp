@@ -55,6 +55,7 @@ class ConfigLoader
 					ServerConfig &server);
 
 		static std::string	parseRoot(const ConfigDirective &d);
+		static long			parseBodySize(const ConfigDirective &d);
 		static bool			parseBool(const std::string &s);
 		static void			parseAutoindex(bool &autoindex,
 							const ConfigDirective &d);

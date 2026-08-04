@@ -415,6 +415,189 @@ static void	test_root_with_extra_arguments_throws(void)
 	     "root with more than one argument throws");
 }
 
+/**
+ * @brief A single server_name yields one stored name.
+ */
+static void	test_single_server_name(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8080;\n    server_name example.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(1),
+	         "a single server_name yields one entry");
+	CHECK_EQ(config.serverNames[0], std::string("example.com"),
+	         "the declared name is stored");
+}
+
+/**
+ * @brief One directive may carry several names.
+ */
+static void	test_several_names_in_one_directive(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name example.com www.example.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "server_name accepts several names in one directive");
+	CHECK_EQ(config.serverNames[1], std::string("www.example.com"),
+	         "every name of the directive is stored");
+}
+
+/**
+ * @brief Repeated directives add to the list instead of replacing it.
+ */
+static void	test_repeated_server_name_directives_accumulate(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name a.com;\n    server_name b.com;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(2),
+	         "repeated server_name directives accumulate");
+}
+
+/**
+ * @brief Names are stored lowercased so the Host match is case-insensitive.
+ */
+static void	test_server_name_is_lowercased(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    server_name EXAMPLE.COM;\n}\n");
+
+	CHECK_EQ(config.serverNames[0], std::string("example.com"),
+	         "a server_name is stored lowercased");
+}
+
+/**
+ * @brief A server without the directive keeps an empty name list.
+ */
+static void	test_no_server_name_leaves_list_empty(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8080;\n}\n");
+
+	CHECK_EQ(config.serverNames.size(), static_cast<size_t>(0),
+	         "a server without server_name keeps an empty name list");
+}
+
+/**
+ * @brief Each server block keeps the names it declared.
+ */
+static void	test_server_names_are_per_server(void)
+{
+	std::vector<ServerConfig>	servers = loadAll(
+		"server {\n    listen 8080;\n    server_name first.com;\n}\n"
+		"server {\n    listen 8081;\n    server_name second.com;\n}\n");
+
+	CHECK_EQ(servers.size(), static_cast<size_t>(2),
+	         "both server blocks are kept");
+	CHECK_EQ(servers[0].serverNames[0], std::string("first.com"),
+	         "the first block keeps its own name");
+	CHECK_EQ(servers[1].serverNames[0], std::string("second.com"),
+	         "the second block keeps its own name");
+}
+
+/**
+ * @brief A server_name carrying no name is rejected.
+ */
+static void	test_server_name_without_argument_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8080;\n    server_name;\n}\n"),
+	     "server_name without an argument throws");
+}
+
+/**
+ * @brief Without the directive the server keeps the 1 MiB default.
+ */
+static void	test_default_body_size(void)
+{
+	ServerConfig	config = loadSource("server {\n    listen 8080;\n}\n");
+
+	CHECK_EQ(config.clientMaxBodySize, 1L * 1024L * 1024L,
+	         "a server without client_max_body_size keeps the 1 MiB default");
+}
+
+/**
+ * @brief A plain number is read as a byte count.
+ */
+static void	test_body_size_in_bytes(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    client_max_body_size 4096;\n}\n");
+
+	CHECK_EQ(config.clientMaxBodySize, 4096L,
+	         "a bare client_max_body_size is a byte count");
+}
+
+/**
+ * @brief The k, m and g suffixes scale the value, in either case.
+ */
+static void	test_body_size_suffixes(void)
+{
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 10M;\n}\n").clientMaxBodySize,
+		10L * 1024L * 1024L, "the M suffix means mebibytes");
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 512k;\n}\n").clientMaxBodySize,
+		512L * 1024L, "the k suffix means kibibytes");
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 1g;\n}\n").clientMaxBodySize,
+		1024L * 1024L * 1024L, "the g suffix means gibibytes");
+	CHECK_EQ(loadSource(
+		"server {\n    client_max_body_size 10m;\n}\n").clientMaxBodySize,
+		10L * 1024L * 1024L, "a lowercase suffix is accepted too");
+}
+
+/**
+ * @brief A location declaring a size of its own keeps it.
+ */
+static void	test_location_body_size_overrides_server(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    client_max_body_size 10M;\n"
+		"    location /upload {\n        client_max_body_size 1M;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is parsed");
+	CHECK_EQ(config.locations[0].clientMaxBodySize, 1L * 1024L * 1024L,
+	         "a location client_max_body_size is parsed");
+}
+
+/**
+ * @brief A location declaring no size keeps the sentinel so it can inherit.
+ */
+static void	test_location_without_body_size_inherits(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    client_max_body_size 10M;\n"
+		"    location /upload {\n        autoindex on;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations[0].clientMaxBodySize, -1L,
+	         "a location without client_max_body_size keeps the -1 sentinel");
+}
+
+/**
+ * @brief Malformed sizes are rejected instead of silently defaulting.
+ */
+static void	test_malformed_body_size_throws(void)
+{
+	TEST(loadThrows("server {\n    client_max_body_size;\n}\n"),
+	     "client_max_body_size without an argument throws");
+	TEST(loadThrows("server {\n    client_max_body_size 10M 20M;\n}\n"),
+	     "client_max_body_size with more than one argument throws");
+	TEST(loadThrows("server {\n    client_max_body_size ten;\n}\n"),
+	     "a non-numeric client_max_body_size throws");
+	TEST(loadThrows("server {\n    client_max_body_size 10X;\n}\n"),
+	     "an unknown client_max_body_size suffix throws");
+	TEST(loadThrows("server {\n    client_max_body_size -1;\n}\n"),
+	     "a negative client_max_body_size throws");
+	TEST(loadThrows(
+		"server {\n    client_max_body_size 999999999999999999999;\n}\n"),
+	     "an out-of-range client_max_body_size throws");
+}
+
 static void	test_static_helpers(void)
 {
 	CHECK_EQ(ConfigLoader::parsePort("8080"), 8080,
@@ -457,6 +640,19 @@ int	main(void)
 	test_location_without_root_inherits();
 	test_root_without_argument_throws();
 	test_root_with_extra_arguments_throws();
+	test_single_server_name();
+	test_several_names_in_one_directive();
+	test_repeated_server_name_directives_accumulate();
+	test_server_name_is_lowercased();
+	test_no_server_name_leaves_list_empty();
+	test_server_names_are_per_server();
+	test_server_name_without_argument_throws();
+	test_default_body_size();
+	test_body_size_in_bytes();
+	test_body_size_suffixes();
+	test_location_body_size_overrides_server();
+	test_location_without_body_size_inherits();
+	test_malformed_body_size_throws();
 	test_static_helpers();
 
 	std::cout << std::endl;

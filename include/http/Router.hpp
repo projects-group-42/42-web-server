@@ -41,6 +41,8 @@ class Router
 				const ServerConfig &config) const;
 		bool			resolveAutoindex(const std::string &uri,
 				const ServerConfig &config) const;
+		long			resolveMaxBodySize(const std::string &uri,
+				const ServerConfig &config) const;
 		void			applyErrorPage(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
 

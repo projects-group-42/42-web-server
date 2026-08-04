@@ -216,6 +216,24 @@ bool	Router::resolveAutoindex(const std::string &uri,
 }
 
 /**
+ * @brief Picks the maximum request body size that applies to a URI.
+ * A location declaring no size of its own keeps the sentinel -1 and inherits
+ * the server value, so a location only overrides it when it declares one.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The maximum body size in bytes, or -1 when no limit applies.
+ */
+long	Router::resolveMaxBodySize(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	if (best != NULL && best->clientMaxBodySize >= 0)
+		return (best->clientMaxBodySize);
+	return (config.clientMaxBodySize);
+}
+
+/**
  * @brief Joins a document root and a configured error page path.
  * The page path is written root-relative in the config file, so exactly one
  * separator is kept between the two halves.
@@ -337,6 +355,8 @@ bool	Router::route(const HttpRequest &request,
 			setIndex(index);
 		_staticHandler.setAutoindex(
 				resolveAutoindex(request.getUri(), config));
+		_staticHandler.setMaxBodySize(
+				resolveMaxBodySize(request.getUri(), config));
 		handler->handle(request, response);
 	}
 	applyErrorPage(request, response, config);

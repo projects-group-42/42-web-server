@@ -31,7 +31,28 @@ static int	s_fail = 0;
 	} while (0)
 
 static const std::string	PYTHON3 = "/usr/bin/python3";
-static const std::string	PHP_CGI = "/usr/bin/php-cgi";
+
+/*
+ * Returns the php-cgi binary of the machine, or an empty string when none is
+ * installed. The path differs between the Linux boxes the project targets and
+ * a Homebrew install, so the suite looks the binary up instead of pinning the
+ * single path conf/default.conf declares.
+ */
+static std::string	findPhpCgi(void)
+{
+	const char	*candidates[] = {
+		"/usr/bin/php-cgi",
+		"/usr/local/bin/php-cgi",
+		"/opt/homebrew/bin/php-cgi"
+	};
+
+	for (size_t i = 0; i < sizeof(candidates) / sizeof(*candidates); ++i)
+	{
+		if (access(candidates[i], X_OK) == 0)
+			return (std::string(candidates[i]));
+	}
+	return ("");
+}
 
 /*
  * Drives the process to completion the way the event loop does: polls the
@@ -546,12 +567,13 @@ static void	test_php_hello(void)
 	std::vector<std::string>	env;
 	std::string					output;
 	HttpResponse				response;
+	std::string					phpCgi = findPhpCgi();
 	bool						ok;
 
-	if (access(PHP_CGI.c_str(), X_OK) != 0)
+	if (phpCgi.empty())
 	{
-		std::cout << "[SKIP] php hello.php: " << PHP_CGI
-			<< " is not installed" << std::endl;
+		std::cout << "[SKIP] php hello.php: php-cgi is not installed"
+			<< std::endl;
 		return ;
 	}
 	env.push_back("GATEWAY_INTERFACE=CGI/1.1");
@@ -562,7 +584,7 @@ static void	test_php_hello(void)
 	env.push_back("SCRIPT_FILENAME=cgi-bin/hello.php");
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
-	ok = handler.execute(PHP_CGI, "cgi-bin/hello.php", "", env, output);
+	ok = handler.execute(phpCgi, "cgi-bin/hello.php", "", env, output);
 	TEST(ok, "php hello.php: execute returns true");
 	TEST(!output.empty(), "php hello.php: captured output");
 	TEST(handler.parseCgiOutput(output, response),

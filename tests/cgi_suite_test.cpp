@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <poll.h>
+#include <unistd.h>
 
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiProcess.hpp"
@@ -30,6 +31,7 @@ static int	s_fail = 0;
 	} while (0)
 
 static const std::string	PYTHON3 = "/usr/bin/python3";
+static const std::string	PHP_CGI = "/usr/bin/php-cgi";
 
 /*
  * Drives the process to completion the way the event loop does: polls the
@@ -532,6 +534,45 @@ static void	test_parse_python_lf_style(void)
 	TEST(response.getBody() == "redirecting...", "LF Python-style: body extracted");
 }
 
+/*
+ * Runs the hello.php script through php-cgi and checks the handler captures
+ * its output and parses it into a valid CGI response. php-cgi is not part of
+ * the toolchain of every machine, so the test reports itself as skipped rather
+ * than failing when the binary is missing.
+ */
+static void	test_php_hello(void)
+{
+	CgiHandler					handler;
+	std::vector<std::string>	env;
+	std::string					output;
+	HttpResponse				response;
+	bool						ok;
+
+	if (access(PHP_CGI.c_str(), X_OK) != 0)
+	{
+		std::cout << "[SKIP] php hello.php: " << PHP_CGI
+			<< " is not installed" << std::endl;
+		return ;
+	}
+	env.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	env.push_back("REQUEST_METHOD=GET");
+	env.push_back("QUERY_STRING=");
+	env.push_back("SERVER_PROTOCOL=HTTP/1.1");
+	env.push_back("SCRIPT_NAME=/cgi-bin/hello.php");
+	env.push_back("SCRIPT_FILENAME=cgi-bin/hello.php");
+	env.push_back("CONTENT_LENGTH=0");
+	env.push_back("REDIRECT_STATUS=200");
+	ok = handler.execute(PHP_CGI, "cgi-bin/hello.php", "", env, output);
+	TEST(ok, "php hello.php: execute returns true");
+	TEST(!output.empty(), "php hello.php: captured output");
+	TEST(handler.parseCgiOutput(output, response),
+		"php hello.php: parses CGI output");
+	TEST(response.getStatusCode() == 200,
+		"php hello.php: status defaults to 200");
+	TEST(response.getBody() == "hello-php",
+		"php hello.php: body contains the script output");
+}
+
 int	main(void)
 {
 	/* CgiHandler::execute() with Python scripts */
@@ -551,6 +592,9 @@ int	main(void)
 	test_proc_python_headers();
 	test_proc_python_large_body();
 	test_proc_python_error_exit();
+
+	/* CgiHandler::execute() with PHP scripts */
+	test_php_hello();
 
 	/* parseCgiOutput edge cases */
 	test_parse_python_traceback();

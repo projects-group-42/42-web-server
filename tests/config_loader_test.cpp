@@ -662,6 +662,30 @@ static void	test_cgi_pass_accumulates_extensions(void)
 }
 
 /**
+ * @brief A cgi_pass directive binds .php to the php-cgi handler.
+ */
+static void	test_cgi_pass_binds_php(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python3;\n"
+		"        cgi_pass .php /usr/bin/php-cgi;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is parsed");
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].cgiPass[".php"],
+	         std::string("/usr/bin/php-cgi"),
+	         "cgi_pass binds .php to the php-cgi handler");
+	CHECK_EQ(config.locations[0].cgiPass[".py"],
+	         std::string("/usr/bin/python3"),
+	         "the python binding survives alongside the php one");
+}
+
+/**
  * @brief An extension declared twice keeps the interpreter declared last.
  */
 static void	test_last_cgi_pass_wins(void)
@@ -781,6 +805,7 @@ int	main(void)
 	test_location_without_cgi_pass_is_empty();
 	test_cgi_pass_binds_python();
 	test_cgi_pass_accumulates_extensions();
+	test_cgi_pass_binds_php();
 	test_last_cgi_pass_wins();
 	test_cgi_pass_is_per_location();
 	test_malformed_cgi_pass_throws();

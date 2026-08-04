@@ -284,9 +284,13 @@ void EventLoop::handleRequest(int fd)
 								conn.getLocalPort(), conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
-	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))
+
+	std::string	interpreter = cgiInterpreterFor(conn.getRequest().getUri(),
+						chosenConfig);
+
+	if (!interpreter.empty())
 	{
-		startCgi(fd, chosenConfig);
+		startCgi(fd, interpreter);
 		return ;
 	}
 	builder.setKeepAlive(conn.get_keep_alive());
@@ -408,16 +412,36 @@ void EventLoop::sendCgiError(int fd, int status)
 	setPollEvents(fd, POLLOUT);
 }
 
+/**
+ * @brief Decides whether a URI is a CGI request and which binary runs it.
+ * The cgi_pass directives of the location matching the URI answer both at
+ * once, so a script only executes when the config declares a handler for its
+ * extension and any other extension keeps being served as a static file. A
+ * ".py" script no location binds falls back to the default interpreter, so a
+ * config declaring no cgi_pass still serves Python scripts.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The binary to execute, or an empty string when the URI is not a CGI
+ * request.
+ */
+std::string	EventLoop::cgiInterpreterFor(const std::string &uri,
+			const ServerConfig &config) const
+{
+	std::string	interpreter = _router.resolveCgiInterpreter(uri, config);
+
+	if (interpreter.empty() && _cgiHandler.isCgiRequest(uri))
+		return (DEFAULT_CGI_INTERPRETER);
+	return (interpreter);
+}
+
 /*
  * Starts a CGI request without blocking the server: validates the script,
- * forks the interpreter bound to its extension by the cgi_pass directives of
- * the config, registers the CGI pipe fds in the poll set, and parks the client
- * fd (no interest) until the child finishes. A script whose extension no
- * location binds falls back to the default interpreter, so a config declaring
- * no cgi_pass still serves Python scripts. On validation or fork failure it
- * queues the matching error response instead.
+ * forks the interpreter the config bound to its extension, registers the CGI
+ * pipe fds in the poll set, and parks the client fd (no interest) until the
+ * child finishes. On validation or fork failure it queues the matching error
+ * response instead.
  */
-void EventLoop::startCgi(int fd, const ServerConfig &config)
+void EventLoop::startCgi(int fd, const std::string &interpreter)
 {
 	Connection		&conn = _clients[fd];
 	std::string		scriptPath;
@@ -428,12 +452,6 @@ void EventLoop::startCgi(int fd, const ServerConfig &config)
 		sendCgiError(fd, errorResponse.getStatusCode());
 		return ;
 	}
-
-	std::string	interpreter = _router.resolveCgiInterpreter(
-						conn.getRequest().getUri(), config);
-
-	if (interpreter.empty())
-		interpreter = DEFAULT_CGI_INTERPRETER;
 
 	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(), scriptPath);
 	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());

@@ -291,6 +291,54 @@ int	main(void)
 			"the body limit of one request does not leak into the next");
 	}
 
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		cgi.cgiPass[".py"] = "/usr/bin/python3";
+		config.locations.push_back(cgi);
+		TEST(router.resolveCgiInterpreter("/cgi/app.py", config)
+				== "/usr/bin/python3",
+			"the interpreter bound to .py runs a python script");
+		TEST(router.resolveCgiInterpreter("/cgi/app.pl", config).empty(),
+			"an extension no cgi_pass binds resolves to no interpreter");
+		TEST(router.resolveCgiInterpreter("/cgi/app", config).empty(),
+			"a script without an extension resolves to no interpreter");
+		TEST(router.resolveCgiInterpreter("/other/app.py", config).empty(),
+			"a URI outside the location resolves to no interpreter");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		root.cgiPass[".py"] = "/usr/bin/python2";
+		cgi.cgiPass[".py"] = "/usr/bin/python3";
+		config.locations.push_back(root);
+		config.locations.push_back(cgi);
+		TEST(router.resolveCgiInterpreter("/cgi/app.py", config)
+				== "/usr/bin/python3",
+			"the longest matching location provides the interpreter");
+		TEST(router.resolveCgiInterpreter("/app.py", config)
+				== "/usr/bin/python2",
+			"a URI outside it falls back to the shorter location");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		config.locations.push_back(cgi);
+		TEST(router.resolveCgiInterpreter("/cgi/app.py", config).empty(),
+			"a location without cgi_pass resolves to no interpreter");
+		TEST(router.resolveCgiInterpreter("/cgi.d/app", config).empty(),
+			"a dot in a parent directory is not taken as an extension");
+	}
+
 	cleanupFixture();
 
 	std::cout << std::endl << s_pass << " passed, " << s_fail << " failed"

@@ -22,7 +22,7 @@
 #include <sys/time.h>
 #include <cstdlib>
 
-static const std::string	CGI_INTERPRETER = "/usr/bin/python3";
+static const std::string	DEFAULT_CGI_INTERPRETER = "/usr/bin/python3";
 static const long			CGI_TIMEOUT_MS = 5000;
 static const int			BACKLOG = 128;
 
@@ -241,7 +241,7 @@ void EventLoop::handleRequest(int fd)
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))
 	{
-		startCgi(fd);
+		startCgi(fd, chosenConfig);
 		return ;
 	}
 	builder.setKeepAlive(conn.get_keep_alive());
@@ -355,11 +355,14 @@ void EventLoop::sendCgiError(int fd, int status)
 
 /*
  * Starts a CGI request without blocking the server: validates the script,
- * forks the interpreter, registers the CGI pipe fds in the poll set, and parks
- * the client fd (no interest) until the child finishes. On validation or fork
- * failure it queues the matching error response instead.
+ * forks the interpreter bound to its extension by the cgi_pass directives of
+ * the config, registers the CGI pipe fds in the poll set, and parks the client
+ * fd (no interest) until the child finishes. A script whose extension no
+ * location binds falls back to the default interpreter, so a config declaring
+ * no cgi_pass still serves Python scripts. On validation or fork failure it
+ * queues the matching error response instead.
  */
-void EventLoop::startCgi(int fd)
+void EventLoop::startCgi(int fd, const ServerConfig &config)
 {
 	Connection		&conn = _clients[fd];
 	std::string		scriptPath;
@@ -371,10 +374,16 @@ void EventLoop::startCgi(int fd)
 		return ;
 	}
 
+	std::string	interpreter = _router.resolveCgiInterpreter(
+						conn.getRequest().getUri(), config);
+
+	if (interpreter.empty())
+		interpreter = DEFAULT_CGI_INTERPRETER;
+
 	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(), scriptPath);
 	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());
 
-	if (!proc->start(CGI_INTERPRETER, scriptPath, env))
+	if (!proc->start(interpreter, scriptPath, env))
 	{
 		delete proc;
 		sendCgiError(fd, 500);

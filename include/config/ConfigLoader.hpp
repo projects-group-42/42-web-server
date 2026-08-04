@@ -65,6 +65,9 @@ class ConfigLoader
 		static void			parseErrorPage(
 							std::map<int, std::string> &pages,
 							const ConfigDirective &d);
+		static void			parseCgiPass(
+							std::map<std::string, std::string> &interpreters,
+							const ConfigDirective &d);
 };
 
 #endif

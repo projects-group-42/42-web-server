@@ -56,6 +56,9 @@ class Router
 		bool	route(const HttpRequest &request,
 					HttpResponse &response, const ServerConfig &config);
 
+		std::string		resolveCgiInterpreter(const std::string &uri,
+					const ServerConfig &config) const;
+
 		static bool	loadErrorPage(const ServerConfig &config,
 					const std::string &root, int status,
 					std::string &body, std::string &contentType);

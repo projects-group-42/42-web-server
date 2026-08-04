@@ -598,6 +598,131 @@ static void	test_malformed_body_size_throws(void)
 	     "an out-of-range client_max_body_size throws");
 }
 
+/**
+ * @brief A location without cgi_pass binds no interpreter at all.
+ */
+static void	test_location_without_cgi_pass_is_empty(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location /cgi {\n        autoindex on;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is parsed");
+	if (config.locations.empty())
+		return ;
+	TEST(config.locations[0].cgiPass.empty(),
+	     "a location without cgi_pass binds no interpreter");
+}
+
+/**
+ * @brief A cgi_pass directive binds its extension to its interpreter.
+ */
+static void	test_cgi_pass_binds_python(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python3;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is parsed");
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].cgiPass.size(), static_cast<size_t>(1),
+	         "a single cgi_pass binds a single extension");
+	CHECK_EQ(config.locations[0].cgiPass[".py"],
+	         std::string("/usr/bin/python3"),
+	         "cgi_pass binds .py to the python interpreter");
+}
+
+/**
+ * @brief Several cgi_pass directives coexist in the same location.
+ */
+static void	test_cgi_pass_accumulates_extensions(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python3;\n"
+		"        cgi_pass .pl /usr/bin/perl;\n    }\n"
+		"}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].cgiPass.size(), static_cast<size_t>(2),
+	         "both cgi_pass directives are kept");
+	CHECK_EQ(config.locations[0].cgiPass[".py"],
+	         std::string("/usr/bin/python3"),
+	         "the python interpreter is kept");
+	CHECK_EQ(config.locations[0].cgiPass[".pl"], std::string("/usr/bin/perl"),
+	         "the perl interpreter is kept");
+}
+
+/**
+ * @brief An extension declared twice keeps the interpreter declared last.
+ */
+static void	test_last_cgi_pass_wins(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python2;\n"
+		"        cgi_pass .py /usr/bin/python3;\n    }\n"
+		"}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].cgiPass.size(), static_cast<size_t>(1),
+	         "a repeated extension is stored once");
+	CHECK_EQ(config.locations[0].cgiPass[".py"],
+	         std::string("/usr/bin/python3"),
+	         "the last cgi_pass declaration wins");
+}
+
+/**
+ * @brief cgi_pass is per location, so one location never sees another's.
+ */
+static void	test_cgi_pass_is_per_location(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location / {\n        autoindex on;\n    }\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python3;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(2),
+	         "both location blocks are parsed");
+	if (config.locations.size() != 2)
+		return ;
+	TEST(config.locations[0].cgiPass.empty(),
+	     "the location without cgi_pass stays empty");
+	CHECK_EQ(config.locations[1].cgiPass.size(), static_cast<size_t>(1),
+	         "the location declaring cgi_pass keeps it");
+}
+
+static void	test_malformed_cgi_pass_throws(void)
+{
+	TEST(loadThrows("server {\n    location /cgi {\n        cgi_pass;\n"
+		"    }\n}\n"),
+	     "cgi_pass without arguments throws");
+	TEST(loadThrows("server {\n    location /cgi {\n        cgi_pass .py;\n"
+		"    }\n}\n"),
+	     "cgi_pass without an interpreter throws");
+	TEST(loadThrows("server {\n    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python3 extra;\n    }\n}\n"),
+	     "cgi_pass with more than two arguments throws");
+	TEST(loadThrows("server {\n    location /cgi {\n"
+		"        cgi_pass py /usr/bin/python3;\n    }\n}\n"),
+	     "a cgi_pass extension without a leading dot throws");
+	TEST(loadThrows("server {\n    location /cgi {\n"
+		"        cgi_pass . /usr/bin/python3;\n    }\n}\n"),
+	     "a cgi_pass extension reduced to a dot throws");
+}
+
 static void	test_static_helpers(void)
 {
 	CHECK_EQ(ConfigLoader::parsePort("8080"), 8080,
@@ -653,6 +778,12 @@ int	main(void)
 	test_location_body_size_overrides_server();
 	test_location_without_body_size_inherits();
 	test_malformed_body_size_throws();
+	test_location_without_cgi_pass_is_empty();
+	test_cgi_pass_binds_python();
+	test_cgi_pass_accumulates_extensions();
+	test_last_cgi_pass_wins();
+	test_cgi_pass_is_per_location();
+	test_malformed_cgi_pass_throws();
 	test_static_helpers();
 
 	std::cout << std::endl;

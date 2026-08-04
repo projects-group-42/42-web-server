@@ -66,6 +66,20 @@ CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/utils/Utils.cpp
 CGI_TEST_BIN	= test_cgi
 
+CGI_PROCESS_TEST_SRC	= tests/cgi_process_test.cpp \
+						  src/cgi/CgiProcess.cpp \
+						  src/cgi/CgiPipes.cpp
+CGI_PROCESS_TEST_BIN	= test_cgi_process
+
+CGI_SUITE_TEST_SRC	= tests/cgi_suite_test.cpp \
+					  src/cgi/CgiHandler.cpp \
+					  src/cgi/CgiProcess.cpp \
+					  src/cgi/CgiPipes.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/utils/Utils.cpp
+CGI_SUITE_TEST_BIN	= test_cgi_suite
+
 MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
 					  src/http/MultipartParser.cpp \
 					  src/http/HttpRequest.cpp \
@@ -183,6 +197,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN)
 test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
@@ -190,6 +205,8 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(SERVER_CONFIG_TEST_BIN)
 	./$(CONFIG_LOADER_TEST_BIN)
 	./$(CGI_TEST_BIN)
+	./$(CGI_PROCESS_TEST_BIN)
+	./$(CGI_SUITE_TEST_BIN)
 	./$(MULTIPART_TEST_BIN)
 	./$(UPLOAD_SUITE_TEST_BIN)
 	./$(REQUEST_PARSER_TEST_BIN)
@@ -214,6 +231,12 @@ $(CONFIG_LOADER_TEST_BIN): $(CONFIG_LOADER_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(CGI_TEST_BIN): $(CGI_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CGI_PROCESS_TEST_BIN): $(CGI_PROCESS_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CGI_SUITE_TEST_BIN): $(CGI_SUITE_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(MULTIPART_TEST_BIN): $(MULTIPART_TEST_SRC)
@@ -248,6 +271,8 @@ fclean: clean
 	rm -f $(SERVER_CONFIG_TEST_BIN)
 	rm -f $(CONFIG_LOADER_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
+	rm -f $(CGI_PROCESS_TEST_BIN)
+	rm -f $(CGI_SUITE_TEST_BIN)
 	rm -f $(MULTIPART_TEST_BIN)
 	rm -f $(UPLOAD_SUITE_TEST_BIN)
 	rm -f $(REQUEST_PARSER_TEST_BIN)

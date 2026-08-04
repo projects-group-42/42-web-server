@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/30 23:11:19 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/04 18:19:01 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/04 19:37:58 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,7 +14,9 @@
 #include <fstream>
 #include <string>
 #include <cstdio>
+#include <csignal>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <vector>
 
@@ -761,6 +763,50 @@ static void	test_plain_post_legit_new_file_still_201(void)
 /* ------------------------------------------------------------------ */
 
 /*
+ * A genuine short/failed write (issue: saveFile() must loop until the whole
+ * content is written or the write truly fails) must not leave a truncated
+ * file behind. RLIMIT_FSIZE + ignoring SIGXFSZ makes write() fail partway
+ * through a large body without killing the process, exercising the same
+ * retry-until-done-or-real-failure path a large body or a signal would.
+ */
+static void	test_post_write_failure_removes_partial_file(void)
+{
+	createDirectoryTree("up_root");
+
+	struct rlimit	oldLimit;
+	struct rlimit	tightLimit;
+
+	getrlimit(RLIMIT_FSIZE, &oldLimit);
+	tightLimit.rlim_cur = 16;
+	tightLimit.rlim_max = oldLimit.rlim_max;
+	setrlimit(RLIMIT_FSIZE, &tightLimit);
+
+	void	(*previousHandler)(int) = signal(SIGXFSZ, SIG_IGN);
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+	std::string		content = generateBinaryContent(4096);
+
+	request.setMethod("POST");
+	request.setUri("/uploads/toolarge.txt");
+	request.setBody(content);
+
+	handler.handle(request, response);
+
+	setrlimit(RLIMIT_FSIZE, &oldLimit);
+	signal(SIGXFSZ, previousHandler);
+
+	TEST(response.getStatusCode() == 500,
+		"a write that truly fails answers 500");
+	TEST(!fileExists("up_root/uploads/toolarge.txt"),
+		"a write that truly fails leaves no truncated file behind");
+
+	std::remove("up_root/uploads/toolarge.txt");
+	destroyDirectoryTree("up_root");
+}
+
+/*
  * Routing an upload through a regular file makes open() fail with ENOTDIR,
  * which is neither a permission nor a missing-directory error, so saveFile()
  * must fall through to 500.
@@ -815,6 +861,7 @@ int	main(void)
 	test_multipart_without_boundary_answers_400();
 	test_multipart_without_file_part_answers_400();
 	test_post_through_regular_file_answers_500();
+	test_post_write_failure_removes_partial_file();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;
 	return (s_fail == 0 ? 0 : 1);

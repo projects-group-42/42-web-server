@@ -62,6 +62,9 @@ class EventLoop
 		int		cgiPollTimeout(void);
 		void	sendCgiError(int fd, int status);
 		std::string
+				buildError(const Connection &conn,
+				const ResponseBuilder &builder, int status) const;
+		std::string
 				cleanHostHeader(const std::string& rawHost) const;
 		const ServerConfig& 
 				getServerConfigForRequest(int clientPort,

@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 00:02:12 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 22:10:11 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 
 # include <cstdlib>
 # include <fstream>
+# include <map>
 # include <sstream>
 # include <string>
 # include <vector>
@@ -58,6 +59,10 @@ class ConfigLoader
 		static void			parseAutoindex(bool &autoindex,
 							const ConfigDirective &d);
 		static void			parseIndex(std::string &index,
+							const ConfigDirective &d);
+		static int			parseErrorCode(const std::string &token);
+		static void			parseErrorPage(
+							std::map<int, std::string> &pages,
 							const ConfigDirective &d);
 };
 

@@ -61,11 +61,6 @@ class EventLoop
 		void	checkCgiTimeouts(void);
 		int		cgiPollTimeout(void);
 		void	sendCgiError(int fd, int status);
-		std::string
-				cleanHostHeader(const std::string& rawHost) const;
-		const ServerConfig& 
-				getServerConfigForRequest(int clientPort,
-				const HttpRequest& request) const;
 
 	public:
 		EventLoop(void);
@@ -74,5 +69,10 @@ class EventLoop
 
 		void	setupSockets(void);
 		void	run(void);
+		std::string
+				cleanHostHeader(const std::string& rawHost) const;
+		const ServerConfig&
+				getServerConfigForRequest(int clientPort,
+				const HttpRequest& request) const;
 };
 #endif

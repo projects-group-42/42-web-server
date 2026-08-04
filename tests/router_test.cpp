@@ -75,6 +75,8 @@ static void	cleanupFixture(void)
 	std::remove((std::string(DOCS_DIR) + "/home.html").c_str());
 	std::remove((std::string(ROOT_DIR) + "/home.html").c_str());
 	std::remove((std::string(ROOT_DIR) + "/index.html").c_str());
+	std::remove((std::string(ROOT_DIR) + "/upload.txt").c_str());
+	std::remove((std::string(DOCS_DIR) + "/upload.txt").c_str());
 	rmdir(ALT_DOCS_DIR);
 	rmdir(ALT_DIR);
 	rmdir(DOCS_DIR);
@@ -96,6 +98,26 @@ static void	routeGet(const std::string &uri, const ServerConfig &config,
 	request.setMethod("GET");
 	request.setUri(uri);
 	request.setVersion("HTTP/1.1");
+	router.route(request, response, config);
+}
+
+/**
+ * @brief Routes a POST carrying `body` through a fresh Router.
+ * @param uri The request target.
+ * @param body The request body to send.
+ * @param config The server block serving the request.
+ * @param response The response filled by the router.
+ */
+static void	routePost(const std::string &uri, const std::string &body,
+		const ServerConfig &config, HttpResponse &response)
+{
+	Router		router;
+	HttpRequest	request;
+
+	request.setMethod("POST");
+	request.setUri(uri);
+	request.setVersion("HTTP/1.1");
+	request.setBody(body);
 	router.route(request, response, config);
 }
 
@@ -202,6 +224,71 @@ int	main(void)
 		routeGet("/", config, response);
 		TEST(response.getStatusCode() == 404,
 			"a directory without its configured index answers 404");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		HttpResponse	response;
+
+		config.clientMaxBodySize = 4;
+		routePost("/upload.txt", "way over the limit", config, response);
+		TEST(response.getStatusCode() == 413,
+			"a body over the server client_max_body_size answers 413");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		HttpResponse	response;
+
+		config.clientMaxBodySize = 1024;
+		routePost("/upload.txt", "small", config, response);
+		TEST(response.getStatusCode() != 413,
+			"a body under the server client_max_body_size is accepted");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	upload("/docs");
+		HttpResponse	response;
+
+		config.clientMaxBodySize = 1024;
+		upload.clientMaxBodySize = 4;
+		config.locations.push_back(upload);
+		routePost("/docs/upload.txt", "way over the limit", config, response);
+		TEST(response.getStatusCode() == 413,
+			"a location client_max_body_size overrides the server value");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	upload("/docs");
+		HttpResponse	response;
+
+		config.clientMaxBodySize = 4;
+		config.locations.push_back(upload);
+		routePost("/docs/upload.txt", "way over the limit", config, response);
+		TEST(response.getStatusCode() == 413,
+			"a location without client_max_body_size inherits the server value");
+	}
+
+	{
+		ServerConfig	tight = makeServer("index.html");
+		ServerConfig	loose = makeServer("index.html");
+		Router			router;
+		HttpRequest		request;
+		HttpResponse	first;
+		HttpResponse	second;
+
+		tight.clientMaxBodySize = 4;
+		loose.clientMaxBodySize = 1024;
+		request.setMethod("POST");
+		request.setUri("/upload.txt");
+		request.setVersion("HTTP/1.1");
+		request.setBody("way over the limit");
+		router.route(request, first, tight);
+		router.route(request, second, loose);
+		TEST(second.getStatusCode() != 413,
+			"the body limit of one request does not leak into the next");
 	}
 
 	cleanupFixture();

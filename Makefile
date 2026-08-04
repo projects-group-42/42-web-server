@@ -55,7 +55,8 @@ CONFIG_LOADER_TEST_SRC	= tests/config_loader_test.cpp \
 						  src/config/ConfigParser.cpp \
 						  src/config/ConfigLoader.cpp \
 						  src/config/ServerConfig.cpp \
-						  src/utils/Logger.cpp
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
 CONFIG_LOADER_TEST_BIN	= test_config_loader
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
 				  src/cgi/CgiHandler.cpp \
@@ -124,6 +125,27 @@ AUTOINDEX_TEST_SRC	= tests/autoindex_test.cpp \
 					  src/utils/Utils.cpp
 AUTOINDEX_TEST_BIN	= test_autoindex
 
+HOST_SELECTION_TEST_SRC	= tests/host_selection_test.cpp \
+						  src/server/EventLoop.cpp \
+						  src/server/Router.cpp \
+						  src/network/Socket.cpp \
+						  src/network/Connection.cpp \
+						  src/handlers/IRequestHandler.cpp \
+						  src/handlers/StaticFileHandler.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/http/HttpResponse.cpp \
+						  src/http/MimeType.cpp \
+						  src/http/MultipartParser.cpp \
+						  src/http/RequestParser.cpp \
+						  src/http/ResponseBuilder.cpp \
+						  src/cgi/CgiHandler.cpp \
+						  src/cgi/CgiPipes.cpp \
+						  src/cgi/CgiProcess.cpp \
+						  src/config/ServerConfig.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+HOST_SELECTION_TEST_BIN	= test_host_selection
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -143,7 +165,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
@@ -155,6 +177,7 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(REQUEST_PARSER_TEST_BIN)
 	./$(ROUTER_TEST_BIN)
 	./$(AUTOINDEX_TEST_BIN)
+	./$(HOST_SELECTION_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -189,6 +212,9 @@ $(ROUTER_TEST_BIN): $(ROUTER_TEST_SRC)
 $(AUTOINDEX_TEST_BIN): $(AUTOINDEX_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(HOST_SELECTION_TEST_BIN): $(HOST_SELECTION_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -205,6 +231,7 @@ fclean: clean
 	rm -f $(REQUEST_PARSER_TEST_BIN)
 	rm -f $(ROUTER_TEST_BIN)
 	rm -f $(AUTOINDEX_TEST_BIN)
+	rm -f $(HOST_SELECTION_TEST_BIN)
 
 re: fclean all
 

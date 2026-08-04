@@ -12,6 +12,9 @@
 
 #include "config/ConfigLoader.hpp"
 #include "utils/Logger.hpp"
+#include "utils/Utils.hpp"
+#include <cerrno>
+#include <climits>
 #include <stdexcept>
 
 /**
@@ -217,6 +220,8 @@ void	ConfigLoader::applyListen(const std::vector<std::string> &args,
 
 /**
  * @brief Collects every name declared by a server_name directive.
+ * Names are stored lowercased because the host of a request is case-insensitive,
+ * so the Host header can be compared against them directly at request time.
  * @param directive The server_name directive taken from the AST.
  * @param server The server block being filled.
  * @throw std::runtime_error when the directive carries no name.
@@ -227,7 +232,7 @@ void	ConfigLoader::parse_names(const ConfigDirective &directive,
 	if (directive.args.empty())
 		throw std::runtime_error("server_name directive requires a name");
 	for (size_t i = 0; i < directive.args.size(); i++)
-		server.serverNames.push_back(directive.args[i]);
+		server.serverNames.push_back(toLower(directive.args[i]));
 }
 
 /**
@@ -286,6 +291,8 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 		}
 		else if (it->name == "autoindex")
 			parseAutoindex(server.autoindex, *it);
+		else if (it->name == "client_max_body_size")
+			server.clientMaxBodySize = parseBodySize(*it);
 	}
 
 	if (indexes > 1)
@@ -317,7 +324,9 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
  * @brief Applies every location block declared inside a server block.
  * A location without its own root inherits the one of the server, which is
  * resolved at request time by the Router. A location without its own index
- * or autoindex inherits the one of the server it was declared in.
+ * or autoindex inherits the one of the server it was declared in. A location
+ * without its own client_max_body_size keeps the -1 sentinel, so the Router
+ * falls back to the server value at request time.
  * @param block The server block taken from the AST.
  * @param server The server block being filled.
  * @throw std::runtime_error when a location block is malformed.
@@ -347,6 +356,8 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				loc.root = parseRoot(*dit);
 			else if (dit->name == "index")
 				parseIndex(loc.index, *dit);
+			else if (dit->name == "client_max_body_size")
+				loc.clientMaxBodySize = parseBodySize(*dit);
 		}
 
 		if (loc.index.empty())
@@ -402,4 +413,50 @@ void ConfigLoader::parseIndex(std::string &index, const ConfigDirective &d)
 		throw std::runtime_error(
 		    "'index' expects a non-empty file name");
 	index = d.args[0];
+}
+
+/**
+ * @brief Converts a client_max_body_size directive into a byte count.
+ * The value is a number of bytes, optionally suffixed by k, m or g for
+ * kibibytes, mebibytes or gibibytes, mirroring the units NGINX accepts.
+ * @param d The client_max_body_size directive taken from the AST.
+ * @return The maximum body size in bytes.
+ * @throw std::runtime_error when the directive carries anything other than a
+ * single size that fits in a long.
+ */
+long ConfigLoader::parseBodySize(const ConfigDirective &d)
+{
+	if (d.args.size() != 1)
+		throw std::runtime_error(
+		    "'client_max_body_size' expects a single size argument");
+
+	std::string	digits = d.args[0];
+	long		multiplier = 1;
+
+	if (!digits.empty())
+	{
+		char	suffix = digits[digits.size() - 1];
+
+		if (suffix == 'k' || suffix == 'K')
+			multiplier = 1024L;
+		else if (suffix == 'm' || suffix == 'M')
+			multiplier = 1024L * 1024L;
+		else if (suffix == 'g' || suffix == 'G')
+			multiplier = 1024L * 1024L * 1024L;
+		if (multiplier != 1)
+			digits.erase(digits.size() - 1);
+	}
+	if (!isAllDigits(digits))
+		throw std::runtime_error(
+		    "'client_max_body_size' expects a size in bytes, optionally "
+		    "suffixed by k, m or g");
+
+	errno = 0;
+
+	long	value = std::strtol(digits.c_str(), NULL, 10);
+
+	if (errno == ERANGE || value > LONG_MAX / multiplier)
+		throw std::runtime_error(
+		    "'client_max_body_size' value is too large: '" + d.args[0] + "'");
+	return (value * multiplier);
 }

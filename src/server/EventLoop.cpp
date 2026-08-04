@@ -584,15 +584,17 @@ void EventLoop::run(void)
 
 /*
  * Strips the optional port from a Host header, so "site.com:8080" and
- * "site.com" both match a server_name of "site.com".
+ * "site.com" both match a server_name of "site.com". The result is lowercased
+ * because the host of a request is case-insensitive, and server_name values are
+ * stored lowercased for the same reason.
  */
 std::string EventLoop::cleanHostHeader(const std::string &rawHost) const
 {
 	size_t	colon = rawHost.find(':');
 
 	if (colon != std::string::npos)
-		return (rawHost.substr(0, colon));
-	return (rawHost);
+		return (toLower(rawHost.substr(0, colon)));
+	return (toLower(rawHost));
 }
 
 /*

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 00:23:10 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/04 18:37:53 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -240,8 +240,10 @@ static std::string canonicalPath(const std::string &path)
  * Resolve `uri` into a filesystem path inside the document root.
  * The URI is split into segments, collapsing "." and ".." lexically; any ".."
  * that would climb above the root returns an empty string so the caller can
- * answer 403. When the resolved target exists, its canonical path is checked
- * against the canonical root so symlinks cannot escape the document root.
+ * answer 403. The canonical path of the target (when it exists) or of its
+ * parent directory (when it does not, as happens for every upload) is then
+ * checked against the canonical root, so a symlink cannot be used to escape
+ * the document root either directly or by creating a new file through it.
  * A root that cannot be canonicalised (empty or missing) is refused outright:
  * without it there is nothing to confine the request to.
  */
@@ -280,6 +282,12 @@ std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 		return ("");
 
 	std::string	resolved = canonicalPath(path);
+	if (resolved.empty())
+	{
+		size_t	slash = path.find_last_of('/');
+		if (slash != std::string::npos)
+			resolved = canonicalPath(path.substr(0, slash));
+	}
 	if (!resolved.empty() && resolved != root
 		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
 		return ("");

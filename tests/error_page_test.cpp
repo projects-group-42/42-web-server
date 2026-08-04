@@ -332,6 +332,47 @@ static void	test_router_falls_back_on_unreadable_page(void)
 }
 
 /**
+ * @brief Checks that a status raised without a handler still gets its page.
+ * A 405 is answered before any handler runs, so it exercises the branch of
+ * route() that sets an empty body, and its Allow header must survive.
+ */
+static void	test_router_serves_page_without_handler(void)
+{
+	const std::string	root = "tests/tmp_405_root";
+	const std::string	file = root + "/405.html";
+	const std::string	page = "<html><body><h1>Custom 405</h1></body></html>";
+
+	createDirectory(root);
+	writeFile(file, page);
+
+	ServerConfig	config;
+	config.root = root;
+	config.errorPages[405] = "/405.html";
+
+	HttpRequest	request;
+	request.setMethod("PUT");
+	request.setUri("/");
+	request.setVersion("HTTP/1.1");
+	request.setHeaders("Host", "localhost");
+
+	HttpResponse	response;
+	Router			router;
+
+	router.route(request, response, config);
+
+	CHECK_EQ(response.getStatusCode(), 405,
+		"an unsupported method answers 405");
+	CHECK_EQ(response.getBody(), page,
+		"a status raised without a handler still gets its page");
+	CHECK_EQ(response.getHeaderValue("Allow"),
+		std::string("DELETE, GET, POST"),
+		"replacing the body keeps the Allow header");
+
+	remove(file.c_str());
+	rmdir(root.c_str());
+}
+
+/**
  * @brief Checks that a successful answer is never rewritten by an error page.
  */
 static void	test_router_leaves_success_untouched(void)
@@ -377,6 +418,7 @@ int	main(void)
 	test_router_resolves_page_against_location_root();
 	test_router_normalises_root_separator();
 	test_router_falls_back_on_unreadable_page();
+	test_router_serves_page_without_handler();
 	test_router_leaves_success_untouched();
 
 	std::cout << std::endl;

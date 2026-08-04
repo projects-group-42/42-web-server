@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/30 23:11:19 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/31 01:30:37 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/04 18:19:01 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -653,6 +653,110 @@ static void	test_multipart_without_file_part_answers_400(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* Containment: symlink escape                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A symlink inside the document root that points outside of it must not let
+ * an upload escape containment just because the target file does not exist
+ * yet: realpath() fails on the not-yet-created file, but the parent
+ * (the symlink itself) resolves outside the root and must be rejected.
+ */
+static void	test_plain_post_through_symlink_answers_403(void)
+{
+	createDirectoryTree("up_root");
+	mkdir("up_escape", 0755);
+	symlink("../../up_escape", "up_root/uploads/link");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads/link/pwned.txt");
+	request.setBody("escaped the root");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 403,
+		"POST through a symlink escaping the root answers 403");
+	TEST(!fileExists("up_escape/pwned.txt"),
+		"POST through a symlink escaping the root writes nothing outside the root");
+
+	std::remove("up_root/uploads/link");
+	std::remove("up_escape/pwned.txt");
+	rmdir("up_escape");
+	destroyDirectoryTree("up_root");
+}
+
+/*
+ * Same escape attempt via a multipart upload, which resolves the target
+ * path through the same rslv_req_realpath() containment check.
+ */
+static void	test_multipart_through_symlink_answers_403(void)
+{
+	createDirectoryTree("up_root");
+	mkdir("up_escape", 0755);
+	symlink("../../up_escape", "up_root/uploads/link");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+	std::string		body =
+		"--BOUNDARY\r\n"
+		"Content-Disposition: form-data; name=\"file\"; filename=\"pwned.txt\"\r\n"
+		"\r\n"
+		"escaped the root"
+		"\r\n--BOUNDARY--\r\n";
+
+	request.setMethod("POST");
+	request.setUri("/uploads/link");
+	request.setHeaders("Content-Type",
+		"multipart/form-data; boundary=BOUNDARY");
+	request.setBody(body);
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 403,
+		"multipart upload through a symlink escaping the root answers 403");
+	TEST(!fileExists("up_escape/pwned.txt"),
+		"multipart upload through a symlink escaping the root writes nothing outside the root");
+
+	std::remove("up_root/uploads/link");
+	std::remove("up_escape/pwned.txt");
+	rmdir("up_escape");
+	destroyDirectoryTree("up_root");
+}
+
+/*
+ * A legitimate upload into a real subdirectory of the root (no symlink
+ * involved) must keep answering 201, confirming the containment check on
+ * the parent directory does not regress normal uploads.
+ */
+static void	test_plain_post_legit_new_file_still_201(void)
+{
+	createDirectoryTree("up_root");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads/deep/legit.txt");
+	request.setBody("legit content");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 201,
+		"legitimate upload inside the root still answers 201");
+	TEST(readFile("up_root/uploads/deep/legit.txt") == "legit content",
+		"legitimate upload inside the root still writes the correct content");
+
+	std::remove("up_root/uploads/deep/legit.txt");
+	destroyDirectoryTree("up_root");
+}
+
+/* ------------------------------------------------------------------ */
 /* Unwritable target (500)                                              */
 /* ------------------------------------------------------------------ */
 
@@ -704,6 +808,9 @@ int	main(void)
 	test_get_does_not_upload();
 	test_upload_to_missing_directory();
 	test_upload_to_readonly_parent();
+	test_plain_post_through_symlink_answers_403();
+	test_multipart_through_symlink_answers_403();
+	test_plain_post_legit_new_file_still_201();
 	test_post_to_directory_answers_400();
 	test_multipart_without_boundary_answers_400();
 	test_multipart_without_file_part_answers_400();

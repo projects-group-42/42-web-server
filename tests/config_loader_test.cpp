@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/01 18:00:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 18:00:00 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/05 17:42:10 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -747,6 +747,210 @@ static void	test_malformed_cgi_pass_throws(void)
 	     "a cgi_pass extension reduced to a dot throws");
 }
 
+/**
+ * @brief A location without limit_except allows no method of its own.
+ */
+static void	test_location_without_limit_except_is_empty(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n        autoindex on;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	TEST(config.locations[0].allowedMethods.empty(),
+	     "a location without limit_except allows no method");
+}
+
+/**
+ * @brief A limit_except directive collects every method it names, in order.
+ */
+static void	test_limit_except_collects_methods(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n"
+		"        limit_except GET POST DELETE;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(3), "every method is collected");
+	CHECK_EQ(config.locations[0].allowedMethods[0], std::string("GET"),
+	         "the first method is kept in order");
+	CHECK_EQ(config.locations[0].allowedMethods[2], std::string("DELETE"),
+	         "the last method is kept in order");
+}
+
+/**
+ * @brief A method named twice is stored once, across directives too.
+ */
+static void	test_limit_except_deduplicates(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n"
+		"        limit_except GET GET;\n"
+		"        limit_except GET POST;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(2), "a repeated method is stored once");
+	CHECK_EQ(config.locations[0].allowedMethods[1], std::string("POST"),
+	         "a second directive adds to the list");
+}
+
+/**
+ * @brief limit_except is per location, so one never sees another's methods.
+ */
+static void	test_limit_except_is_per_location(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n        limit_except GET;\n    }\n"
+		"    location /uploads {\n        limit_except POST;\n    }\n}\n");
+
+	if (config.locations.size() != 2)
+		return ;
+	CHECK_EQ(config.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(1), "the first location keeps one method");
+	CHECK_EQ(config.locations[1].allowedMethods[0], std::string("POST"),
+	         "the second location keeps its own method");
+}
+
+static void	test_malformed_limit_except_throws(void)
+{
+	TEST(loadThrows("server {\n    location / {\n        limit_except;\n"
+		"    }\n}\n"),
+	     "limit_except without arguments throws");
+	TEST(loadThrows("server {\n    location / {\n        limit_except PUT;\n"
+		"    }\n}\n"),
+	     "a method the server does not implement throws");
+	TEST(loadThrows("server {\n    location / {\n        limit_except get;\n"
+		"    }\n}\n"),
+	     "a lowercased method throws");
+}
+
+/**
+ * @brief A location without return redirects nowhere.
+ */
+static void	test_location_without_return_is_unset(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n        autoindex on;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].returnCode, 0,
+	         "a location without return keeps the 0 sentinel");
+	TEST(config.locations[0].returnUrl.empty(),
+	     "a location without return points nowhere");
+}
+
+/**
+ * @brief A return directive stores its status code and its target.
+ */
+static void	test_return_is_parsed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location /old {\n        return 302 /new;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].returnCode, 302, "the status code is stored");
+	CHECK_EQ(config.locations[0].returnUrl, std::string("/new"),
+	         "the target is stored");
+}
+
+/**
+ * @brief A location declaring return twice keeps the last declaration.
+ */
+static void	test_last_return_wins(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location /old {\n        return 302 /first;\n"
+		"        return 301 /second;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].returnCode, 301,
+	         "the last return code wins");
+	CHECK_EQ(config.locations[0].returnUrl, std::string("/second"),
+	         "the last return target wins");
+}
+
+static void	test_malformed_return_throws(void)
+{
+	TEST(loadThrows("server {\n    location / {\n        return;\n    }\n}\n"),
+	     "return without arguments throws");
+	TEST(loadThrows("server {\n    location / {\n        return 302;\n"
+		"    }\n}\n"),
+	     "return without a target throws");
+	TEST(loadThrows("server {\n    location / {\n        return 302 /a /b;\n"
+		"    }\n}\n"),
+	     "return with more than two arguments throws");
+	TEST(loadThrows("server {\n    location / {\n        return 3o2 /a;\n"
+		"    }\n}\n"),
+	     "a non-numeric return code throws");
+	TEST(loadThrows("server {\n    location / {\n        return 404 /a;\n"
+		"    }\n}\n"),
+	     "a return code outside 300-399 throws");
+}
+
+/**
+ * @brief A location without upload_store stores uploads nowhere.
+ */
+static void	test_location_without_upload_store_is_empty(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n        autoindex on;\n    }\n}\n");
+
+	if (config.locations.empty())
+		return ;
+	TEST(config.locations[0].uploadStore.empty(),
+	     "a location without upload_store keeps no directory");
+}
+
+/**
+ * @brief An upload_store directive stores its directory, trailing slash apart.
+ */
+static void	test_upload_store_is_parsed(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location /uploads {\n"
+		"        upload_store www/uploads;\n    }\n"
+		"    location /other {\n"
+		"        upload_store www/other/;\n    }\n}\n");
+
+	if (config.locations.size() != 2)
+		return ;
+	CHECK_EQ(config.locations[0].uploadStore, std::string("www/uploads"),
+	         "the upload directory is stored");
+	CHECK_EQ(config.locations[1].uploadStore, std::string("www/other"),
+	         "a trailing slash is trimmed");
+}
+
+static void	test_malformed_upload_store_throws(void)
+{
+	TEST(loadThrows("server {\n    location / {\n        upload_store;\n"
+		"    }\n}\n"),
+	     "upload_store without arguments throws");
+	TEST(loadThrows("server {\n    location / {\n"
+		"        upload_store a b;\n    }\n}\n"),
+	     "upload_store with extra arguments throws");
+}
+
+static void	test_unknown_directive_throws(void)
+{
+	TEST(loadThrows("server {\n    listen 8080;\n    autoindexx on;\n}\n"),
+	     "an unknown server directive throws");
+	TEST(loadThrows("server {\n    location / {\n        rooot www;\n"
+		"    }\n}\n"),
+	     "an unknown location directive throws");
+	TEST(loadThrows("server {\n    location / {\n        listen 8080;\n"
+		"    }\n}\n"),
+	     "a server directive inside a location throws");
+	TEST(loadThrows("server {\n    limit_except GET;\n}\n"),
+	     "a location directive inside a server throws");
+}
+
 static void	test_static_helpers(void)
 {
 	CHECK_EQ(ConfigLoader::parsePort("8080"), 8080,
@@ -809,6 +1013,19 @@ int	main(void)
 	test_last_cgi_pass_wins();
 	test_cgi_pass_is_per_location();
 	test_malformed_cgi_pass_throws();
+	test_location_without_limit_except_is_empty();
+	test_limit_except_collects_methods();
+	test_limit_except_deduplicates();
+	test_limit_except_is_per_location();
+	test_malformed_limit_except_throws();
+	test_location_without_return_is_unset();
+	test_return_is_parsed();
+	test_last_return_wins();
+	test_malformed_return_throws();
+	test_location_without_upload_store_is_empty();
+	test_upload_store_is_parsed();
+	test_malformed_upload_store_throws();
+	test_unknown_directive_throws();
 	test_static_helpers();
 
 	std::cout << std::endl;

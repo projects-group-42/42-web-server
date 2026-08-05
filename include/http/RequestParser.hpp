@@ -20,6 +20,8 @@
 
 #define MAX_URI_LENGTH 2048
 #define MAX_HEADER_SIZE 8192
+#define MAX_REQUEST_LINE_SIZE (MAX_URI_LENGTH + 1024)
+#define DEFAULT_MAX_BODY_SIZE (1 * 1024 * 1024)
 
 typedef enum e_psr_state
 {
@@ -42,9 +44,15 @@ class RequestParser
 		HttpRequest	_request;
 		int			_error_code;
 		size_t		_chunk_size;
+		size_t		_content_length;
+		size_t		_chunked_total;
+		long		_max_body_size;
 
 		void				setErrorState(int status_code);
 		bool				isValidVersion(const std::string &version) const;
+		bool				bodyLimitExceeded(size_t size) const;
+		bool				checkBufferLimit(void);
+		bool				parseContentLength(void);
 
 	public:
 		RequestParser(void);
@@ -55,6 +63,7 @@ class RequestParser
 
 		void feed(const char *buffer, ssize_t bytes_read);
 		void reset(void);
+		void setMaxBodySize(long maxBodySize);
 		t_psr_state	get_psr_state(void) const;
 		int			get_error_code(void) const;
 		std::string str_extract(std::string str_find, int nbr);

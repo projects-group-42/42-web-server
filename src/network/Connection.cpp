@@ -106,6 +106,16 @@ void	Connection::set_keep_alive(bool keep_alive)
 }
 
 /*
+ * Caps how large a body the parser of this connection buffers before it
+ * answers 413, so an oversized upload is refused while it is being read
+ * instead of after it has been held whole in memory.
+ */
+void	Connection::setMaxBodySize(long maxBodySize)
+{
+	_parser.setMaxBodySize(maxBodySize);
+}
+
+/*
  * Returns whether this connection is to be reused after the response.
  */
 bool	Connection::get_keep_alive(void) const

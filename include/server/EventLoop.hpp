@@ -41,6 +41,7 @@ class EventLoop
 		EventLoop&	operator=(const EventLoop &other);
 
 		bool	isPortBound(int port) const;
+		long	maxBodySizeForPort(int port) const;
 		bool	isMasterSocket(int fd) const;
 		void	acceptClients(int fd);
 		bool	handleClient(int fd);

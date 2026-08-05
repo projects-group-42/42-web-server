@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/19 15:11:15 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 17:37:02 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,6 +42,7 @@ class RequestParser
 		HttpRequest	_request;
 		int			_error_code;
 		size_t		_chunk_size;
+		size_t		_max_body_size;
 
 		void				setErrorState(int status_code);
 		bool				isValidVersion(const std::string &version) const;
@@ -53,19 +54,20 @@ class RequestParser
 		RequestParser& operator=(const RequestParser &other);
 		~RequestParser(void);
 
-		void feed(const char *buffer, ssize_t bytes_read);
-		void reset(void);
-		t_psr_state	get_psr_state(void) const;
-		int			get_error_code(void) const;
-		std::string str_extract(std::string str_find, int nbr);
-		bool prs_method(void);
-		bool prs_headers(void);
-		bool prs_body(void);
-		const HttpRequest& getRequest(void) const;
-		std::string percent_decoding(std::string str);
-		bool prs_chunked_size(void);
-		bool prs_chunked_data(void);
-		bool prs_chunked_trailer(void);
+		void				feed(const char *buffer		, ssize_t bytes_read);
+		void				reset(void);
+		t_psr_state			get_psr_state(void) const;
+		int					get_error_code(void) const;
+		std::string			str_extract(std::string str_find, int nbr);
+		bool				prs_method(void);
+		bool				prs_headers(void);
+		bool				prs_body(void);
+		bool				prs_chunked_size(void);
+		bool				prs_chunked_data(void);
+		bool				prs_chunked_trailer(void);
+		const HttpRequest&	getRequest(void) const;
+		std::string			percent_decoding(std::string str);
+		void				setMaxBodySize(size_t max_body_size);
 };
 
 #endif

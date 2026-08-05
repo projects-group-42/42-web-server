@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:20:37 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 22:41:35 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 17:54:41 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,15 +17,17 @@
 #include <ctime>
 #include <sys/types.h>
 #include <http/RequestParser.hpp>
+# include "config/ServerConfig.hpp"
 
 class Connection
 {
 	private:
-		int				_client_fd;
-		std::string		_write_buffer;
-		time_t			_time;
-		RequestParser	_parser;
-		bool			_keep_alive;
+		int					_client_fd;
+		std::string			_write_buffer;
+		time_t				_time;
+		RequestParser		_parser;
+		bool				_keep_alive;
+		const ServerConfig*	_server_cfg;
 
 	public:
 		Connection(void);
@@ -47,5 +49,8 @@ class Connection
 		int					get_error_code(void) const;
 		const HttpRequest&	getRequest(void) const;
 		int					getLocalPort(void) const;
+
+		void setServerCfg(const ServerConfig* cfg);
+		const ServerConfig* getServerCfg() const { return _server_cfg; }
 };
 #endif

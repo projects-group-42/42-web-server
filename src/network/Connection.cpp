@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 22:43:48 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 17:55:35 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,11 +15,11 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
-Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser(), _keep_alive(false)
+Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser(), _keep_alive(false), _server_cfg(NULL)
 {
 }
 
-Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _parser(), _keep_alive(false)
+Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _parser(), _keep_alive(false), _server_cfg(NULL)
 {
 }
 
@@ -28,7 +28,8 @@ Connection::Connection(const Connection &copy)
 	  _write_buffer(copy._write_buffer),
 	  _time(copy._time),
 	  _parser(copy._parser),
-	  _keep_alive(copy._keep_alive)
+	  _keep_alive(copy._keep_alive),
+	  _server_cfg(copy._server_cfg)
 {
 	const_cast<Connection&>(copy)._client_fd = -1;
 }
@@ -45,6 +46,7 @@ Connection &Connection::operator=(const Connection &other)
 		_time = other._time;
 		_parser = other._parser;
 		_keep_alive = other._keep_alive;
+		_server_cfg = other._server_cfg;
 	}
 	return (*this);
 }
@@ -156,4 +158,13 @@ int Connection::getLocalPort(void) const
 
 	// Retorna a porta convertida para o formato legível (Host Byte Order)
 	return ntohs(address.sin_port);
+}
+
+void Connection::setServerCfg(const ServerConfig* cfg)
+{
+	_server_cfg = cfg;
+	if (cfg)
+		_parser.setMaxBodySize(cfg->clientMaxBodySize);
+	else
+		_parser.setMaxBodySize(1024 * 1024);
 }

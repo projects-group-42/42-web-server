@@ -91,6 +91,8 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 			}
 			else if (it->name == "error_page")
 				parse_error_page(*it, current_server);
+			else if (it->name == "client_max_body_size")
+				parse_client_max_body_size(*it, current_server);
 		}
 		std::vector<ConfigBlock>::const_iterator child_it;
 		for (child_it = block_it->children.begin(); child_it != block_it->children.end(); ++child_it)
@@ -211,3 +213,25 @@ LocationConfig ConfigLoader::parse_location(const ConfigBlock &block)
 	return (location);
 }
 
+void ConfigLoader::parse_client_max_body_size(
+	const ConfigDirective &directive,
+	ServerConfig &server)
+{
+	if (directive.args.empty())
+		throw std::runtime_error("client_max_body_size directive requires an argument");
+
+	size_t max_body = std::strtoul(directive.args[0].c_str(), NULL, 10);
+	if (directive.args[0].find('K') != std::string::npos || directive.args[0].find('k') != std::string::npos)
+	{
+		max_body *= 1024;
+	}
+	else if (directive.args[0].find('M') != std::string::npos || directive.args[0].find('m') != std::string::npos)
+	{
+		max_body *= 1024 * 1024;
+	}
+	else if (directive.args[0].find('G') != std::string::npos || directive.args[0].find('g') != std::string::npos)
+	{
+		max_body *= 1024 * 1024 * 1024;
+	}
+	server.clientMaxBodySize = max_body;
+}

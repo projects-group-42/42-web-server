@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 22:45:30 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 17:14:57 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,6 +34,7 @@ class EventLoop
 		CgiHandler					_cgiHandler;
 		std::map<int, CgiProcess*>	_cgi;
 		std::map<int, int>			_pipeToClient;
+		std::map<int, size_t>		_lstServers;
 
 		bool	isMasterSocket(int fd) const;
 		void	acceptClients(int fd);

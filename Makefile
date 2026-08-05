@@ -62,8 +62,26 @@ ERROR_PAGE_TEST_SRC	= tests/error_page_test.cpp \
 		       src/http/HttpResponse.cpp \
 		       src/http/ResponseBuilder.cpp \
 		       src/http/MimeType.cpp \
-		       src/utils/Logger.cpp \
+		       src/utils/Logger.cpp \		       src/utils/Utils.cpp
+ERROR_PAGE_TEST_BIN	= test_error_page
 
+CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
+			  src/cgi/CgiHandler.cpp \
+			  src/cgi/CgiPipes.cpp \
+			  src/http/HttpRequest.cpp \
+			  src/http/HttpResponse.cpp \
+			  src/utils/Utils.cpp
+CGI_TEST_BIN	= test_cgi
+
+MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
+			  src/http/MultipartParser.cpp \
+			  src/http/HttpRequest.cpp \
+			  src/http/HttpResponse.cpp \
+			  src/http/MimeType.cpp \
+			  src/handlers/IRequestHandler.cpp \
+			  src/handlers/StaticFileHandler.cpp \
+			  src/utils/Utils.cpp
+MULTIPART_TEST_BIN	= test_multipart
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP

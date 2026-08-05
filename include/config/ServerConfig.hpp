@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ServerConfig.hpp                                   :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 19:31:52 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/20 23:12:19 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/03 12:20:23 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,7 +28,7 @@ struct LocationConfig
 	std::string					cgiPass;
 	int							returnCode;
 	std::string					returnUrl;
-	long						clientMaxBodySize;
+	size_t						clientMaxBodySize;
 	LocationConfig(void);
 	LocationConfig(const std::string &path);
 };
@@ -41,7 +41,7 @@ struct ServerConfig
 	std::string					root;
 	std::string					index;
 	std::map<int, std::string>	errorPages;
-	long						clientMaxBodySize;
+	size_t						clientMaxBodySize;
 	std::vector<LocationConfig>	locations;
 	ServerConfig(void);
 };

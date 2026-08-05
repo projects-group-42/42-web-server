@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 16:24:41 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 17:51:07 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,11 +16,11 @@
 # include <cctype>
 
 RequestParser::RequestParser(void)
-	: _buffer(""), _len(0), _psr_state(REQUEST_LINE), _error_code(0)
+	: _buffer(""), _len(0), _psr_state(REQUEST_LINE), _error_code(0), _max_body_size(1024 * 1024)
 {
 }
 RequestParser::RequestParser(std::string buffer, ssize_t len)
-	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE), _error_code(0)
+	: _buffer(buffer), _len(len), _psr_state(REQUEST_LINE), _error_code(0), _max_body_size(1024 * 1024)
 {
 }
 
@@ -38,6 +38,7 @@ RequestParser& RequestParser::operator=(const RequestParser &other)
 		_psr_state = other._psr_state;
 		_request = other._request;
 		_error_code = other._error_code;
+		_max_body_size = other._max_body_size;
 	}
 	return (*this);
 }
@@ -134,7 +135,15 @@ bool RequestParser::prs_chunked_size(void)
 	if (_chunk_size == 0)
 		_psr_state = CHUNK_TRAILER;
 	else
+	{
+		if (_chunk_size != 0 &&_request.getBody().size() + _chunk_size > _max_body_size)
+		{
+			Logger::error("413 Content Too Large");
+			setErrorState(413);
+			return true;
+		}
 		_psr_state = CHUNK_DATA;
+	}
 	return false;
 }
 
@@ -146,6 +155,12 @@ bool RequestParser::prs_chunked_data(void)
 	{
 		Logger::error("400 Bad Request");
 		setErrorState(400);
+		return true;
+	}
+	if (_request.getBody().size() + _chunk_size > _max_body_size)
+	{
+		Logger::error("413 Content Too Large");
+		setErrorState(413);
 		return true;
 	}
 	_request.setBody(_buffer.substr(0, _chunk_size));
@@ -173,19 +188,23 @@ bool RequestParser::prs_chunked_trailer(void)
 
 bool RequestParser::prs_body(void)
 {
-	//h_size é p tamanho do body declarado no header
 	size_t h_size = strtoul(_request.getHeaderValue("Content-Length").c_str(), NULL, 10);
 	if (h_size == 0)
 	{
 		_psr_state = COMPLETE;
 		return true;
 	}
-	//b_size é o tamanho do body
+	if (h_size > _max_body_size)
+	{
+		Logger::error("413 Content Too Large");
+		setErrorState(413);
+		return true;
+	}
 	size_t b_size = _buffer.size();
-	//se o tamnho declarado no header for maior que o do buffer retorna falso e le de novo
+
 	if (h_size > b_size)
 		return false;
-	//temp lê do buffer até o tamanho do header
+
 	std::string temp = _buffer.substr(0, h_size);
 	_request.setBody(temp);
 	_buffer.erase(0, h_size);
@@ -378,6 +397,7 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		else
 			_psr_state = BODY;
 	}
+	if (_psr_state == BODY || _psr_state == CHUNK_SIZE)
 	while (_psr_state == CHUNK_SIZE || _psr_state == CHUNK_DATA
 		|| _psr_state == CHUNK_TRAILER)
 	{
@@ -396,4 +416,9 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 		prs_body();
 		return;
 	}
+}
+
+void RequestParser::setMaxBodySize(size_t max_body_size)
+{
+	_max_body_size = max_body_size;
 }

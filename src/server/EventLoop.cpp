@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/02 00:31:30 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 17:26:34 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -96,6 +96,7 @@ void EventLoop::setupSockets(void)
 			Logger::info(oss.str());
 
 			_sckt.push_back(sckt);
+			_lstServers[sckt->getFd()] = i;
 			bound_ports.push_back(current_port);
 		}
 	}
@@ -117,13 +118,20 @@ void EventLoop::acceptClients(int fd)
 		int client = accept(fd, NULL, NULL);
 		if (client == -1)
 			break;
+
 		setNonBlocking(client);
+
 		struct pollfd pfd;
 		pfd.fd = client;
 		pfd.events = POLLIN;
 		pfd.revents = 0;
+
 		_fds.push_back(pfd);
 		_clients[client] = Connection(client);
+
+		if (_lstServers.count(fd))
+			_clients[client].setServerCfg(&_configs[_lstServers[fd]]);
+
 		Logger::info("New client connected.");
 	}
 }
@@ -195,8 +203,9 @@ void EventLoop::handleRequest(int fd)
 {
 	Connection	&conn = _clients[fd];
 	ResponseBuilder	builder;
-	int clientPort = conn.getLocalPort(); // (Ou de onde você guarda a porta)
-	const ServerConfig& chosenConfig = getServerConfigForRequest(clientPort, conn.getRequest());
+	const ServerConfig *assigned = conn.getServerCfg();
+	const ServerConfig& chosenConfig = assigned ? *assigned
+			: getServerConfigForRequest(conn.getLocalPort(), conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	if (_cgiHandler.isCgiRequest(conn.getRequest().getUri()))

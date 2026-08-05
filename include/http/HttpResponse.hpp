@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/12 13:37:03 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/06/29 19:04:29 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/03 10:37:16 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,7 +35,7 @@ class HttpResponse
 		~HttpResponse(void);
 
 		const std::string&	getVersion(void) const;
-		int			getStatusCode(void) const;
+		int					getStatusCode(void) const;
 		const std::map<std::string,
 			std::string>&	getHeaders(void) const;
 		const std::string	getHeaderValue(const std::string &key) const;

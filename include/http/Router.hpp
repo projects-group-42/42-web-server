@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 22:23:50 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/03 22:18:44 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,11 +15,12 @@
 
 # include <string>
 # include <map>
-# include "http/IRequestHandler.hpp"
-# include "http/StaticFileHandler.hpp"
+# include "handlers/IRequestHandler.hpp"
+# include "handlers/StaticFileHandler.hpp"
 # include "http/HttpRequest.hpp"
 # include "http/HttpResponse.hpp"
 # include "http/ResponseBuilder.hpp"
+# include "config/ServerConfig.hpp"
 
 class Router
 {
@@ -31,6 +32,19 @@ class Router
 		IRequestHandler	*resolveHandler(const std::string &method,
 				const std::string &uri, bool &pathFound,
 				std::string &allow);
+		const LocationConfig
+						*matchLocation(const std::string &uri,
+				const ServerConfig &config) const;
+		std::string		resolveRoot(const std::string &uri,
+				const ServerConfig &config) const;
+		std::string		resolveIndex(const std::string &uri,
+				const ServerConfig &config) const;
+		bool			resolveAutoindex(const std::string &uri,
+				const ServerConfig &config) const;
+		long			resolveMaxBodySize(const std::string &uri,
+				const ServerConfig &config) const;
+		void			applyErrorPage(const HttpRequest &request,
+				HttpResponse &response, const ServerConfig &config) const;
 
 	public:
 		Router(void);
@@ -40,7 +54,14 @@ class Router
 		~Router(void);
 
 		bool	route(const HttpRequest &request,
-					HttpResponse &response);
+					HttpResponse &response, const ServerConfig &config);
+
+		std::string		resolveCgiInterpreter(const std::string &uri,
+					const ServerConfig &config) const;
+
+		static bool	loadErrorPage(const ServerConfig &config,
+					const std::string &root, int status,
+					std::string &body, std::string &contentType);
 
 		void	addHandler(const std::string &method,
 					const std::string &path, IRequestHandler *handler);

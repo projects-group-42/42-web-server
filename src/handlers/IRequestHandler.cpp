@@ -3,14 +3,14 @@
 /*                                                        :::      ::::::::   */
 /*   IRequestHandler.cpp                                :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/29 16:22:14 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 21:32:42 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/07/19 14:46:00 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "http/IRequestHandler.hpp"
+#include "handlers/IRequestHandler.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 

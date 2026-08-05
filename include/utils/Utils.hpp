@@ -19,5 +19,8 @@
 void		setNonBlocking(int fd);
 std::string	toLower(const std::string &str);
 std::string	getHttpDate(void);
+std::string	htmlEscape(const std::string &str);
+std::string	urlEncodePath(const std::string &str);
+std::string	urlEncodeSegment(const std::string &str);
 
 #endif

@@ -1,5 +1,22 @@
 # binário
 webserv
+# test binaries
+test_mime
+test_lexer
+test_parser
+test_cgi
+test_cgi_process
+test_server_config
+test_config_loader
+test_multipart
+test_upload_suite
+test_request_parser
+test_config_loader
+test_router
+test_autoindex
+test_host_selection
+test_error_page
+tests/tmp_router/
 # build artifacts
 obj/
 *.o

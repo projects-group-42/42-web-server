@@ -1,4 +1,5 @@
 NAME		= webserv
+SRC			= $(shell find src -name "*.cpp")
 
 SRC_FILES	= main.cpp \
 			  network/Socket.cpp \
@@ -11,11 +12,18 @@ SRC_FILES	= main.cpp \
 			  http/MimeType.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
-			  http/IRequestHandler.cpp \
-			  http/StaticFileHandler.cpp \
-			  http/Router.cpp \
+			  http/MultipartParser.cpp \
+			  handlers/IRequestHandler.cpp \
+			  handlers/StaticFileHandler.cpp \
+			  server/Router.cpp \
 			  cgi/CgiHandler.cpp \
-			  config/Lexer.cpp
+			  cgi/CgiPipes.cpp \
+			  cgi/CgiProcess.cpp \
+			  config/Lexer.cpp \
+			  config/ConfigAST.cpp \
+			  config/ConfigParser.cpp \
+			  config/ConfigLoader.cpp \
+			  config/ServerConfig.cpp
 SRC			= $(addprefix src/, $(SRC_FILES))
 
 OBJ_DIR		= obj
@@ -30,6 +38,145 @@ TEST_BIN	= test_mime
 LEXER_TEST_SRC	= tests/config_lexer_test.cpp \
 				  src/config/Lexer.cpp
 LEXER_TEST_BIN	= test_lexer
+
+PARSER_TEST_SRC	= tests/config_parser_test.cpp \
+				  src/config/Lexer.cpp \
+				  src/config/ConfigAST.cpp \
+				  src/config/ConfigParser.cpp
+PARSER_TEST_BIN	= test_parser
+
+SERVER_CONFIG_TEST_SRC	= tests/server_config_test.cpp \
+						  src/config/ServerConfig.cpp
+SERVER_CONFIG_TEST_BIN	= test_server_config
+
+CONFIG_LOADER_TEST_SRC	= tests/config_loader_test.cpp \
+						  src/config/Lexer.cpp \
+						  src/config/ConfigAST.cpp \
+						  src/config/ConfigParser.cpp \
+						  src/config/ConfigLoader.cpp \
+						  src/config/ServerConfig.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+CONFIG_LOADER_TEST_BIN	= test_config_loader
+CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
+				  src/cgi/CgiHandler.cpp \
+				  src/cgi/CgiPipes.cpp \
+				  src/http/HttpRequest.cpp \
+				  src/http/HttpResponse.cpp \
+				  src/utils/Utils.cpp
+CGI_TEST_BIN	= test_cgi
+
+CGI_PROCESS_TEST_SRC	= tests/cgi_process_test.cpp \
+						  src/cgi/CgiProcess.cpp \
+						  src/cgi/CgiPipes.cpp
+CGI_PROCESS_TEST_BIN	= test_cgi_process
+
+CGI_SUITE_TEST_SRC	= tests/cgi_suite_test.cpp \
+					  src/cgi/CgiHandler.cpp \
+					  src/cgi/CgiProcess.cpp \
+					  src/cgi/CgiPipes.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/utils/Utils.cpp
+CGI_SUITE_TEST_BIN	= test_cgi_suite
+
+MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/utils/Utils.cpp
+MULTIPART_TEST_BIN	= test_multipart
+
+UPLOAD_SUITE_TEST_SRC	= tests/upload_suite_test.cpp \
+						  src/http/MultipartParser.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/http/HttpResponse.cpp \
+						  src/http/MimeType.cpp \
+						  src/handlers/IRequestHandler.cpp \
+						  src/handlers/StaticFileHandler.cpp \
+						  src/utils/Utils.cpp
+UPLOAD_SUITE_TEST_BIN	= test_upload_suite
+
+REQUEST_PARSER_TEST_SRC	= tests/request_parser_test.cpp \
+						  src/http/RequestParser.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+REQUEST_PARSER_TEST_BIN	= test_request_parser
+
+ROUTER_TEST_SRC	= tests/router_test.cpp \
+				  src/server/Router.cpp \
+				  src/handlers/IRequestHandler.cpp \
+				  src/handlers/StaticFileHandler.cpp \
+				  src/http/HttpRequest.cpp \
+				  src/http/HttpResponse.cpp \
+				  src/http/MimeType.cpp \
+				  src/http/MultipartParser.cpp \
+				  src/http/ResponseBuilder.cpp \
+				  src/config/ServerConfig.cpp \
+				  src/utils/Logger.cpp \
+				  src/utils/Utils.cpp
+ROUTER_TEST_BIN	= test_router
+
+AUTOINDEX_TEST_SRC	= tests/autoindex_test.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/server/Router.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/ResponseBuilder.cpp \
+					  src/config/Lexer.cpp \
+					  src/config/ConfigAST.cpp \
+					  src/config/ConfigParser.cpp \
+					  src/config/ConfigLoader.cpp \
+					  src/config/ServerConfig.cpp \
+					  src/utils/Logger.cpp \
+					  src/utils/Utils.cpp
+AUTOINDEX_TEST_BIN	= test_autoindex
+
+HOST_SELECTION_TEST_SRC	= tests/host_selection_test.cpp \
+						  src/server/EventLoop.cpp \
+						  src/server/Router.cpp \
+						  src/network/Socket.cpp \
+						  src/network/Connection.cpp \
+						  src/handlers/IRequestHandler.cpp \
+						  src/handlers/StaticFileHandler.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/http/HttpResponse.cpp \
+						  src/http/MimeType.cpp \
+						  src/http/MultipartParser.cpp \
+						  src/http/RequestParser.cpp \
+						  src/http/ResponseBuilder.cpp \
+						  src/cgi/CgiHandler.cpp \
+						  src/cgi/CgiPipes.cpp \
+						  src/cgi/CgiProcess.cpp \
+						  src/config/ServerConfig.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+HOST_SELECTION_TEST_BIN	= test_host_selection
+
+ERROR_PAGE_TEST_SRC	= tests/error_page_test.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/server/Router.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/ResponseBuilder.cpp \
+					  src/config/Lexer.cpp \
+					  src/config/ConfigAST.cpp \
+					  src/config/ConfigParser.cpp \
+					  src/config/ConfigLoader.cpp \
+					  src/config/ServerConfig.cpp \
+					  src/utils/Logger.cpp \
+					  src/utils/Utils.cpp
+ERROR_PAGE_TEST_BIN	= test_error_page
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -50,14 +197,67 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
+	./$(PARSER_TEST_BIN)
+	./$(SERVER_CONFIG_TEST_BIN)
+	./$(CONFIG_LOADER_TEST_BIN)
+	./$(CGI_TEST_BIN)
+	./$(CGI_PROCESS_TEST_BIN)
+	./$(CGI_SUITE_TEST_BIN)
+	./$(MULTIPART_TEST_BIN)
+	./$(UPLOAD_SUITE_TEST_BIN)
+	./$(REQUEST_PARSER_TEST_BIN)
+	./$(ROUTER_TEST_BIN)
+	./$(AUTOINDEX_TEST_BIN)
+	./$(HOST_SELECTION_TEST_BIN)
+	./$(ERROR_PAGE_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(LEXER_TEST_BIN): $(LEXER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(PARSER_TEST_BIN): $(PARSER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(SERVER_CONFIG_TEST_BIN): $(SERVER_CONFIG_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CONFIG_LOADER_TEST_BIN): $(CONFIG_LOADER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CGI_TEST_BIN): $(CGI_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CGI_PROCESS_TEST_BIN): $(CGI_PROCESS_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(CGI_SUITE_TEST_BIN): $(CGI_SUITE_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(MULTIPART_TEST_BIN): $(MULTIPART_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(UPLOAD_SUITE_TEST_BIN): $(UPLOAD_SUITE_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(REQUEST_PARSER_TEST_BIN): $(REQUEST_PARSER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(ROUTER_TEST_BIN): $(ROUTER_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(AUTOINDEX_TEST_BIN): $(AUTOINDEX_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(HOST_SELECTION_TEST_BIN): $(HOST_SELECTION_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(ERROR_PAGE_TEST_BIN): $(ERROR_PAGE_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
@@ -67,6 +267,19 @@ fclean: clean
 	rm -f $(NAME)
 	rm -f $(TEST_BIN)
 	rm -f $(LEXER_TEST_BIN)
+	rm -f $(PARSER_TEST_BIN)
+	rm -f $(SERVER_CONFIG_TEST_BIN)
+	rm -f $(CONFIG_LOADER_TEST_BIN)
+	rm -f $(CGI_TEST_BIN)
+	rm -f $(CGI_PROCESS_TEST_BIN)
+	rm -f $(CGI_SUITE_TEST_BIN)
+	rm -f $(MULTIPART_TEST_BIN)
+	rm -f $(UPLOAD_SUITE_TEST_BIN)
+	rm -f $(REQUEST_PARSER_TEST_BIN)
+	rm -f $(ROUTER_TEST_BIN)
+	rm -f $(AUTOINDEX_TEST_BIN)
+	rm -f $(HOST_SELECTION_TEST_BIN)
+	rm -f $(ERROR_PAGE_TEST_BIN)
 
 re: fclean all
 

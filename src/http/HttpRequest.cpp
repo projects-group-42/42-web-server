@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/06/29 16:44:05 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/19 14:36:24 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -105,7 +105,7 @@ void	HttpRequest::setHeaders(const std::string &key, const std::string &value)
 
 void	HttpRequest::setBody(const std::string &body)
 {
-	_body = body;
+	_body += body;
 }
 
 bool	HttpRequest::hasHeader(const std::string &key) const

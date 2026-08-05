@@ -1,0 +1,2 @@
+CompileFlags:
+  Add: [-I/Users/gyasminalves/Desktop/42sp/milestone#5/42-web-server/include, -std=c++98]

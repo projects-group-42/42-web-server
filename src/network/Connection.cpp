@@ -3,15 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   Connection.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/01 17:40:01 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:43:48 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "network/Connection.hpp"
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <unistd.h>
 
 Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser(), _keep_alive(false)
@@ -105,6 +106,16 @@ void	Connection::set_keep_alive(bool keep_alive)
 }
 
 /*
+ * Caps how large a body the parser of this connection buffers before it
+ * answers 413, so an oversized upload is refused while it is being read
+ * instead of after it has been held whole in memory.
+ */
+void	Connection::setMaxBodySize(long maxBodySize)
+{
+	_parser.setMaxBodySize(maxBodySize);
+}
+
+/*
  * Returns whether this connection is to be reused after the response.
  */
 bool	Connection::get_keep_alive(void) const
@@ -140,4 +151,19 @@ int Connection::get_error_code(void) const
 const HttpRequest& Connection::getRequest(void) const
 {
 	return _parser.getRequest();
+}
+
+/*
+ * Returns the local port this connection was accepted on, so the request can
+ * be matched against the server blocks listening on it. Returns 0 when the
+ * socket cannot be queried.
+ */
+int Connection::getLocalPort(void) const
+{
+	struct sockaddr_in	address;
+	socklen_t			len = sizeof(address);
+
+	if (getsockname(_client_fd, (struct sockaddr *)&address, &len) == -1)
+		return (0);
+	return (ntohs(address.sin_port));
 }

@@ -129,7 +129,8 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 	     block_it != _tree.children.end(); ++block_it)
 	{
 		if (block_it->name != "server")
-			continue;
+			throw std::runtime_error("unknown block '" + block_it->name
+				+ "' at the top level");
 
 		ServerConfig	server;
 
@@ -345,7 +346,8 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 	for (it = block.children.begin(); it != block.children.end(); ++it)
 	{
 		if (it->name != "location")
-			continue;
+			throw std::runtime_error("unknown block '" + it->name
+				+ "' in server block");
 		if (it->args.empty())
 			throw std::runtime_error("location block requires a path argument");
 

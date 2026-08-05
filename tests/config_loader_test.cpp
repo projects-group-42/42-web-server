@@ -949,6 +949,11 @@ static void	test_unknown_directive_throws(void)
 	     "a server directive inside a location throws");
 	TEST(loadThrows("server {\n    limit_except GET;\n}\n"),
 	     "a location directive inside a server throws");
+	TEST(loadThrows("server {\n    locationn / {\n        autoindex on;\n"
+		"    }\n}\n"),
+	     "an unknown block inside a server throws");
+	TEST(loadThrows("http {\n    server {\n        listen 8080;\n    }\n}\n"),
+	     "an unknown block at the top level throws");
 }
 
 static void	test_static_helpers(void)

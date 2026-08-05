@@ -12,6 +12,7 @@
 
 # include "http/RequestParser.hpp"
 # include "utils/Logger.hpp"
+# include "utils/Utils.hpp"
 # include <iostream>
 # include <cctype>
 # include <limits>
@@ -185,10 +186,19 @@ const HttpRequest& RequestParser::getRequest(void) const
 	return (_request);
 }
 
+/*
+ * Fails the request with the given status. Whatever is left in _buffer is
+ * dropped: once a request is malformed the byte stream can no longer be split
+ * into requests the way the client meant it, so the remainder is not a
+ * pipelined request the server may answer. Keeping it would let reset() parse
+ * it on the next turn of a kept-alive connection and dispatch bytes the client
+ * smuggled inside the request that was just refused.
+ */
 void RequestParser::setErrorState(int status_code)
 {
 	_error_code = status_code;
 	_psr_state = ERROR;
+	_buffer.clear();
 }
 
 int RequestParser::get_error_code(void) const
@@ -314,6 +324,14 @@ bool RequestParser::prs_body(void)
 	return true;
 }
 
+/*
+ * Reads the header block into the request. Headers are stored in a map keyed by
+ * their lowercased name, so a repeated Content-Length would silently overwrite
+ * the first one and leave the server reading a body of a length the client may
+ * not have meant. RFC 7230 3.3.3 requires the request to be refused instead:
+ * the second Content-Length is caught here, while the field values are still
+ * separate, and answers 400.
+ */
 bool RequestParser::prs_headers(void)
 {
 	if (_buffer.size() > MAX_HEADER_SIZE)
@@ -334,6 +352,13 @@ bool RequestParser::prs_headers(void)
 		std::string str_value = str_extract("\r\n", 2);
 		if (!_buffer.empty() && _buffer[0] == ' ')
 			_buffer.erase(0, 1);
+		if (toLower(str_key) == "content-length"
+			&& _request.hasHeader("Content-Length"))
+		{
+			Logger::error("400 Bad Request: duplicated Content-Length");
+			setErrorState(400);
+			return (false);
+		}
 		_request.setHeaders(str_key, str_value);
 	}
 	std::string str_value = str_extract("\r\n", 2);

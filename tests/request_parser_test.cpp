@@ -370,6 +370,173 @@ static void	test_negative_content_length_rejected(void)
 		"a negative Content-Length answers 400");
 }
 
+/* ------------------------------------------------------------------ */
+/* Content-Length must not desynchronise the connection                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * "Content-Length: abc" is not a number. strtoul read it as 0, which completed
+ * the request while its declared body stayed in the buffer, so the bytes the
+ * client framed as a body were parsed as a request of their own.
+ */
+static void	test_non_numeric_content_length_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: abc\r\n\r\n";
+	RequestParser	parser;
+
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"a non-numeric Content-Length is rejected");
+	TEST(parser.get_error_code() == 400,
+		"a non-numeric Content-Length answers 400");
+}
+
+/*
+ * "Content-Length: +5" carries a sign strtoul accepts and the header does not
+ * allow. It is malformed rather than oversized, so it answers 400 instead of
+ * framing five bytes of body.
+ */
+static void	test_signed_content_length_rejected(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: +5\r\n\r\nHELLO";
+	RequestParser	parser;
+
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == ERROR,
+		"a signed Content-Length is rejected");
+	TEST(parser.get_error_code() == 400,
+		"a signed Content-Length answers 400");
+}
+
+/*
+ * Two Content-Length headers frame the same bytes in two ways. Headers are kept
+ * in a map keyed by their lowercased name, so the second one would win in
+ * silence, whatever case it is written in and even when both agree.
+ */
+static void	test_duplicate_content_length_rejected(void)
+{
+	std::string	cases[3] = {
+		"Content-Length: 5\r\nContent-Length: 6\r\n",
+		"Content-Length: 5\r\nContent-Length: 5\r\n",
+		"Content-Length: 5\r\ncontent-length: 6\r\n"
+	};
+
+	for (std::size_t i = 0; i < 3; ++i)
+	{
+		std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n" + cases[i]
+			+ "\r\nHELLO!";
+		RequestParser	parser;
+
+		parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+		TEST(parser.get_psr_state() == ERROR
+			&& parser.get_error_code() == 400,
+			"a duplicated Content-Length answers 400 (case "
+			+ toDecimal(i) + ")");
+	}
+}
+
+/*
+ * The reported attack: a request whose Content-Length cannot be honoured,
+ * followed in the same read by a request the client wants dispatched. Refusing
+ * the first is not enough on its own, since a kept-alive connection calls
+ * reset() once the error is answered and parses whatever is left. The bytes
+ * behind a malformed request must never reach a second parse.
+ */
+static void	test_smuggled_request_is_not_dispatched(void)
+{
+	std::string	cases[3] = {
+		"Content-Length: abc\r\n",
+		"Content-Length: +5\r\n",
+		"Content-Length: 5\r\nContent-Length: 6\r\n"
+	};
+
+	for (std::size_t i = 0; i < 3; ++i)
+	{
+		std::string		raw = "POST /upload HTTP/1.1\r\nHost: good.com\r\n"
+			+ cases[i] + "\r\n"
+			+ "DELETE /admin/secret HTTP/1.1\r\nHost: evil.com\r\n\r\n";
+		RequestParser	parser;
+
+		parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+		TEST(parser.get_psr_state() == ERROR,
+			"a request smuggled behind a bad Content-Length is refused (case "
+			+ toDecimal(i) + ")");
+
+		parser.reset();
+
+		TEST(parser.get_psr_state() != COMPLETE
+			&& parser.getRequest().getUri() != "/admin/secret",
+			"the smuggled request is not dispatched after reset (case "
+			+ toDecimal(i) + ")");
+	}
+}
+
+/*
+ * The malformed request may arrive behind a valid one, which is the ordering
+ * that keeps a connection alive: the first request is answered, the connection
+ * is reused, and the parser rewinds into the bytes that follow. The error has
+ * to be raised there and still leave nothing for the next reset to dispatch.
+ */
+static void	test_smuggling_behind_a_valid_request(void)
+{
+	std::string	cases[2] = {
+		"Content-Length: abc\r\n",
+		"Content-Length: 5\r\nContent-Length: 0\r\n"
+	};
+
+	for (std::size_t i = 0; i < 2; ++i)
+	{
+		std::string		raw = buildPost("/a", "HELLO")
+			+ "POST /b HTTP/1.1\r\nHost: x\r\n" + cases[i] + "\r\n"
+			+ "DELETE /admin/secret HTTP/1.1\r\nHost: evil.com\r\n\r\n";
+		RequestParser	parser;
+
+		parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+		TEST(parser.get_psr_state() == COMPLETE
+			&& parser.getRequest().getUri() == "/a",
+			"the valid request ahead of the smuggled one is served (case "
+			+ toDecimal(i) + ")");
+
+		parser.reset();
+
+		TEST(parser.get_psr_state() == ERROR && parser.get_error_code() == 400,
+			"a malformed Content-Length is caught on a reused connection (case "
+			+ toDecimal(i) + ")");
+
+		parser.reset();
+
+		TEST(parser.get_psr_state() != COMPLETE
+			&& parser.getRequest().getUri() != "/admin/secret",
+			"the smuggled request is not dispatched on a reused connection "
+			"(case " + toDecimal(i) + ")");
+	}
+}
+
+/*
+ * A single Content-Length must keep framing the body it declares, so the
+ * duplicate guard does not turn every request carrying a body into a 400.
+ */
+static void	test_single_content_length_still_accepted(void)
+{
+	std::string		raw = "POST /u HTTP/1.1\r\nHost: x\r\n"
+		"Content-Length: 5\r\nX-Trace: cl\r\n\r\nHELLO";
+	RequestParser	parser;
+
+	parser.feed(raw.data(), static_cast<ssize_t>(raw.size()));
+
+	TEST(parser.get_psr_state() == COMPLETE,
+		"a single Content-Length parses to COMPLETE");
+	TEST(parser.getRequest().getBody() == "HELLO",
+		"a single Content-Length frames its body");
+}
+
 /*
  * A Content-Length that is representable but over the configured limit must
  * still be refused before the body is buffered.
@@ -598,6 +765,12 @@ int	main(void)
 	test_absurd_content_length_rejected();
 	test_content_length_overflow_rejected();
 	test_negative_content_length_rejected();
+	test_non_numeric_content_length_rejected();
+	test_signed_content_length_rejected();
+	test_duplicate_content_length_rejected();
+	test_smuggled_request_is_not_dispatched();
+	test_smuggling_behind_a_valid_request();
+	test_single_content_length_still_accepted();
 	test_content_length_over_limit_rejected();
 	test_content_length_within_limit_accepted();
 	test_unterminated_header_block_rejected();

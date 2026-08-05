@@ -27,7 +27,7 @@ struct LocationConfig
 	bool						autoindex;
 	std::vector<std::string>	allowedMethods;
 	std::string					uploadStore;
-	std::string					cgiPass;
+	std::map<std::string, std::string>	cgiPass;
 	int							returnCode;
 	std::string					returnUrl;
 	long						clientMaxBodySize;

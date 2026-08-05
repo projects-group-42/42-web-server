@@ -14,7 +14,7 @@
 
 LocationConfig::LocationConfig(void)
 	: path(""), root(""), index(""), autoindex(false), allowedMethods(),
-	  uploadStore(""), cgiPass(""), returnCode(0), returnUrl(""),
+	  uploadStore(""), cgiPass(), returnCode(0), returnUrl(""),
 	  clientMaxBodySize(-1)
 {
 }
@@ -25,9 +25,9 @@ LocationConfig::LocationConfig(const std::string &path):
 	index(""), 
 	autoindex(false), 
 	allowedMethods(),
-	uploadStore(""), 
-	cgiPass(""), 
-	returnCode(0), 
+	uploadStore(""),
+	cgiPass(),
+	returnCode(0),
 	returnUrl(""),
 	clientMaxBodySize(-1)
 {

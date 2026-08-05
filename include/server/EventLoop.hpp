@@ -53,7 +53,7 @@ class EventLoop
 		void	addPollFd(int fd, short events);
 		void	disablePollFd(int fd);
 		void	compactPollFds(void);
-		void	startCgi(int fd);
+		void	startCgi(int fd, const ServerConfig &config);
 		void	handleCgiIo(int fd, short revents);
 		void	finishCgi(int clientFd, CgiProcess *proc);
 		void	abortCgi(int clientFd);

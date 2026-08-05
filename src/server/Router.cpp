@@ -160,6 +160,53 @@ const LocationConfig	*Router::matchLocation(const std::string &uri,
 }
 
 /**
+ * @brief Extracts the extension of the last segment of a URI.
+ * A dot belonging to a parent directory is ignored, so "/cgi.d/script" is not
+ * mistaken for a ".d/script" extension.
+ * @param uri The request target.
+ * @return The extension including its leading dot, or an empty string when the
+ * last segment carries none.
+ */
+static std::string	uriExtension(const std::string &uri)
+{
+	std::string::size_type	dot = uri.rfind('.');
+	std::string::size_type	slash = uri.rfind('/');
+
+	if (dot == std::string::npos)
+		return ("");
+	if (slash != std::string::npos && dot < slash)
+		return ("");
+	return (uri.substr(dot));
+}
+
+/**
+ * @brief Picks the interpreter that runs the CGI script a URI points to.
+ * The interpreter is looked up by script extension in the cgi_pass directives
+ * of the location matching the URI, so "/cgi/app.py" is run by the interpreter
+ * bound to ".py" there.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The interpreter path, or an empty string when the matching location
+ * binds no interpreter to the extension of the URI.
+ */
+std::string	Router::resolveCgiInterpreter(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+	std::string				extension = uriExtension(uri);
+
+	if (best == NULL || extension.empty())
+		return ("");
+
+	std::map<std::string, std::string>::const_iterator	it
+		= best->cgiPass.find(extension);
+
+	if (it == best->cgiPass.end())
+		return ("");
+	return (it->second);
+}
+
+/**
  * @brief Picks the document root that applies to a URI in a server block.
  * When the matching location declares no root of its own it inherits the
  * server root.

@@ -360,6 +360,8 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				parseIndex(loc.index, *dit);
 			else if (dit->name == "client_max_body_size")
 				loc.clientMaxBodySize = parseBodySize(*dit);
+			else if (dit->name == "cgi_pass")
+				parseCgiPass(loc.cgiPass, *dit);
 		}
 
 		if (loc.index.empty())
@@ -509,4 +511,34 @@ void	ConfigLoader::parseErrorPage(std::map<int, std::string> &pages,
 		throw std::runtime_error("error_page: path cannot be empty");
 	for (size_t i = 0; i + 1 < d.args.size(); i++)
 		pages[parseErrorCode(d.args[i])] = path;
+}
+
+/**
+ * @brief Applies a cgi_pass directive to the interpreter map of a location.
+ * The directive binds one script extension to the interpreter that runs it, as
+ * in "cgi_pass .py /usr/bin/python3", so a location can serve several
+ * languages by declaring the directive once per extension. An extension
+ * declared twice keeps the last interpreter, which mirrors how the other
+ * directives resolve duplicates.
+ * @param interpreters The destination holding the interpreters of the location.
+ * @param d The cgi_pass directive taken from the AST.
+ * @throw std::runtime_error when the extension or the interpreter is malformed.
+ */
+void	ConfigLoader::parseCgiPass(
+			std::map<std::string, std::string> &interpreters,
+			const ConfigDirective &d)
+{
+	if (d.args.size() != 2)
+		throw std::runtime_error(
+			"'cgi_pass' expects an extension and an interpreter path");
+
+	const std::string	&extension = d.args[0];
+	const std::string	&interpreter = d.args[1];
+
+	if (extension.size() < 2 || extension[0] != '.')
+		throw std::runtime_error("cgi_pass: invalid extension '" + extension
+			+ "' (expected a leading '.', as in '.py')");
+	if (interpreter.empty())
+		throw std::runtime_error("cgi_pass: interpreter path cannot be empty");
+	interpreters[extension] = interpreter;
 }

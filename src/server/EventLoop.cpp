@@ -221,6 +221,15 @@ std::string EventLoop::buildError(const Connection &conn,
 	return (builder.buildErrorResponse(status, body, contentType));
 }
 
+/*
+ * Answers a request the parser refused. The connection is marked as closing:
+ * a request that could not be framed says nothing about where the next one
+ * begins, so the bytes still to come cannot be trusted to be a request of their
+ * own. The error response already advertises "Connection: close", since it is
+ * serialised by a builder that was never told the connection is persistent, so
+ * a connection kept alive by an earlier request has to be closed here to match
+ * what the client is being told.
+ */
 void EventLoop::handleParseError(int fd)
 {
 	Connection		&conn = _clients[fd];
@@ -230,6 +239,7 @@ void EventLoop::handleParseError(int fd)
 	if (error_code == 0)
 		error_code = 400;
 
+	conn.set_keep_alive(false);
 	conn.set_write_buffer(buildError(conn, builder, error_code));
 
 	setPollEvents(fd, POLLOUT);
@@ -301,6 +311,14 @@ void EventLoop::handleRequest(int fd)
 	setPollEvents(fd, POLLOUT);
 }
 
+/*
+ * Writes what is pending on the connection and decides what follows once the
+ * response is out. Resetting a kept-alive connection re-parses the bytes read
+ * along with the request just answered, so the next request may already be
+ * complete, or already refused: a pipelined request is parsed here rather than
+ * in handleClient, and a parser error found at this point has to be answered
+ * here too, or the client is left waiting on a response that is never written.
+ */
 bool EventLoop::handleSend(int fd)
 {
 	Connection	&conn = _clients[fd];
@@ -322,6 +340,8 @@ bool EventLoop::handleSend(int fd)
 		Logger::info("Response fully sent, keeping connection alive.");
 		if (conn.get_psr_state() == COMPLETE)
 			handleRequest(fd);
+		else if (conn.get_psr_state() == ERROR)
+			handleParseError(fd);
 		return true;
 	}
 	return true; // more to send

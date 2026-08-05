@@ -339,6 +339,27 @@ int	main(void)
 			"a dot in a parent directory is not taken as an extension");
 	}
 
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		cgi.cgiPass[".py"] = "/usr/bin/python3";
+		cgi.cgiPass[".php"] = "/usr/bin/php-cgi";
+		config.locations.push_back(cgi);
+		TEST(router.resolveCgiInterpreter("/cgi/app.php", config)
+				== "/usr/bin/php-cgi",
+			"the interpreter bound to .php runs a php script");
+		TEST(router.resolveCgiInterpreter("/cgi/app.py", config)
+				== "/usr/bin/python3",
+			"binding .php leaves the .py binding untouched");
+		TEST(router.resolveCgiInterpreter("/cgi-bin/hello.php", config)
+				== "/usr/bin/php-cgi",
+			"a /cgi-bin script resolves through the location prefixing it");
+		TEST(router.resolveCgiInterpreter("/cgi/app.phps", config).empty(),
+			"an extension merely starting with .php is not bound");
+	}
+
 	cleanupFixture();
 
 	std::cout << std::endl << s_pass << " passed, " << s_fail << " failed"

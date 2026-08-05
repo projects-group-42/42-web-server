@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/03 22:10:11 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/05 17:42:10 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -68,6 +68,12 @@ class ConfigLoader
 		static void			parseCgiPass(
 							std::map<std::string, std::string> &interpreters,
 							const ConfigDirective &d);
+		static void			parseLimitExcept(
+							std::vector<std::string> &methods,
+							const ConfigDirective &d);
+		static void			parseReturn(LocationConfig &location,
+							const ConfigDirective &d);
+		static std::string	parseUploadStore(const ConfigDirective &d);
 };
 
 #endif

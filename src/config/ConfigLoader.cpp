@@ -6,13 +6,14 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:25:05 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 15:37:53 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/05 17:42:10 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "config/ConfigLoader.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
+#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <stdexcept>
@@ -295,6 +296,9 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			server.clientMaxBodySize = parseBodySize(*it);
 		else if (it->name == "error_page")
 			parseErrorPage(server.errorPages, *it);
+		else
+			throw std::runtime_error("unknown directive '" + it->name
+				+ "' in server block");
 	}
 
 	if (indexes > 1)
@@ -362,6 +366,15 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				loc.clientMaxBodySize = parseBodySize(*dit);
 			else if (dit->name == "cgi_pass")
 				parseCgiPass(loc.cgiPass, *dit);
+			else if (dit->name == "limit_except")
+				parseLimitExcept(loc.allowedMethods, *dit);
+			else if (dit->name == "return")
+				parseReturn(loc, *dit);
+			else if (dit->name == "upload_store")
+				loc.uploadStore = parseUploadStore(*dit);
+			else
+				throw std::runtime_error("unknown directive '" + dit->name
+					+ "' in location block");
 		}
 
 		if (loc.index.empty())
@@ -542,3 +555,85 @@ void	ConfigLoader::parseCgiPass(
 		throw std::runtime_error("cgi_pass: interpreter path cannot be empty");
 	interpreters[extension] = interpreter;
 }
+
+/**
+ * @brief Collects the methods a limit_except directive allows on a location.
+ * A method named twice is stored once, and a second directive adds to the list
+ * instead of replacing it, as server_name does.
+ * @param methods The destination holding the allowed methods of the location.
+ * @param d The limit_except directive taken from the AST.
+ * @throw std::runtime_error when the directive carries no method or names one
+ * the server does not implement.
+ */
+void	ConfigLoader::parseLimitExcept(std::vector<std::string> &methods,
+			const ConfigDirective &d)
+{
+	if (d.args.empty())
+		throw std::runtime_error("'limit_except' expects at least one method");
+	for (size_t i = 0; i < d.args.size(); i++)
+	{
+		const std::string	&method = d.args[i];
+
+		if (method != "GET" && method != "POST" && method != "DELETE")
+			throw std::runtime_error("limit_except: unsupported method '"
+				+ method + "' (expected GET, POST or DELETE)");
+		if (std::find(methods.begin(), methods.end(), method) == methods.end())
+			methods.push_back(method);
+	}
+}
+
+/**
+ * @brief Applies a return directive to the location that declared it, as in
+ * "return 302 /". Only redirection codes are accepted, since the second
+ * argument is the target the response points the client to.
+ * @param location The location block being filled.
+ * @param d The return directive taken from the AST.
+ * @throw std::runtime_error when the directive does not carry exactly one
+ * redirection code and one non-empty target.
+ */
+void	ConfigLoader::parseReturn(LocationConfig &location,
+			const ConfigDirective &d)
+{
+	if (d.args.size() != 2)
+		throw std::runtime_error(
+			"'return' expects a status code and a target");
+	if (!isAllDigits(d.args[0]) || d.args[0].size() != 3)
+		throw std::runtime_error("return: invalid status code '"
+			+ d.args[0] + "'");
+
+	std::istringstream	iss(d.args[0]);
+	int					code = 0;
+
+	iss >> code;
+	if (iss.fail() || code < 300 || code > 399)
+		throw std::runtime_error("return: status code out of range "
+			"(300-399): '" + d.args[0] + "'");
+	if (d.args[1].empty())
+		throw std::runtime_error("return: target cannot be empty");
+	location.returnCode = code;
+	location.returnUrl = d.args[1];
+}
+
+/**
+ * @brief Validates an upload_store directive and normalises its path, dropping
+ * trailing slashes as parseRoot does.
+ * @param d The upload_store directive taken from the AST.
+ * @return The directory uploaded files are written to.
+ * @throw std::runtime_error when the directive does not carry exactly one
+ * non-empty path.
+ */
+std::string	ConfigLoader::parseUploadStore(const ConfigDirective &d)
+{
+	if (d.args.size() != 1)
+		throw std::runtime_error(
+			"'upload_store' expects a single path argument");
+	if (d.args[0].empty())
+		throw std::runtime_error("upload_store: path cannot be empty");
+
+	std::string	path = d.args[0];
+
+	while (path.size() > 1 && path[path.size() - 1] == '/')
+		path.erase(path.size() - 1);
+	return (path);
+}
+

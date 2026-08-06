@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/06 12:47:58 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/06 12:54:00 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -240,12 +240,12 @@ int Router::resolveLocation(const HttpRequest &request,
 	{
 		const std::string &locPath = config.locations[i].path;
 
-		if (request.getUri().compare(0, locPath.size(), locPath) != 0)
+		if (request.getUri().compare(0, locPath.size(), locPath) == 0)
 		{
 			Logger::info("Location encontrada: " + config.locations[i].path);
 			Logger::info("Root da location: " + config.locations[i].root);
 			Logger::info("Index configurado: " + config.locations[i].index);
-			if (locPath.size() <= bestMatchPath.size())
+			if (locPath.size() > bestMatchPath.size())
 			{
 				bestMatchPath = locPath;
 				bestMatchIndex = i;

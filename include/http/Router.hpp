@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 01:36:13 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/06 12:50:50 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,15 +40,20 @@ class Router
 		Router &operator=(const Router &other);
 		~Router(void);
 
-		bool	route(const HttpRequest &request,
-					HttpResponse &response, const ServerConfig &config);
-
-		void	addHandler(const std::string &method,
-					const std::string &path, IRequestHandler *handler);
-
+		bool				route(const HttpRequest &request,
+							HttpResponse &response, const ServerConfig &config);
+		void				addHandler(const std::string &method,
+							const std::string &path, IRequestHandler *handler);
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
+		void 				serveCustomErrorPage(HttpResponse &response, 
+							const ServerConfig &config, const std::string &finalRoot);
+		bool				checkAllowedMethods(const HttpRequest &request, 
+							HttpResponse &response, const LocationConfig &location);
+		int 				resolveLocation(const HttpRequest &request, 
+							const ServerConfig &config, std::string &finalRoot, std::string &finalIndex);
+
 };
 
 #endif

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   config_lexer_test.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/13 21:16:05 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/13 23:37:58 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/06 11:34:17 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -135,7 +135,7 @@ static void	test_lexer_realistic_config(void)
 		"\n"
 		"    # static files location\n"
 		"    location / {\n"
-		"        allowed_methods GET POST;\n"
+		"        limit_except GET POST;\n"
 		"        autoindex off;\n"
 		"    }\n"
 		"}\n";

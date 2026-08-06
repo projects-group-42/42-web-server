@@ -208,6 +208,10 @@ LocationConfig ConfigLoader::parse_location(const ConfigBlock &block)
 			location.root = it->args[0];
 		else if (it->name == "index")
 			location.index = it->args[0];
+		else if (it->name == "limit_except")
+		{
+			parse_limit_except(*it, location);
+		}
 	}
 
 	return (location);
@@ -234,4 +238,30 @@ void ConfigLoader::parse_client_max_body_size(
 		max_body *= 1024 * 1024 * 1024;
 	}
 	server.clientMaxBodySize = max_body;
+}
+
+void ConfigLoader::parse_limit_except(const ConfigDirective &directive, LocationConfig &location)
+{
+	const char *allowed[] = {"GET", "POST", "DELETE", NULL};
+
+	for (size_t i = 0; i < directive.args.size(); ++i)
+	{
+		std::string method = directive.args[i];
+
+		// Verifica se o método é permitido no seu servidor
+		bool valid = false;
+		for (int j = 0; allowed[j] != NULL; ++j)
+		{
+			if (method == allowed[j])
+			{
+				valid = true;
+				break;
+			}
+		}
+
+		// Se é válido, adiciona à lista
+		if (valid)
+			location.allowedMethods.push_back(method);
+		// Se não é válido, ignora (como nginx faz)
+	}
 }

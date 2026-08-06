@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/03 12:21:15 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/06 11:37:22 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,6 +47,6 @@ class ConfigLoader
 		void			parse_error_page(const ConfigDirective &directive, ServerConfig &server);
 		LocationConfig	parse_location(const ConfigBlock &block);
 		void			parse_client_max_body_size(const ConfigDirective &directive, ServerConfig &server);
+		void parse_limit_except(const ConfigDirective &directive, LocationConfig &location);
 };
-
 #endif

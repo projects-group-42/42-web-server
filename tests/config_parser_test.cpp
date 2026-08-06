@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   config_parser_test.cpp                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/19 15:37:32 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 16:10:53 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/06 11:35:44 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -109,7 +109,7 @@ static void	test_parser_nested_location(void)
 		"    root /var/www;\n"
 		"\n"
 		"    location / {\n"
-		"        allowed_methods GET POST;\n"
+		"        limit_except GET POST;\n"
 		"        autoindex off;\n"
 		"    }\n"
 		"}\n";
@@ -129,9 +129,9 @@ static void	test_parser_nested_location(void)
 	         "'location' has one argument (the path)");
 	CHECK_EQ(location.args[0], std::string("/"), "location path is '/'");
 	CHECK_EQ(location.directives.size(), static_cast<size_t>(2),
-	         "location has 'allowed_methods' and 'autoindex' directives");
+	         "location has 'limit_except' and 'autoindex' directives");
 	CHECK_EQ(location.directives[0].args.size(), static_cast<size_t>(2),
-	         "'allowed_methods' has two arguments");
+	         "'limit_except' has two arguments");
 }
 
 static void	test_parser_multiple_top_level_servers(void)

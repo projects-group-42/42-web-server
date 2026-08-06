@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/02 01:44:21 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/06 11:27:37 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -189,17 +189,23 @@ bool	Router::route(const HttpRequest &request,
 	std::string finalRoot = config.root;
 	std::string finalIndex = config.index;
 	std::string bestMatchPath = "";
+	int			bestMatchIndex = -1;
+	//loop por todas as locations do servidor
 	for (size_t i = 0; i < config.locations.size(); ++i)
 	{
 		const std::string &locPath = config.locations[i].path;
+		// Verifica se o URI da requisição começa com este path
 		if (request.getUri().compare(0, locPath.size(), locPath) == 0)
 		{
 			Logger::info("Location encontrada: " + config.locations[i].path);
 			Logger::info("Root da location: " + config.locations[i].root);
 			Logger::info("Index configurado: " + config.locations[i].index);
+			// Se é a melhor match até agora (maior/mais específico path)
 			if (locPath.size() > bestMatchPath.size())
 			{
 				bestMatchPath = locPath;
+				bestMatchIndex = i;
+				// Usa root e index da location se tiverem configurados
 				if (!config.locations[i].root.empty())
 				{
 					finalRoot = config.locations[i].root;
@@ -211,7 +217,37 @@ bool	Router::route(const HttpRequest &request,
 			}
 		}
 	}
-
+	if (bestMatchIndex != -1)
+	{
+		if (!config.locations[bestMatchIndex].allowedMethods.empty())
+		{
+			
+			bool methodAllowed = false;
+			for (size_t i = 0; i < config.locations[bestMatchIndex].allowedMethods.size(); ++i)
+			{
+				if (config.locations[bestMatchIndex].allowedMethods[i] == request.getMethod())
+				{
+					methodAllowed = true;
+					break;
+				}
+			}
+			if (!methodAllowed)
+			{
+				response.setStatusCode(405);
+				std::string result;
+				for (size_t i = 0; i < config.locations[bestMatchIndex].allowedMethods.size(); ++i)
+				{
+					if (i > 0)
+						result += ", ";
+					result += config.locations[bestMatchIndex].allowedMethods[i];
+				}
+				response.setHeaders("Allow", result);
+				response.setBody("");
+				return (true);
+			}
+		}
+	}
+// Se não encontrou handler, retorna erro apropriado
 	if (handler == NULL)
 	{
 		if (pathFound)
@@ -225,6 +261,7 @@ bool	Router::route(const HttpRequest &request,
 		Logger::warning("No handler for: " + request.getMethod() + " "
 				+ request.getUri());
 	}
+// Handler encontrado, processa a requisição
 	else
 	{
 		Logger::info("FINAL ROOT: " + finalRoot);
@@ -233,7 +270,7 @@ bool	Router::route(const HttpRequest &request,
 		setIndex(finalIndex);
 		handler->handle(request, response);
 	}
-
+// Se houve erro, tenta servir página de erro customizada
 	if (response.getStatusCode() >= 400)
 	{
 		std::map<int, std::string>::const_iterator error_it;

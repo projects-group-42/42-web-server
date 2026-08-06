@@ -208,6 +208,14 @@ LocationConfig ConfigLoader::parse_location(const ConfigBlock &block)
 			location.root = it->args[0];
 		else if (it->name == "index")
 			location.index = it->args[0];
+		else if (it->name == "return")
+		{
+			if (it->args.size() < 2)
+				throw std::runtime_error("return requires status code and url");
+
+			location.returnCode = std::atoi(it->args[0].c_str());
+			location.returnUrl = it->args[1];
+		}
 		else if (it->name == "limit_except")
 		{
 			parse_limit_except(*it, location);

@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/06 12:54:00 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/06 16:54:52 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -233,6 +233,7 @@ int Router::resolveLocation(const HttpRequest &request,
 							 std::string &finalRoot,
 							 std::string &finalIndex)
 {
+	
 	std::string bestMatchPath;
 	int bestMatchIndex = -1;
 
@@ -273,10 +274,26 @@ bool	Router::route(const HttpRequest &request,
 	//loop por todas as locations do servidor
 
 	int bestMatchIndex = resolveLocation(request, config, finalRoot, finalIndex);
-	if (bestMatchIndex != -1 && (
-			!checkAllowedMethods(request, response,
-			config.locations[bestMatchIndex])))
-		return (true);
+	if (bestMatchIndex != -1)
+	{
+		if (bestMatchIndex != -1 &&
+			config.locations[bestMatchIndex].returnCode != 0)
+		{
+			response.setStatusCode(
+				config.locations[bestMatchIndex].returnCode);
+
+			response.setHeaders(
+				"Location",
+				config.locations[bestMatchIndex].returnUrl);
+			response.setBody("");
+			return (true);
+		} 
+		if (!checkAllowedMethods(request, response,
+			config.locations[bestMatchIndex]))
+		{
+			return (true);
+		}
+	}
 	if (handler == NULL)
 	{
 		if (pathFound)

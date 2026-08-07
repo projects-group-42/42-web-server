@@ -380,6 +380,22 @@ bool	Router::loadErrorPage(const ServerConfig &config,
  * @param config The server block serving the request.
  * @return true when the request was answered with a redirect.
  */
+/**
+ * @brief Tells whether a URI is answered by a redirect.
+ * CGI is dispatched before the router runs, so the caller driving it has to
+ * know a location redirects to keep a script from executing instead.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return true when the location matching the URI declares a return.
+ */
+bool	Router::redirects(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	return (best != NULL && best->returnCode != 0);
+}
+
 bool	Router::applyRedirect(const HttpRequest &request,
 			HttpResponse &response, const ServerConfig &config) const
 {

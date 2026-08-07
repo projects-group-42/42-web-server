@@ -61,6 +61,9 @@ class Router
 		std::string		resolveCgiInterpreter(const std::string &uri,
 					const ServerConfig &config) const;
 
+		bool			redirects(const std::string &uri,
+					const ServerConfig &config) const;
+
 		static bool	loadErrorPage(const ServerConfig &config,
 					const std::string &root, int status,
 					std::string &body, std::string &contentType);

@@ -284,6 +284,15 @@ void EventLoop::handleRequest(int fd)
 								conn.getLocalPort(), conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
+	builder.setKeepAlive(conn.get_keep_alive());
+
+	if (_router.bodyExceedsLimit(conn.getRequest(), chosenConfig))
+	{
+		Logger::error("413 Content Too Large");
+		conn.set_write_buffer(buildError(conn, builder, 413));
+		setPollEvents(fd, POLLOUT);
+		return ;
+	}
 
 	std::string	interpreter = cgiInterpreterFor(conn.getRequest().getUri(),
 						chosenConfig);
@@ -293,7 +302,6 @@ void EventLoop::handleRequest(int fd)
 		startCgi(fd, interpreter);
 		return ;
 	}
-	builder.setKeepAlive(conn.get_keep_alive());
 
 	try
 	{

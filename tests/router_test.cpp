@@ -122,6 +122,23 @@ static void	routePost(const std::string &uri, const std::string &body,
 }
 
 /**
+ * @brief Builds a POST request carrying a body for a URI.
+ * @param uri The request target.
+ * @param body The bytes the request carries.
+ * @return The populated request.
+ */
+static HttpRequest	makePost(const std::string &uri, const std::string &body)
+{
+	HttpRequest	request;
+
+	request.setMethod("POST");
+	request.setUri(uri);
+	request.setVersion("HTTP/1.1");
+	request.setBody(body);
+	return (request);
+}
+
+/**
  * @brief Builds a server block rooted at the fixture tree.
  * @param index The index directive value of the server block.
  * @return The populated server config.
@@ -289,6 +306,49 @@ int	main(void)
 		router.route(request, second, loose);
 		TEST(second.getStatusCode() != 413,
 			"the body limit of one request does not leak into the next");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		config.clientMaxBodySize = 1024;
+		cgi.clientMaxBodySize = 4;
+		cgi.cgiPass[".py"] = "/usr/bin/python3";
+		config.locations.push_back(cgi);
+		TEST(router.bodyExceedsLimit(makePost("/cgi/app.py", "over"), config)
+				== false,
+			"a CGI body at the location client_max_body_size is accepted");
+		TEST(router.bodyExceedsLimit(
+				makePost("/cgi/app.py", "way over the limit"), config),
+			"a CGI body over the location client_max_body_size is refused");
+		TEST(router.bodyExceedsLimit(makePost("/cgi/app.py", "ok"), config)
+				== false,
+			"a CGI body under the location client_max_body_size is accepted");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		config.clientMaxBodySize = 4;
+		cgi.cgiPass[".py"] = "/usr/bin/python3";
+		config.locations.push_back(cgi);
+		TEST(router.bodyExceedsLimit(
+				makePost("/cgi/app.py", "way over the limit"), config),
+			"a CGI location without a limit inherits the server value");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		Router			router;
+
+		config.clientMaxBodySize = -1;
+		TEST(router.bodyExceedsLimit(
+				makePost("/upload.txt", "way over the limit"), config) == false,
+			"a negative client_max_body_size lifts the limit");
 	}
 
 	{

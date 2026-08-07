@@ -61,6 +61,7 @@ class Router
 		std::string		resolveCgiInterpreter(const std::string &uri,
 					const ServerConfig &config) const;
 
+		bool			bodyExceedsLimit(const HttpRequest &request,
 		bool			redirects(const std::string &uri,
 					const ServerConfig &config) const;
 

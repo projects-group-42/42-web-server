@@ -281,6 +281,26 @@ long	Router::resolveMaxBodySize(const std::string &uri,
 }
 
 /**
+ * @brief Reports whether the body of a request is over the size its URI allows.
+ * The parser only knows the widest client_max_body_size configured for the
+ * port, since the server block and location serving a request are picked from
+ * headers it has not read yet. This answers the same question once both are
+ * known, so a request the parser let through is still refused when the block
+ * or location that ended up serving it declares a narrower limit.
+ * @param request The request being answered.
+ * @param config The server block serving the request.
+ * @return true when the body is larger than the limit resolved for the URI.
+ */
+bool	Router::bodyExceedsLimit(const HttpRequest &request,
+			const ServerConfig &config) const
+{
+	long	limit = resolveMaxBodySize(request.getUri(), config);
+
+	return (limit >= 0
+		&& request.getBody().size() > static_cast<size_t>(limit));
+}
+
+/**
  * @brief Joins a document root and a configured error page path.
  * The page path is written root-relative in the config file, so exactly one
  * separator is kept between the two halves.

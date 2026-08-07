@@ -285,6 +285,76 @@ static void	test_malformed_index_throws(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* limit_except                                                        */
+/* ------------------------------------------------------------------ */
+
+static void	test_location_without_limit_except_is_unrestricted(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location / {\n        index a.html;\n    }\n}\n");
+
+	CHECK_EQ(server.locations.size(), static_cast<size_t>(1),
+	         "the location is parsed");
+	CHECK_EQ(server.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(0),
+	         "a location without limit_except restricts no method");
+}
+
+static void	test_limit_except_is_parsed(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location / {\n        limit_except GET POST;\n"
+		"    }\n}\n");
+
+	CHECK_EQ(server.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(2), "both methods are kept");
+	CHECK_EQ(server.locations[0].allowedMethods[0], std::string("GET"),
+	         "the first method is GET");
+	CHECK_EQ(server.locations[0].allowedMethods[1], std::string("POST"),
+	         "the second method is POST");
+}
+
+static void	test_limit_except_stores_a_repeat_once(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location / {\n        limit_except GET GET POST;\n"
+		"    }\n}\n");
+
+	CHECK_EQ(server.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(2),
+	         "a method named twice is stored once, so Allow never repeats it");
+}
+
+static void	test_limit_except_is_per_location(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n"
+		"    location / {\n        limit_except GET;\n    }\n"
+		"    location /uploads {\n        limit_except GET POST DELETE;\n"
+		"    }\n}\n");
+
+	CHECK_EQ(server.locations[0].allowedMethods.size(),
+	         static_cast<size_t>(1), "the first location keeps its own list");
+	CHECK_EQ(server.locations[1].allowedMethods.size(),
+	         static_cast<size_t>(3), "the second location keeps its own list");
+}
+
+static void	test_malformed_limit_except_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    location / {\n        limit_except;\n    }\n}\n"),
+	     "a limit_except without a method is rejected");
+	TEST(loadThrows(
+		"server {\n    location / {\n        limit_except PUT;\n    }\n}\n"),
+	     "an unimplemented method is rejected instead of being dropped, which "
+	     "would leave the list empty and the location open");
+	TEST(loadThrows(
+		"server {\n    location / {\n        limit_except GET post;\n"
+		"    }\n}\n"),
+	     "a lowercase method is rejected rather than silently ignored");
+}
+
+/* ------------------------------------------------------------------ */
 /* Loader behaviour                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -916,6 +986,12 @@ int	main(void)
 	test_last_server_index_wins();
 	test_index_is_per_server();
 	test_malformed_index_throws();
+
+	test_location_without_limit_except_is_unrestricted();
+	test_limit_except_is_parsed();
+	test_limit_except_stores_a_repeat_once();
+	test_limit_except_is_per_location();
+	test_malformed_limit_except_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();

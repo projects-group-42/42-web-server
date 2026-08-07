@@ -13,6 +13,7 @@
 #include "config/ConfigLoader.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
+#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <stdexcept>
@@ -362,6 +363,8 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				loc.clientMaxBodySize = parseBodySize(*dit);
 			else if (dit->name == "cgi_pass")
 				parseCgiPass(loc.cgiPass, *dit);
+			else if (dit->name == "limit_except")
+				parseLimitExcept(loc.allowedMethods, *dit);
 			else if (dit->name == "return")
 				parseReturn(loc, *dit);
 		}
@@ -598,4 +601,32 @@ void	ConfigLoader::parseCgiPass(
 	if (interpreter.empty())
 		throw std::runtime_error("cgi_pass: interpreter path cannot be empty");
 	interpreters[extension] = interpreter;
+}
+
+/**
+ * @brief Collects the methods a limit_except directive allows on a location.
+ * A method the server does not implement is refused rather than skipped: were
+ * every argument skipped the list would come out empty, and an empty list means
+ * "no restriction" to the Router, so a single typo would quietly leave the
+ * location open. A method named twice is stored once, so Allow never repeats it.
+ * @param methods The destination holding the allowed methods of the location.
+ * @param d The limit_except directive taken from the AST.
+ * @throw std::runtime_error when the directive carries no method or names one
+ * the server does not implement.
+ */
+void	ConfigLoader::parseLimitExcept(std::vector<std::string> &methods,
+			const ConfigDirective &d)
+{
+	if (d.args.empty())
+		throw std::runtime_error("'limit_except' expects at least one method");
+	for (size_t i = 0; i < d.args.size(); i++)
+	{
+		const std::string	&method = d.args[i];
+
+		if (method != "GET" && method != "POST" && method != "DELETE")
+			throw std::runtime_error("limit_except: unsupported method '"
+				+ method + "' (expected GET, POST or DELETE)");
+		if (std::find(methods.begin(), methods.end(), method) == methods.end())
+			methods.push_back(method);
+	}
 }

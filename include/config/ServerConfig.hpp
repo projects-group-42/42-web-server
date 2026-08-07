@@ -18,6 +18,7 @@
 # include <map>
 
 # define DEFAULT_ROOT	"www"
+# define DEFAULT_INDEX	"index.html"
 
 struct LocationConfig
 {

@@ -209,7 +209,9 @@ std::string	Router::resolveCgiInterpreter(const std::string &uri,
 /**
  * @brief Picks the document root that applies to a URI in a server block.
  * When the matching location declares no root of its own it inherits the
- * server root.
+ * server root, and a server declaring none falls back to the default root, so
+ * a URI always resolves to a root of its own instead of keeping the one the
+ * previous request left on the handler.
  * @param uri The request target.
  * @param config The server block serving the request.
  * @return The document root to serve the request from.
@@ -221,14 +223,18 @@ std::string	Router::resolveRoot(const std::string &uri,
 
 	if (best != NULL && !best->root.empty())
 		return (best->root);
-	return (config.root);
+	if (!config.root.empty())
+		return (config.root);
+	return (DEFAULT_ROOT);
 }
 
 /**
  * @brief Picks the index file that applies to a URI in a server block.
  * ConfigLoader already copies the server index into every location that
  * declares none, so an empty location index only happens when the server
- * declares none either, and the server value is used as the fallback.
+ * declares none either, and the default index is used as the fallback rather
+ * than an empty name, so a URI matching no location never keeps the index a
+ * previous request resolved through one.
  * @param uri The request target.
  * @param config The server block serving the request.
  * @return The index file name to serve directories with.
@@ -240,7 +246,9 @@ std::string	Router::resolveIndex(const std::string &uri,
 
 	if (best != NULL && !best->index.empty())
 		return (best->index);
-	return (config.index);
+	if (!config.index.empty())
+		return (config.index);
+	return (DEFAULT_INDEX);
 }
 
 /**
@@ -458,13 +466,8 @@ bool	Router::route(const HttpRequest &request,
 	}
 	else
 	{
-		std::string	root = resolveRoot(request.getUri(), config);
-		std::string	index = resolveIndex(request.getUri(), config);
-
-		if (!root.empty())
-			setRoot(root);
-		if (!index.empty())
-			setIndex(index);
+		setRoot(resolveRoot(request.getUri(), config));
+		setIndex(resolveIndex(request.getUri(), config));
 		_staticHandler.setAutoindex(
 				resolveAutoindex(request.getUri(), config));
 		_staticHandler.setMaxBodySize(

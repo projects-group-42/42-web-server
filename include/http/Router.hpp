@@ -45,6 +45,8 @@ class Router
 				const ServerConfig &config) const;
 		bool			applyRedirect(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
+		bool			applyMethodLimit(const HttpRequest &request,
+				HttpResponse &response, const ServerConfig &config) const;
 		void			applyErrorPage(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
 

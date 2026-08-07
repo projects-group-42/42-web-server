@@ -535,6 +535,64 @@ int	main(void)
 			"a URI outside the location reports no redirect");
 	}
 
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		HttpResponse	allowed;
+		HttpResponse	refused;
+
+		root.allowedMethods.push_back("GET");
+		config.locations.push_back(root);
+		routeGet("/", config, allowed);
+		TEST(allowed.getStatusCode() == 200,
+			"a method the location allows is served");
+		routePost("/", "body", config, refused);
+		TEST(refused.getStatusCode() == 405,
+			"a method limit_except leaves out is refused with 405");
+		TEST(refused.getHeaderValue("Allow") == "GET",
+			"a 405 names the methods the location accepts");
+		TEST(refused.getBody().empty(),
+			"a refusal answers no body of its own");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		HttpResponse	response;
+
+		root.allowedMethods.push_back("GET");
+		root.allowedMethods.push_back("POST");
+		config.locations.push_back(root);
+		routePost("/", "body", config, response);
+		TEST(response.getStatusCode() != 405,
+			"a method named in limit_except is not refused");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		LocationConfig	uploads("/uploads");
+		HttpResponse	response;
+
+		root.allowedMethods.push_back("GET");
+		uploads.allowedMethods.push_back("GET");
+		uploads.allowedMethods.push_back("POST");
+		config.locations.push_back(root);
+		config.locations.push_back(uploads);
+		routePost("/uploads", "body", config, response);
+		TEST(response.getStatusCode() != 405,
+			"the longest matching location decides, not the first one");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		HttpResponse	response;
+
+		routePost("/", "body", config, response);
+		TEST(response.getStatusCode() != 405,
+			"a location without limit_except restricts no method");
+	}
+
 	cleanupFixture();
 
 	std::cout << std::endl << s_pass << " passed, " << s_fail << " failed"

@@ -6,6 +6,7 @@ test_lexer
 test_parser
 test_cgi
 test_cgi_process
+test_cgi_suite
 test_server_config
 test_config_loader
 test_multipart

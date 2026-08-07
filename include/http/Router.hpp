@@ -62,6 +62,8 @@ class Router
 					const ServerConfig &config) const;
 
 		bool			bodyExceedsLimit(const HttpRequest &request,
+					const ServerConfig &config) const;
+
 		bool			redirects(const std::string &uri,
 					const ServerConfig &config) const;
 

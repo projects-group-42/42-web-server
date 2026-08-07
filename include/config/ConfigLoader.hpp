@@ -71,6 +71,9 @@ class ConfigLoader
 		static void			parseCgiPass(
 							std::map<std::string, std::string> &interpreters,
 							const ConfigDirective &d);
+		static void			parseLimitExcept(
+							std::vector<std::string> &methods,
+							const ConfigDirective &d);
 };
 
 #endif

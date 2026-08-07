@@ -439,6 +439,45 @@ bool	Router::applyRedirect(const HttpRequest &request,
 	return (true);
 }
 
+/**
+ * @brief Refuses a method the location matching the request does not allow.
+ * A location without limit_except restricts nothing, so its empty list lets
+ * every implemented method through. When the method is refused the response is
+ * answered 405 carrying the Allow header the standard requires, naming the
+ * methods the location does accept.
+ * @param request The request being answered.
+ * @param response The response to fill when the method is refused.
+ * @param config The server block serving the request.
+ * @return true when the response was answered 405 and no handler may run,
+ * false when the method is allowed to proceed.
+ */
+bool	Router::applyMethodLimit(const HttpRequest &request,
+			HttpResponse &response, const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(request.getUri(), config);
+	std::string				allow;
+
+	if (best == NULL || best->allowedMethods.empty())
+		return (false);
+	for (size_t i = 0; i < best->allowedMethods.size(); ++i)
+	{
+		if (best->allowedMethods[i] == request.getMethod())
+			return (false);
+	}
+	for (size_t i = 0; i < best->allowedMethods.size(); ++i)
+	{
+		if (!allow.empty())
+			allow.append(", ");
+		allow.append(best->allowedMethods[i]);
+	}
+	response.setStatusCode(405);
+	response.setHeaders("Allow", allow);
+	response.setBody("");
+	Logger::warning("limit_except refused: " + request.getMethod() + " "
+			+ request.getUri());
+	return (true);
+}
+
 bool	Router::route(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config)
 {
@@ -447,6 +486,12 @@ bool	Router::route(const HttpRequest &request,
 
 	if (applyRedirect(request, response, config))
 		return (true);
+
+	if (applyMethodLimit(request, response, config))
+	{
+		applyErrorPage(request, response, config);
+		return (true);
+	}
 
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);

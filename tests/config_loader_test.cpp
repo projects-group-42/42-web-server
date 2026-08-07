@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/01 18:00:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 18:00:00 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/07 20:40:12 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -352,6 +352,78 @@ static void	test_malformed_limit_except_throws(void)
 		"server {\n    location / {\n        limit_except GET post;\n"
 		"    }\n}\n"),
 	     "a lowercase method is rejected rather than silently ignored");
+}
+
+/* ------------------------------------------------------------------ */
+/* upload_store                                                        */
+/* ------------------------------------------------------------------ */
+
+static void	test_location_without_upload_store_is_empty(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location / {\n        index a.html;\n    }\n}\n");
+
+	CHECK_EQ(server.locations.size(), static_cast<size_t>(1),
+	         "the location is parsed");
+	CHECK_EQ(server.locations[0].uploadStore, std::string(""),
+	         "a location without upload_store keeps no upload directory");
+}
+
+static void	test_upload_store_is_parsed(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location /uploads {\n"
+		"        upload_store www/uploads;\n    }\n}\n");
+
+	CHECK_EQ(server.locations[0].uploadStore, std::string("www/uploads"),
+	         "the upload directory is kept");
+}
+
+static void	test_upload_store_trailing_slash_is_trimmed(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location /uploads {\n"
+		"        upload_store www/uploads/;\n    }\n}\n");
+
+	CHECK_EQ(server.locations[0].uploadStore, std::string("www/uploads"),
+	         "a trailing slash is stripped, as it is for root");
+}
+
+static void	test_upload_store_is_per_location(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n"
+		"    location / {\n        index a.html;\n    }\n"
+		"    location /uploads {\n        upload_store www/uploads;\n"
+		"    }\n}\n");
+
+	CHECK_EQ(server.locations[0].uploadStore, std::string(""),
+	         "a location without the directive is left untouched by another");
+	CHECK_EQ(server.locations[1].uploadStore, std::string("www/uploads"),
+	         "the declaring location keeps its own upload directory");
+}
+
+static void	test_last_upload_store_wins(void)
+{
+	ServerConfig	server = loadSource(
+		"server {\n    location /uploads {\n"
+		"        upload_store www/first;\n"
+		"        upload_store www/second;\n    }\n}\n");
+
+	CHECK_EQ(server.locations[0].uploadStore, std::string("www/second"),
+	         "a directive declared twice keeps the last path");
+}
+
+static void	test_malformed_upload_store_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    location /uploads {\n        upload_store;\n"
+		"    }\n}\n"),
+	     "an upload_store without a path is rejected");
+	TEST(loadThrows(
+		"server {\n    location /uploads {\n"
+		"        upload_store www/uploads extra;\n    }\n}\n"),
+	     "an extra argument is rejected instead of being silently dropped");
 }
 
 /* ------------------------------------------------------------------ */
@@ -992,6 +1064,12 @@ int	main(void)
 	test_limit_except_stores_a_repeat_once();
 	test_limit_except_is_per_location();
 	test_malformed_limit_except_throws();
+	test_location_without_upload_store_is_empty();
+	test_upload_store_is_parsed();
+	test_upload_store_trailing_slash_is_trimmed();
+	test_upload_store_is_per_location();
+	test_last_upload_store_wins();
+	test_malformed_upload_store_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();

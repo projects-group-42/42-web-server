@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:25:05 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/07 20:40:12 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -365,6 +365,8 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				parseCgiPass(loc.cgiPass, *dit);
 			else if (dit->name == "limit_except")
 				parseLimitExcept(loc.allowedMethods, *dit);
+			else if (dit->name == "upload_store")
+				loc.uploadStore = parseUploadStore(*dit);
 			else if (dit->name == "return")
 				parseReturn(loc, *dit);
 		}
@@ -629,4 +631,32 @@ void	ConfigLoader::parseLimitExcept(std::vector<std::string> &methods,
 		if (std::find(methods.begin(), methods.end(), method) == methods.end())
 			methods.push_back(method);
 	}
+}
+
+/**
+ * @brief Validates an upload_store directive and normalises the path it holds.
+ * The directive names the directory an upload is written to, as in
+ * "upload_store www/uploads", so a location accepting uploads keeps them out
+ * of the tree it serves when it needs to. Exactly one path is expected, so a
+ * trailing argument is refused instead of being silently dropped. Trailing
+ * slashes are stripped, mirroring root, so "www/uploads/" and "www/uploads"
+ * resolve identically once a file name is appended to them.
+ * @param d The upload_store directive taken from the AST.
+ * @return The upload directory path.
+ * @throw std::runtime_error when the directive does not carry exactly one
+ * non-empty path.
+ */
+std::string	ConfigLoader::parseUploadStore(const ConfigDirective &d)
+{
+	if (d.args.size() != 1)
+		throw std::runtime_error(
+			"'upload_store' expects a single directory argument");
+	if (d.args[0].empty())
+		throw std::runtime_error("upload_store: path cannot be empty");
+
+	std::string	path = d.args[0];
+
+	while (path.size() > 1 && path[path.size() - 1] == '/')
+		path.erase(path.size() - 1);
+	return (path);
 }

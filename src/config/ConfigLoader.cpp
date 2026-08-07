@@ -13,6 +13,7 @@
 #include "config/ConfigLoader.hpp"
 #include <stdexcept>
 #include <iostream>
+#include <algorithm>
 
 ConfigLoader::ConfigLoader(void) : _file_path("conf/default.conf")
 {
@@ -240,28 +241,31 @@ void ConfigLoader::parse_client_max_body_size(
 	server.clientMaxBodySize = max_body;
 }
 
+/**
+ * @brief Collects the methods a limit_except directive allows on a location.
+ * A method the server does not implement is refused instead of dropped, since
+ * dropping every argument would leave the list empty and the Router reads an
+ * empty list as "no restriction", turning a typo into an open location. A
+ * method named twice is stored once, so the Allow header never repeats it.
+ * @param directive The limit_except directive taken from the AST.
+ * @param location The location block being filled.
+ * @throw std::runtime_error when the directive carries no method or names one
+ * the server does not implement.
+ */
 void ConfigLoader::parse_limit_except(const ConfigDirective &directive, LocationConfig &location)
 {
-	const char *allowed[] = {"GET", "POST", "DELETE", NULL};
-
+	if (directive.args.empty())
+		throw std::runtime_error("'limit_except' expects at least one method");
 	for (size_t i = 0; i < directive.args.size(); ++i)
 	{
-		std::string method = directive.args[i];
+		const std::string	&method = directive.args[i];
 
-		// Verifica se o método é permitido no seu servidor
-		bool valid = false;
-		for (int j = 0; allowed[j] != NULL; ++j)
-		{
-			if (method == allowed[j])
-			{
-				valid = true;
-				break;
-			}
-		}
-
-		// Se é válido, adiciona à lista
-		if (valid)
+		if (method != "GET" && method != "POST" && method != "DELETE")
+			throw std::runtime_error("limit_except: unsupported method '"
+				+ method + "' (expected GET, POST or DELETE)");
+		if (std::find(location.allowedMethods.begin(),
+				location.allowedMethods.end(), method)
+			== location.allowedMethods.end())
 			location.allowedMethods.push_back(method);
-		// Se não é válido, ignora (como nginx faz)
 	}
 }

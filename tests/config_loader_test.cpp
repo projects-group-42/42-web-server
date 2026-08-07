@@ -747,6 +747,145 @@ static void	test_malformed_cgi_pass_throws(void)
 	     "a cgi_pass extension reduced to a dot throws");
 }
 
+/* ------------------------------------------------------------------ */
+/* return (redirects)                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief A location declaring no return keeps the 0 sentinel.
+ */
+static void	test_location_without_return_is_zero(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location / {\n        autoindex on;\n    }\n}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location block is parsed");
+	if (config.locations.empty())
+		return ;
+	CHECK_EQ(config.locations[0].returnCode, 0,
+	         "a location without return keeps the 0 sentinel");
+	TEST(config.locations[0].returnUrl.empty(),
+	     "a location without return keeps an empty target");
+}
+
+/**
+ * @brief Both redirect codes the response builder knows are accepted.
+ */
+static void	test_return_codes_are_parsed(void)
+{
+	ServerConfig	moved = loadSource(
+		"server {\n    location /old {\n        return 301 /new;\n    }\n}\n");
+	ServerConfig	found = loadSource(
+		"server {\n    location /old {\n        return 302 /new;\n    }\n}\n");
+
+	if (moved.locations.empty() || found.locations.empty())
+	{
+		TEST(false, "both return blocks are parsed");
+		return ;
+	}
+	CHECK_EQ(moved.locations[0].returnCode, 301, "return 301 is parsed");
+	CHECK_EQ(moved.locations[0].returnUrl, std::string("/new"),
+	         "return 301 keeps its target");
+	CHECK_EQ(found.locations[0].returnCode, 302, "return 302 is parsed");
+}
+
+/**
+ * @brief An absolute URL is a valid redirect target, not only a local path.
+ */
+static void	test_return_accepts_absolute_url(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location /old {\n"
+		"        return 301 http://example.com/new;\n    }\n}\n");
+
+	if (config.locations.empty())
+	{
+		TEST(false, "the return block is parsed");
+		return ;
+	}
+	CHECK_EQ(config.locations[0].returnUrl,
+	         std::string("http://example.com/new"),
+	         "an absolute URL is kept as the target");
+}
+
+/**
+ * @brief return is per location, so one location never sees another's.
+ */
+static void	test_return_is_per_location(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n"
+		"    location / {\n        autoindex on;\n    }\n"
+		"    location /old {\n        return 301 /new;\n    }\n"
+		"}\n");
+
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(2),
+	         "both location blocks are parsed");
+	if (config.locations.size() != 2)
+		return ;
+	CHECK_EQ(config.locations[0].returnCode, 0,
+	         "the location without return stays at 0");
+	CHECK_EQ(config.locations[1].returnCode, 301,
+	         "the location declaring return keeps it");
+}
+
+/**
+ * @brief The last return declaration wins, as the other directives do.
+ */
+static void	test_last_return_wins(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    location /old {\n"
+		"        return 301 /first;\n        return 302 /second;\n    }\n}\n");
+
+	if (config.locations.empty())
+	{
+		TEST(false, "the return block is parsed");
+		return ;
+	}
+	CHECK_EQ(config.locations[0].returnCode, 302,
+	         "the last return code wins");
+	CHECK_EQ(config.locations[0].returnUrl, std::string("/second"),
+	         "the last return target wins");
+}
+
+/**
+ * @brief A malformed return is refused at load time.
+ * A status code that never reaches a reason phrase would be serialised as an
+ * invalid status line, so it is refused while the config is read instead.
+ */
+static void	test_malformed_return_throws(void)
+{
+	TEST(loadThrows("server {\n    location /old {\n        return;\n"
+		"    }\n}\n"),
+	     "return without arguments throws");
+	TEST(loadThrows("server {\n    location /old {\n        return 301;\n"
+		"    }\n}\n"),
+	     "return without a target throws");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return 301 /a /b;\n    }\n}\n"),
+	     "return with more than two arguments throws");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return abc /new;\n    }\n}\n"),
+	     "a non-numeric status code is refused");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return -301 /new;\n    }\n}\n"),
+	     "a negative status code is refused");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return 999 /new;\n    }\n}\n"),
+	     "a status code outside 301/302 is refused");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return 200 /new;\n    }\n}\n"),
+	     "a non-redirect status code is refused");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return 3011 /new;\n    }\n}\n"),
+	     "a status code longer than three digits is refused");
+	TEST(loadThrows("server {\n    location /old {\n"
+		"        return 301 relative;\n    }\n}\n"),
+	     "a target that is neither an absolute path nor a URL is refused");
+}
+
 static void	test_static_helpers(void)
 {
 	CHECK_EQ(ConfigLoader::parsePort("8080"), 8080,
@@ -809,6 +948,12 @@ int	main(void)
 	test_last_cgi_pass_wins();
 	test_cgi_pass_is_per_location();
 	test_malformed_cgi_pass_throws();
+	test_location_without_return_is_zero();
+	test_return_codes_are_parsed();
+	test_return_accepts_absolute_url();
+	test_return_is_per_location();
+	test_last_return_wins();
+	test_malformed_return_throws();
 	test_static_helpers();
 
 	std::cout << std::endl;

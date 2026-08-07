@@ -6,7 +6,7 @@
 /*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/03 22:18:44 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -43,6 +43,8 @@ class Router
 				const ServerConfig &config) const;
 		long			resolveMaxBodySize(const std::string &uri,
 				const ServerConfig &config) const;
+		bool			applyRedirect(const HttpRequest &request,
+				HttpResponse &response, const ServerConfig &config) const;
 		void			applyErrorPage(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
 
@@ -57,6 +59,9 @@ class Router
 					HttpResponse &response, const ServerConfig &config);
 
 		std::string		resolveCgiInterpreter(const std::string &uri,
+					const ServerConfig &config) const;
+
+		bool			redirects(const std::string &uri,
 					const ServerConfig &config) const;
 
 		static bool	loadErrorPage(const ServerConfig &config,

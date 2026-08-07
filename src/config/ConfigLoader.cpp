@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:25:05 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/01 15:37:53 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -362,6 +362,8 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				loc.clientMaxBodySize = parseBodySize(*dit);
 			else if (dit->name == "cgi_pass")
 				parseCgiPass(loc.cgiPass, *dit);
+			else if (dit->name == "return")
+				parseReturn(loc, *dit);
 		}
 
 		if (loc.index.empty())
@@ -511,6 +513,61 @@ void	ConfigLoader::parseErrorPage(std::map<int, std::string> &pages,
 		throw std::runtime_error("error_page: path cannot be empty");
 	for (size_t i = 0; i + 1 < d.args.size(); i++)
 		pages[parseErrorCode(d.args[i])] = path;
+}
+
+/**
+ * @brief Validates a redirect status code and converts it to an int.
+ * Only the two redirect codes the response builder carries a reason phrase for
+ * are accepted, so a typo such as "30l", a negative value or a code outside
+ * the redirect range is refused at load time instead of reaching a client as a
+ * malformed status line.
+ * @param token The raw status code taken from the return directive.
+ * @return The status code as an int.
+ * @throw std::runtime_error when the token is neither 301 nor 302.
+ */
+int	ConfigLoader::parseRedirectCode(const std::string &token)
+{
+	if (!isAllDigits(token) || token.size() != 3)
+		throw std::runtime_error("return: invalid status code '"
+			+ token + "'");
+
+	std::istringstream	iss(token);
+	int					code = 0;
+
+	iss >> code;
+	if (iss.fail() || (code != 301 && code != 302))
+		throw std::runtime_error("return: only 301 and 302 are supported, "
+			"got '" + token + "'");
+	return (code);
+}
+
+/**
+ * @brief Applies a return directive to the location it was declared in.
+ * The directive answers every request matching the location with a redirect to
+ * another URI, as in "return 301 /new", so the location serves no file of its
+ * own. Exactly one code and one target are expected, so a trailing argument is
+ * refused instead of being silently dropped. The target has to be an absolute
+ * path or an absolute URL, since it is sent back as a Location header. A
+ * location declaring the directive twice keeps the last one, which mirrors how
+ * the other directives resolve duplicates.
+ * @param loc The location being filled.
+ * @param d The return directive taken from the AST.
+ * @throw std::runtime_error when the code or the target URI is malformed.
+ */
+void	ConfigLoader::parseReturn(LocationConfig &loc, const ConfigDirective &d)
+{
+	if (d.args.size() != 2)
+		throw std::runtime_error(
+			"'return' expects a status code and a target URI");
+
+	const std::string	&target = d.args[1];
+
+	if (target.empty() || (target[0] != '/'
+			&& target.find("://") == std::string::npos))
+		throw std::runtime_error("return: target must be an absolute path or "
+			"an absolute URL, got '" + target + "'");
+	loc.returnCode = parseRedirectCode(d.args[0]);
+	loc.returnUrl = target;
 }
 
 /**

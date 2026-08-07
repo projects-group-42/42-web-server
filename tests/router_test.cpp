@@ -218,6 +218,48 @@ int	main(void)
 	}
 
 	{
+		ServerConfig	config = makeServer("");
+		LocationConfig	docs("/docs");
+		Router			router;
+		HttpRequest		request;
+		HttpResponse	first;
+		HttpResponse	second;
+
+		docs.index = "manual.html";
+		config.locations.push_back(docs);
+
+		request.setMethod("GET");
+		request.setVersion("HTTP/1.1");
+		request.setUri("/docs/");
+		router.route(request, first, config);
+		request.setUri("/");
+		router.route(request, second, config);
+		TEST(second.getBody() == "DEFAULT INDEX",
+			"a URI matching no location does not inherit the index of one");
+	}
+
+	{
+		ServerConfig	config = makeServer("");
+		LocationConfig	docs("/docs");
+		Router			router;
+		HttpRequest		request;
+		HttpResponse	first;
+		HttpResponse	second;
+
+		docs.root = ALT_DIR;
+		config.locations.push_back(docs);
+
+		request.setMethod("GET");
+		request.setVersion("HTTP/1.1");
+		request.setUri("/docs/");
+		router.route(request, first, config);
+		request.setUri("/");
+		router.route(request, second, config);
+		TEST(second.getBody() == "DEFAULT INDEX",
+			"a URI matching no location does not inherit the root of one");
+	}
+
+	{
 		ServerConfig	config = makeServer("missing.html");
 		HttpResponse	response;
 

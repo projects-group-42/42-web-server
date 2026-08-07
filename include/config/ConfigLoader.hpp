@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/03 22:10:11 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -64,6 +64,9 @@ class ConfigLoader
 		static int			parseErrorCode(const std::string &token);
 		static void			parseErrorPage(
 							std::map<int, std::string> &pages,
+							const ConfigDirective &d);
+		static int			parseRedirectCode(const std::string &token);
+		static void			parseReturn(LocationConfig &loc,
 							const ConfigDirective &d);
 		static void			parseCgiPass(
 							std::map<std::string, std::string> &interpreters,

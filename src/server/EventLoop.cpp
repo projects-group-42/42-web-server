@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/02 00:31:30 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -426,7 +426,9 @@ void EventLoop::sendCgiError(int fd, int status)
  * once, so a script only executes when the config declares a handler for its
  * extension and any other extension keeps being served as a static file. A
  * ".py" script no location binds falls back to the default interpreter, so a
- * config declaring no cgi_pass still serves Python scripts.
+ * config declaring no cgi_pass still serves Python scripts. A location that
+ * redirects runs nothing, since the redirect is the answer and the fallback
+ * would otherwise execute the script before the router ever sees the request.
  * @param uri The request target.
  * @param config The server block serving the request.
  * @return The binary to execute, or an empty string when the URI is not a CGI
@@ -435,6 +437,9 @@ void EventLoop::sendCgiError(int fd, int status)
 std::string	EventLoop::cgiInterpreterFor(const std::string &uri,
 			const ServerConfig &config) const
 {
+	if (_router.redirects(uri, config))
+		return ("");
+
 	std::string	interpreter = _router.resolveCgiInterpreter(uri, config);
 
 	if (interpreter.empty() && _cgiHandler.isCgiRequest(uri))

@@ -6,7 +6,7 @@
 /*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/03 21:44:02 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -390,11 +390,56 @@ bool	Router::loadErrorPage(const ServerConfig &config,
 	return (true);
 }
 
+/**
+ * @brief Tells whether a URI is answered by a redirect.
+ * CGI is dispatched before the router runs, so the caller driving it has to
+ * know a location redirects to keep a script from executing instead.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return true when the location matching the URI declares a return.
+ */
+bool	Router::redirects(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	return (best != NULL && best->returnCode != 0);
+}
+
+/**
+ * @brief Answers a request matching a location that declares a return.
+ * The redirect is emitted before any handler runs, so the location needs no
+ * root of its own and the target is never looked up on disk. Every method is
+ * redirected, the same rewrite-before-content order nginx applies.
+ * @param request The request being answered.
+ * @param response The response to fill in place.
+ * @param config The server block serving the request.
+ * @return true when the request was answered with a redirect.
+ */
+bool	Router::applyRedirect(const HttpRequest &request,
+			HttpResponse &response, const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(request.getUri(), config);
+
+	if (best == NULL || best->returnCode == 0)
+		return (false);
+	response.setStatusCode(best->returnCode);
+	response.setHeaders("Location", best->returnUrl);
+	response.setBody("");
+	Logger::info("Redirecting " + request.getUri() + " to "
+			+ best->returnUrl);
+	return (true);
+}
+
 bool	Router::route(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config)
 {
 	bool pathFound = false;
 	std::string allow;
+
+	if (applyRedirect(request, response, config))
+		return (true);
+
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);
 

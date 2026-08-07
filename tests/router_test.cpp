@@ -420,6 +420,79 @@ int	main(void)
 			"an extension merely starting with .php is not bound");
 	}
 
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	old("/old");
+		HttpResponse	response;
+
+		old.returnCode = 301;
+		old.returnUrl = "/new";
+		config.locations.push_back(old);
+		routeGet("/old", config, response);
+		TEST(response.getStatusCode() == 301,
+			"a location declaring return answers its status");
+		TEST(response.getHeaderValue("Location") == "/new",
+			"a redirect carries the configured Location header");
+		TEST(response.getBody().empty(),
+			"a redirect answers no body of its own");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	old("/old");
+		HttpResponse	found;
+		HttpResponse	deep;
+
+		old.returnCode = 302;
+		old.returnUrl = "/new";
+		config.locations.push_back(old);
+		routeGet("/old", config, found);
+		TEST(found.getStatusCode() == 302,
+			"return 302 answers 302");
+		routeGet("/old/deeper/page.html", config, deep);
+		TEST(deep.getStatusCode() == 302,
+			"every URI under the location is redirected");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	old("/old");
+		HttpResponse	response;
+
+		old.returnCode = 301;
+		old.returnUrl = "/new";
+		config.locations.push_back(old);
+		routePost("/old", "body", config, response);
+		TEST(response.getStatusCode() == 301,
+			"a redirect applies to every method, not only GET");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		HttpResponse	response;
+
+		routeGet("/", config, response);
+		TEST(response.getStatusCode() == 200,
+			"a server without any return is not redirected");
+		TEST(response.getHeaderValue("Location").empty(),
+			"a plain response carries no Location header");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	cgi("/cgi");
+		Router			router;
+
+		cgi.cgiPass[".py"] = "/usr/bin/python3";
+		cgi.returnCode = 301;
+		cgi.returnUrl = "/new";
+		config.locations.push_back(cgi);
+		TEST(router.redirects("/cgi/app.py", config),
+			"a location declaring return reports a redirect");
+		TEST(!router.redirects("/other/app.py", config),
+			"a URI outside the location reports no redirect");
+	}
+
 	cleanupFixture();
 
 	std::cout << std::endl << s_pass << " passed, " << s_fail << " failed"

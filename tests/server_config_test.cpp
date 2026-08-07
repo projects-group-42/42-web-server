@@ -104,7 +104,7 @@ static void	test_location_config_defaults(void)
 	         "default location has no method restriction");
 	CHECK_EQ(location.returnCode, 0,
 	         "default location has no return configured");
-	CHECK_EQ(location.clientMaxBodySize, -1L,
+	CHECK_EQ(location.clientMaxBodySize, static_cast<size_t>(-1),
 	         "default location inherits client_max_body_size from server");
 }
 

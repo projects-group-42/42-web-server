@@ -6,6 +6,16 @@ test_lexer
 test_parser
 test_cgi
 test_cgi_process
+test_autoindex
+test_cgi_suite
+test_config_loader
+test_error_page
+test_host_selection
+test_multipart
+test_request_parser
+test_router
+test_server_config
+test_upload_suite
 # build artifacts
 obj/
 *.o

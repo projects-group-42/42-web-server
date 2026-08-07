@@ -62,7 +62,9 @@ ERROR_PAGE_TEST_SRC	= tests/error_page_test.cpp \
 		       src/http/HttpResponse.cpp \
 		       src/http/ResponseBuilder.cpp \
 		       src/http/MimeType.cpp \
-		       src/utils/Logger.cpp \		       src/utils/Utils.cpp
+		       src/http/MultipartParser.cpp \
+		       src/utils/Logger.cpp \
+		       src/utils/Utils.cpp
 ERROR_PAGE_TEST_BIN	= test_error_page
 
 CGI_TEST_SRC	= tests/cgi_handler_test.cpp \
@@ -80,6 +82,7 @@ MULTIPART_TEST_SRC	= tests/multipart_parser_test.cpp \
 			  src/http/MimeType.cpp \
 			  src/handlers/IRequestHandler.cpp \
 			  src/handlers/StaticFileHandler.cpp \
+			  src/utils/Logger.cpp \
 			  src/utils/Utils.cpp
 MULTIPART_TEST_BIN	= test_multipart
 CXX			= c++

@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/04 19:34:31 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/07 19:36:02 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -337,12 +337,12 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 
 /*
  * Creates or overwrites the file at `resolvedPath` with `content`.
- * Writes in a loop so a short write() (large body, signal interruption)
- * does not truncate the content; on a real write failure, the partial
- * file is removed before reporting 500 so no truncated file is left on
- * disk. Returns the HTTP status code describing the outcome: 201 when
- * the file did not exist yet, 200 when an existing file was overwritten,
- * 400 when the target is a directory, 403/404/500 on the matching write
+ * Writes in a loop so a short write() does not truncate the content. A
+ * write() returning -1 or 0 is a failure: the partial file is removed
+ * before reporting 500, so no truncated file is left on disk. Returns
+ * the HTTP status code describing the outcome: 201 when the file did
+ * not exist yet, 200 when an existing file was overwritten, 400 when
+ * the target is a directory, 403/404/500 on the matching write
  * failures.
  */
 int StaticFileHandler::saveFile(const std::string &resolvedPath,
@@ -371,10 +371,8 @@ int StaticFileHandler::saveFile(const std::string &resolvedPath,
 	while (offset < total)
 	{
 		ssize_t	written = write(fd, data + offset, total - offset);
-		if (written == -1)
+		if (written <= 0)
 		{
-			if (errno == EINTR)
-				continue;
 			close(fd);
 			unlink(resolvedPath.c_str());
 			return (500);

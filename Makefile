@@ -143,6 +143,7 @@ fclean: clean
 	rm -f $(LEXER_TEST_BIN)
 	rm -f $(PARSER_TEST_BIN)
 	rm -f $(SERVER_CONFIG_TEST_BIN)
+	rm -f $(ERROR_PAGE_TEST_BIN)
 	rm -f $(CGI_TEST_BIN)
 	rm -f $(MULTIPART_TEST_BIN)
 

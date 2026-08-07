@@ -202,6 +202,18 @@ void Router::serveCustomErrorPage(HttpResponse &response,
 		response.setHeaders("content-type", contentType);
 }
 
+/**
+ * @brief Enforces the limit_except methods a location declares.
+ * A location without limit_except restricts nothing, so its empty list allows
+ * every method the server implements. When the method is refused the response
+ * is answered 405 carrying the Allow header the standard requires, listing the
+ * methods the location does accept.
+ * @param request The request being answered.
+ * @param response The response to fill when the method is refused.
+ * @param location The location matching the request target.
+ * @return true when the method may proceed, false when the response was
+ * answered 405 and the handler must not run.
+ */
 bool Router::checkAllowedMethods(const HttpRequest &request,
 								 HttpResponse &response,
 								 const LocationConfig &location)
@@ -228,8 +240,18 @@ bool Router::checkAllowedMethods(const HttpRequest &request,
 	return (false);
 }
 
+/**
+ * @brief Finds the location block that applies to a request target.
+ * The location whose path is the longest matching prefix of the URI wins, and
+ * the root and index it declares replace the ones inherited from the server.
+ * @param request The request being answered.
+ * @param config The server block serving the request.
+ * @param finalRoot The root to serve the request from, overwritten in place.
+ * @param finalIndex The index file to serve, overwritten in place.
+ * @return The index of the winning location, or -1 when none matches.
+ */
 int Router::resolveLocation(const HttpRequest &request,
-							 const ServerConfig &config, 
+							 const ServerConfig &config,
 							 std::string &finalRoot,
 							 std::string &finalIndex)
 {
@@ -248,7 +270,7 @@ int Router::resolveLocation(const HttpRequest &request,
 			if (locPath.size() > bestMatchPath.size())
 			{
 				bestMatchPath = locPath;
-				bestMatchIndex = i;
+				bestMatchIndex = static_cast<int>(i);
 				if (!config.locations[i].root.empty())
 					finalRoot = config.locations[i].root;
 				if (!config.locations[i].index.empty())
@@ -269,14 +291,15 @@ bool	Router::route(const HttpRequest &request,
 			request.getMethod(), request.getUri(), pathFound, allow);
 	std::string finalRoot = config.root;
 	std::string finalIndex = config.index;
-	std::string bestMatchPath = "";
-	//loop por todas as locations do servidor
-
 	int bestMatchIndex = resolveLocation(request, config, finalRoot, finalIndex);
-	if (bestMatchIndex != -1 && (
-			!checkAllowedMethods(request, response,
-			config.locations[bestMatchIndex])))
+
+	if (bestMatchIndex != -1
+		&& !checkAllowedMethods(request, response,
+			config.locations[bestMatchIndex]))
+	{
+		serveCustomErrorPage(response, config, finalRoot);
 		return (true);
+	}
 	if (handler == NULL)
 	{
 		if (pathFound)

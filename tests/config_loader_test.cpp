@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/01 18:00:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/07 20:40:12 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/08 19:56:13 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -424,6 +424,20 @@ static void	test_malformed_upload_store_throws(void)
 		"server {\n    location /uploads {\n"
 		"        upload_store www/uploads extra;\n    }\n}\n"),
 	     "an extra argument is rejected instead of being silently dropped");
+}
+
+static void	test_unknown_server_directive_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    listen 8081;\n    unsupported_directive on;\n}\n"),
+	     "an unknown server-level directive is rejected");
+}
+
+static void	test_unknown_location_directive_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    listen 8081;\n    location / {\n        unsupported_directive on;\n    }\n}\n"),
+	     "an unknown location-level directive is rejected");
 }
 
 /* ------------------------------------------------------------------ */
@@ -1070,6 +1084,8 @@ int	main(void)
 	test_upload_store_is_per_location();
 	test_last_upload_store_wins();
 	test_malformed_upload_store_throws();
+	test_unknown_server_directive_throws();
+	test_unknown_location_directive_throws();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();

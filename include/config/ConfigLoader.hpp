@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:21:16 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/07 20:40:12 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -74,6 +74,7 @@ class ConfigLoader
 		static void			parseLimitExcept(
 							std::vector<std::string> &methods,
 							const ConfigDirective &d);
+		static std::string	parseUploadStore(const ConfigDirective &d);
 };
 
 #endif

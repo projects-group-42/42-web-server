@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/08 18:08:20 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -204,6 +204,15 @@ std::string	Router::resolveCgiInterpreter(const std::string &uri,
 	if (it == best->cgiPass.end())
 		return ("");
 	return (it->second);
+}
+
+std::string Router::resolveUploadStore(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig *best = matchLocation(uri, config);
+	if (best != NULL && !best->uploadStore.empty())
+		return (best->uploadStore);
+	return ("");
 }
 
 /**
@@ -492,10 +501,8 @@ bool	Router::route(const HttpRequest &request,
 		applyErrorPage(request, response, config);
 		return (true);
 	}
-
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);
-
 	if (handler == NULL)
 	{
 		if (pathFound)
@@ -517,6 +524,7 @@ bool	Router::route(const HttpRequest &request,
 				resolveAutoindex(request.getUri(), config));
 		_staticHandler.setMaxBodySize(
 				resolveMaxBodySize(request.getUri(), config));
+		_staticHandler.setUploadStore(resolveUploadStore(request.getUri(), config));
 		handler->handle(request, response);
 	}
 	applyErrorPage(request, response, config);
@@ -547,3 +555,4 @@ void	Router::applyErrorPage(const HttpRequest &request,
 	if (!contentType.empty())
 		response.setHeaders("content-type", contentType);
 }
+

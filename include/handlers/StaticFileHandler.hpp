@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/24 18:21:08 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/08 18:14:46 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,9 +35,9 @@ class StaticFileHandler : public IRequestHandler
 	private:
 		std::string	_root;
 		std::string	_index;
+		std::string _uploadStore;
 		bool		_autoindex;
 		long		_maxBodySize;
-
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
@@ -52,24 +52,14 @@ class StaticFileHandler : public IRequestHandler
 						std::string &boundary) const;
 		bool		handleMultipartUpload(const HttpRequest &request,
 						const std::string &boundary, HttpResponse &response);
-
+		int prepareUploadStore(std::string &canStore);
+		int savePartToUploadStore(const std::string &canStore,
+						const std::string &filename, const std::string &content);
 	protected:
-		/*
-		 * Serves the resource resolved from the URI as the response body.
-		 */
 		bool				handleGet(const HttpRequest &request,
 								  HttpResponse &response);
-
-		/*
-		 * Writes the request body to the file resolved from the URI.
-		 * Returns 201 if the file was created, 200 if it was overwritten.
-		 */
 		bool				handlePost(const HttpRequest &request,
 								  HttpResponse &response);
-
-		/*
-		 * Removes the file resolved from the URI. Returns 200 on success.
-		 */
 		bool				handleDelete(const HttpRequest &request,
 								  HttpResponse &response);
 
@@ -84,6 +74,7 @@ class StaticFileHandler : public IRequestHandler
 		void				setIndex(const std::string &index);
 		void				setAutoindex(bool autoindex);
 		void				setMaxBodySize(long maxBodySize);
+		void				setUploadStore(const std::string &uploadStore);
 		const std::string	&getRoot(void) const;
 };
 

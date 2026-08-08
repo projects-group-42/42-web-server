@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:24:45 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 19:36:02 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/08 18:25:04 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,13 +22,13 @@
 #include <cerrno>
 
 StaticFileHandler::StaticFileHandler(void)
-	: _root("www"), _index("index.html"), _autoindex(false),
-	  _maxBodySize(1 * 1024 * 1024)
+	: _root("www"), _index("index.html"), _uploadStore(""),
+	_autoindex(false), _maxBodySize(1 * 1024 * 1024)
 {
 }
 
 StaticFileHandler::StaticFileHandler(const std::string &root)
-	: _root(root), _index("index.html"), _autoindex(false),
+	: _root(root), _index("index.html"), _uploadStore(""), _autoindex(false),
 	  _maxBodySize(1 * 1024 * 1024)
 {
 }
@@ -46,6 +46,7 @@ StaticFileHandler &StaticFileHandler::operator=(const StaticFileHandler &other)
 		_index = other._index;
 		_autoindex = other._autoindex;
 		_maxBodySize = other._maxBodySize;
+		_uploadStore = other._uploadStore;
 	}
 	return (*this);
 }
@@ -80,6 +81,11 @@ void	StaticFileHandler::setAutoindex(bool autoindex)
 void	StaticFileHandler::setMaxBodySize(long maxBodySize)
 {
 	_maxBodySize = maxBodySize;
+}
+
+void StaticFileHandler::setUploadStore(const std::string &uploadStore)
+{
+	_uploadStore = uploadStore;
 }
 
 const std::string &StaticFileHandler::getRoot(void) const
@@ -417,6 +423,30 @@ static std::string	fileBaseName(const std::string &name)
 	return (name.substr(slash + 1));
 }
 
+int StaticFileHandler::prepareUploadStore(std::string &canStore)
+{
+    if (_uploadStore.empty())
+        return 405; // no upload_store configured
+
+    canStore = canonicalPath(_uploadStore);
+    if (canStore.empty())
+        return 404; // upload_store not found / not canonicalisable
+
+    return 200;
+}
+
+int StaticFileHandler::savePartToUploadStore(const std::string &canStore,
+        const std::string &filename, const std::string &content)
+{
+    if (filename.empty() || filename == "." || filename == "..")
+        return 400;
+
+    std::string target = canStore;
+    if (target[target.size() - 1] != '/')
+        target += '/';
+    target += filename;
+    return saveFile(target, content);
+}
 /*
  * Parses a multipart/form-data body and saves every file part under the
  * directory addressed by the request URI, naming each file after the base
@@ -434,42 +464,29 @@ bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
 		response.setStatusCode(400);
 		return (true);
 	}
-
 	MultipartParser	parser;
 	if (!parser.parse(request.getBody(), boundary))
 	{
 		response.setStatusCode(parser.getErrorCode());
 		return (true);
 	}
-
-	std::string	baseUri = request.getUri();
-	if (baseUri.empty() || baseUri[baseUri.size() - 1] != '/')
-		baseUri += "/";
-
+	std::string canStore;
+	int prep = prepareUploadStore(canStore);
+	if (prep != 200)
+	{
+		response.setStatusCode(prep);
+		return true;
+	}
 	const std::vector<MultipartPart>	&parts = parser.getParts();
 	size_t								savedFiles = 0;
 	bool								anyCreated = false;
-
 	for (size_t i = 0; i < parts.size(); ++i)
 	{
 		if (!parts[i].isFile())
 			continue;
 
 		std::string	filename = fileBaseName(parts[i].filename);
-		if (filename.empty() || filename == "." || filename == "..")
-		{
-			response.setStatusCode(400);
-			return (true);
-		}
-
-		std::string	resolvedPath = rslv_req_realpath(baseUri + filename);
-		if (resolvedPath.empty())
-		{
-			response.setStatusCode(403);
-			return (true);
-		}
-
-		int	status = saveFile(resolvedPath, parts[i].content);
+		int status = savePartToUploadStore(canStore, filename, parts[i].content);
 		if (status != 200 && status != 201)
 		{
 			response.setStatusCode(status);
@@ -478,13 +495,11 @@ bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
 		++savedFiles;
 		anyCreated = anyCreated || (status == 201);
 	}
-
 	if (savedFiles == 0)
 	{
 		response.setStatusCode(400);
 		return (true);
 	}
-
 	response.setStatusCode(anyCreated ? 201 : 200);
 	return (true);
 }
@@ -505,19 +520,31 @@ bool StaticFileHandler::handlePost(const HttpRequest &request,
 		response.setStatusCode(413);
 		return (true);
 	}
-
+	if (_uploadStore.empty()) {
+		response.setStatusCode(405);
+		return true;
+	}
 	std::string	boundary;
 	if (isMultipartFormData(request, boundary))
 		return (handleMultipartUpload(request, boundary, response));
-
-	std::string	resolvedPath = rslv_req_realpath(request.getUri());
-	if (resolvedPath.empty())
+	 std::string filename = fileBaseName(request.getUri());
+	if (filename.empty() || filename == "." || filename == "..")
 	{
-		response.setStatusCode(403);
+		response.setStatusCode(400);
+		return (true);
+	}
+	std::string canStore = canonicalPath(_uploadStore);
+	if (canStore.empty())
+	{
+		response.setStatusCode(404);
 		return (true);
 	}
 
-	response.setStatusCode(saveFile(resolvedPath, request.getBody()));
+	std::string target = canStore;
+	if (target[target.size() - 1] != '/')
+		target += '/';
+	target += filename;
+	response.setStatusCode(saveFile(target, request.getBody()));
 	return (true);
 }
 

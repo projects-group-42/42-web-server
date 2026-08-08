@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <sstream>
 #include <stdexcept>
 
 /**
@@ -296,6 +297,12 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			server.clientMaxBodySize = parseBodySize(*it);
 		else if (it->name == "error_page")
 			parseErrorPage(server.errorPages, *it);
+		else
+		{
+			std::ostringstream oss;
+			oss << "unknown directive '" << it->name << "' at line " << it->line;
+			throw std::runtime_error(oss.str());
+		}
 	}
 
 	if (indexes > 1)
@@ -369,6 +376,13 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				loc.uploadStore = parseUploadStore(*dit);
 			else if (dit->name == "return")
 				parseReturn(loc, *dit);
+			else
+			{
+				std::ostringstream oss;
+				oss << "unknown directive '" << dit->name << "' at line "
+				    << dit->line;
+				throw std::runtime_error(oss.str());
+			}
 		}
 
 		if (loc.index.empty())

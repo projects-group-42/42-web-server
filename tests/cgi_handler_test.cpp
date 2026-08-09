@@ -17,8 +17,10 @@
 #include <cstdio>
 
 #include "cgi/CgiHandler.hpp"
+#include "cgi/CgiProcess.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
+#include <poll.h>
 
 static int	s_pass = 0;
 static int	s_fail = 0;
@@ -41,6 +43,62 @@ static void	writeScript(const std::string &path, const std::string &content)
 }
 
 /*
+ * Runs a script the way the event loop does: a CgiProcess whose two pipes are
+ * driven by poll(), one step at a time. The server no longer ships a blocking
+ * helper for this, so the tests own the loop and keep reporting the same pair
+ * the removed CgiHandler::execute() reported: whether the child exited cleanly
+ * and what it wrote.
+ */
+static bool	runCgi(const std::string &interpreter, const std::string &scriptPath,
+			const std::string &body, const std::vector<std::string> &env,
+			std::string &output)
+{
+	CgiProcess	proc(-1, body);
+
+	if (!proc.start(interpreter, scriptPath, env))
+		return (false);
+	while (!proc.finished())
+	{
+		struct pollfd	fds[2];
+		nfds_t			count = 0;
+		int				outIndex = -1;
+		int				bodyIndex = -1;
+
+		if (proc.isReading())
+		{
+			fds[count].fd = proc.outputReadFd();
+			fds[count].events = POLLIN;
+			fds[count].revents = 0;
+			outIndex = static_cast<int>(count);
+			++count;
+		}
+		if (proc.isWriting())
+		{
+			fds[count].fd = proc.bodyWriteFd();
+			fds[count].events = POLLOUT;
+			fds[count].revents = 0;
+			bodyIndex = static_cast<int>(count);
+			++count;
+		}
+		if (count == 0 || poll(fds, count, 5000) <= 0)
+			break ;
+		if (proc.isWriting()
+			&& (fds[bodyIndex].revents & (POLLOUT | POLLERR | POLLHUP)))
+		{
+			if (fds[bodyIndex].revents & (POLLERR | POLLHUP))
+				proc.stopWriting();
+			else
+				proc.onWritable();
+		}
+		if (proc.isReading()
+			&& (fds[outIndex].revents & (POLLIN | POLLHUP | POLLERR)))
+			proc.onReadable();
+	}
+	output = proc.output();
+	return (proc.reap() == 0);
+}
+
+/*
  * Runs a script that writes to stdout and checks the parent captured it.
  */
 static void	test_stdout_redirect(void)
@@ -51,7 +109,7 @@ static void	test_stdout_redirect(void)
 	bool						ok;
 
 	writeScript("cgi_echo.sh", "echo hello-cgi\n");
-	ok = handler.execute("/bin/sh", "cgi_echo.sh", "", env, output);
+	ok = runCgi("/bin/sh", "cgi_echo.sh", "", env, output);
 	TEST(ok, "execute returns true on success");
 	TEST(output == "hello-cgi\n", "captures script stdout");
 	std::remove("cgi_echo.sh");
@@ -68,7 +126,7 @@ static void	test_stdin_redirect(void)
 	bool						ok;
 
 	writeScript("cgi_cat.sh", "cat\n");
-	ok = handler.execute("/bin/sh", "cgi_cat.sh", "ping", env, output);
+	ok = runCgi("/bin/sh", "cgi_cat.sh", "ping", env, output);
 	TEST(ok, "execute returns true when feeding stdin");
 	TEST(output == "ping", "forwards request body to script stdin");
 	std::remove("cgi_cat.sh");
@@ -87,7 +145,7 @@ static void	test_large_body(void)
 	bool						ok;
 
 	writeScript("cgi_cat.sh", "cat\n");
-	ok = handler.execute("/bin/sh", "cgi_cat.sh", body, env, output);
+	ok = runCgi("/bin/sh", "cgi_cat.sh", body, env, output);
 	TEST(ok, "execute returns true on a large body");
 	TEST(output == body, "streams a body larger than the pipe buffer");
 	std::remove("cgi_cat.sh");
@@ -158,7 +216,7 @@ static void	test_env_reaches_script(void)
 	request.setVersion("HTTP/1.1");
 	env = handler.buildEnv(request, "cgi_env.sh", 8080, "127.0.0.1");
 	writeScript("cgi_env.sh", "echo \"$REQUEST_METHOD:$QUERY_STRING\"\n");
-	ok = handler.execute("/bin/sh", "cgi_env.sh", request.getBody(), env, output);
+	ok = runCgi("/bin/sh", "cgi_env.sh", request.getBody(), env, output);
 	TEST(ok, "execute returns true with an environment");
 	TEST(output == "GET:q=hello\n", "child process receives CGI variables");
 	std::remove("cgi_env.sh");

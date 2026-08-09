@@ -11,18 +11,11 @@
 /* ************************************************************************** */
 
 #include "cgi/CgiHandler.hpp"
-#include "cgi/CgiPipes.hpp"
 #include "utils/Utils.hpp"
 #include <sys/stat.h>
 #include <unistd.h>
-#include <limits.h>
-#include <stdlib.h>
 #include <vector>
 #include <sstream>
-#include <sys/wait.h>
-#include <poll.h>
-#include <fcntl.h>
-#include <errno.h>
 
 CgiHandler::CgiHandler(void)
 	: _cgiRoot("cgi-bin"), _locationPrefix("")
@@ -169,128 +162,6 @@ std::string CgiHandler::resolvePath(const std::string &uri) const
 	if (!isWithinRoot(_cgiRoot, path))
 		return ("");
 	return (path);
-}
-
-/*
- * Runs in the child after fork: redirects the pipe ends onto stdin/stdout,
- * closes the leftover pipe fds, then execve's the interpreter with the script
- * as argv[1] and the prepared CGI environment. Never returns; _exit is called
- * if any step fails.
- */
-static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const std::string &scriptPath, char **envp)
-{
-    char    *argv[3];
-
-    pipes.closeParentEnds();
-    if(dup2(pipes.bodyReadFd(), STDIN_FILENO) == -1)
-        _exit(1);
-    if(dup2(pipes.outputWriteFd(), STDOUT_FILENO) == -1)
-        _exit(1);
-    pipes.closeChildEnds();
-
-    argv[0] = const_cast<char *>(interpreter.c_str());
-    argv[1] = const_cast<char *>(scriptPath.c_str());
-    argv[2] = NULL;
-
-    execve(interpreter.c_str(), argv, envp);
-    _exit(1);
-}
-
-/*
- * Puts fd into non-blocking mode so a write can never stall the parent. Only
- * F_SETFL and O_NONBLOCK are used, which is all the subject authorises.
- * Returns false when the mode cannot be set.
- */
-static bool setPipeNonBlocking(int fd)
-{
-    return (fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
-}
-
-/*
- * Feeds body to the child's stdin while draining its stdout at the same time,
- * multiplexing both pipes with poll so a body larger than the pipe buffer
- * cannot deadlock the parent. Returns false only on a poll or read error.
- */
-static bool pumpCgiIo(CgiPipes &pipes, const std::string &body, std::string &output)
-{
-    struct pollfd   fds[2];
-    size_t          sent = 0;
-    bool            writing = !body.empty();
-    bool            reading = true;
-
-    if (!writing)
-        pipes.closeBodyWrite();
-    else
-        setPipeNonBlocking(pipes.bodyWriteFd());
-    while (reading || writing)
-    {
-        nfds_t  count = 0;
-        int     outIndex = -1;
-        int     bodyIndex = -1;
-
-        if (reading)
-        {
-            fds[count].fd = pipes.outputReadFd();
-            fds[count].events = POLLIN;
-            fds[count].revents = 0;
-            outIndex = static_cast<int>(count);
-            ++count;
-        }
-        if (writing)
-        {
-            fds[count].fd = pipes.bodyWriteFd();
-            fds[count].events = POLLOUT;
-            fds[count].revents = 0;
-            bodyIndex = static_cast<int>(count);
-            ++count;
-        }
-        if (poll(fds, count, -1) == -1)
-        {
-            if (errno == EINTR)
-                continue;
-            return (false);
-        }
-        if (writing && (fds[bodyIndex].revents & (POLLERR | POLLHUP)))
-        {
-            pipes.closeBodyWrite();
-            writing = false;
-        }
-        else if (writing && (fds[bodyIndex].revents & POLLOUT))
-        {
-            ssize_t written = write(pipes.bodyWriteFd(), body.data() + sent, body.size() - sent);
-
-            if (written <= 0)
-            {
-                pipes.closeBodyWrite();
-                writing = false;
-            }
-            else
-            {
-                sent += static_cast<size_t>(written);
-                if (sent == body.size())
-                {
-                    pipes.closeBodyWrite();
-                    writing = false;
-                }
-            }
-        }
-        if (reading && (fds[outIndex].revents & (POLLIN | POLLHUP | POLLERR)))
-        {
-            char    buffer[4096];
-            ssize_t bytes = read(pipes.outputReadFd(), buffer, sizeof(buffer));
-
-            if (bytes > 0)
-                output.append(buffer, static_cast<size_t>(bytes));
-            else if (bytes == 0)
-            {
-                pipes.closeOutputRead();
-                reading = false;
-            }
-            else
-                return (false);
-        }
-    }
-    return (true);
 }
 
 bool CgiHandler::isCgiRequest(const std::string &uri) const
@@ -572,43 +443,5 @@ bool CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) 
     for (size_t i = 0; i < parsed.size(); ++i)
         response.addHeader(parsed[i].first, parsed[i].second);
     response.setBody(raw.substr(sep + sepLen));
-    return (true);
-}
-
-/*
- * Runs the CGI script through the interpreter: creates the pipes, forks, wires
- * the child's stdin/stdout to the pipes, passes env as the child's environment,
- * then streams body to the child while collecting its stdout into output at the
- * same time. Reaps the child and returns false on fork/pipe failure, on I/O
- * error, or when the script does not exit cleanly with status 0.
- */
-bool    CgiHandler::execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, const std::vector<std::string> &env, std::string &output) const
-{
-    CgiPipes                pipes;
-    std::vector<char *>     envp;
-    pid_t                   pid;
-    bool                    ok;
-    int                     status;
-
-    for (size_t i = 0; i < env.size(); ++i)
-        envp.push_back(const_cast<char *>(env[i].c_str()));
-    envp.push_back(NULL);
-    if (!pipes.create())
-        return(false);
-    pid = fork();
-    if (pid == -1)
-        return(false);
-    if (pid == 0)
-        runCgiChild(pipes, interpreter, scriptPath, &envp[0]);
-    pipes.closeChildEnds();
-    ok = pumpCgiIo(pipes, body, output);
-    if (waitpid(pid, &status, 0) == -1)
-        return (false);
-    if (!ok)
-        return (false);
-    if (!WIFEXITED(status))
-        return (false);
-    if (WEXITSTATUS(status) != 0)
-        return (false);
     return (true);
 }

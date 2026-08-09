@@ -189,7 +189,7 @@ static void	test_handler_saves_uploaded_file(void)
 	std::remove("mp_root/uploads/report.txt");
 
 	StaticFileHandler	handler("mp_root");
-	handler.setUploadStore("mp_root/uploads");
+	handler.setUploadStore(std::string("mp_root") + "/uploads");
 	HttpRequest			request;
 	HttpResponse		response;
 	std::string			body =
@@ -227,7 +227,7 @@ static void	test_handler_overwrites_existing_file(void)
 	existing.close();
 
 	StaticFileHandler	handler("mp_root2");
-	handler.setUploadStore("mp_root2/uploads");
+	handler.setUploadStore(std::string("mp_root2") + "/uploads");
 	HttpRequest			request;
 	HttpResponse		response;
 	std::string			body =
@@ -257,7 +257,7 @@ static void	test_handler_overwrites_existing_file(void)
 static void	test_handler_rejects_missing_boundary(void)
 {
 	StaticFileHandler	handler("mp_root3");
-	handler.setUploadStore("mp_root3/uploads");
+	handler.setUploadStore(std::string("mp_root3") + "/uploads");
 	HttpRequest			request;
 	HttpResponse		response;
 
@@ -278,7 +278,7 @@ static void	test_handler_rejects_body_without_file_part(void)
 	mkdir("mp_root4/uploads", 0755);
 
 	StaticFileHandler	handler("mp_root4");
-	handler.setUploadStore("mp_root4/uploads");
+	handler.setUploadStore(std::string("mp_root4") + "/uploads");
 	HttpRequest			request;
 	HttpResponse		response;
 	std::string			body =
@@ -298,7 +298,6 @@ static void	test_handler_rejects_body_without_file_part(void)
 	TEST(response.getStatusCode() == 400,
 		"answers 400 when no part carries a filename");
 
-	rmdir("mp_root4/uploads");
 	rmdir("mp_root4");
 }
 
@@ -310,7 +309,7 @@ static void	test_handler_strips_path_from_filename(void)
 	std::remove("mp_root5/escape.txt");
 
 	StaticFileHandler	handler("mp_root5");
-	handler.setUploadStore("mp_root5/uploads");
+	handler.setUploadStore(std::string("mp_root5") + "/uploads");
 	HttpRequest			request;
 	HttpResponse		response;
 	std::string			body =
@@ -348,7 +347,7 @@ static void	test_handler_rejects_dotdot_filename(void)
 	mkdir("mp_root6/uploads", 0755);
 
 	StaticFileHandler	handler("mp_root6");
-	handler.setUploadStore("mp_root6/uploads");
+	handler.setUploadStore(std::string("mp_root6") + "/uploads");
 	HttpRequest			request;
 	HttpResponse		response;
 	std::string			body =
@@ -378,7 +377,7 @@ static void	test_handler_rejects_oversized_body(void)
 	mkdir("mp_root7/uploads", 0755);
 
 	StaticFileHandler	handler("mp_root7");
-	handler.setUploadStore("mp_root7/uploads");
+	handler.setUploadStore(std::string("mp_root7") + "/uploads");
 	handler.setMaxBodySize(8);
 	HttpRequest			request;
 	HttpResponse		response;

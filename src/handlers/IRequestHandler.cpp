@@ -56,6 +56,8 @@ bool IRequestHandler::handleDelete(const HttpRequest &request,
 
 /*
  * Dispatches the request to the method matching its HTTP verb.
+ * HEAD is answered by the GET path, since the two only differ by the body,
+ * which the response builder drops on the way out.
  * Unsupported verbs yield 405 Method Not Allowed.
  */
 bool IRequestHandler::handle(const HttpRequest &request,
@@ -63,7 +65,7 @@ bool IRequestHandler::handle(const HttpRequest &request,
 {
 	const std::string	&method = request.getMethod();
 
-	if (method == "GET")
+	if (method == "GET" || method == "HEAD")
 		return (handleGet(request, response));
 	if (method == "POST")
 		return (handlePost(request, response));

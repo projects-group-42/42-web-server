@@ -11,20 +11,19 @@
 /* ************************************************************************** */
 
 #include "cgi/CgiHandler.hpp"
+#include "utils/Utils.hpp"
 #include <sys/stat.h>
 #include <unistd.h>
-#include <limits.h>
-#include <stdlib.h>
 #include <vector>
 #include <sstream>
 
 CgiHandler::CgiHandler(void)
-	: _cgiRoot("cgi-bin")
+	: _cgiRoot("cgi-bin"), _locationPrefix("")
 {
 }
 
 CgiHandler::CgiHandler(const std::string &cgiRoot)
-	: _cgiRoot(cgiRoot)
+	: _cgiRoot(cgiRoot), _locationPrefix("")
 {
 }
 
@@ -36,7 +35,10 @@ CgiHandler::CgiHandler(const CgiHandler &copy)
 CgiHandler &CgiHandler::operator=(const CgiHandler &other)
 {
 	if (this != &other)
+	{
 		_cgiRoot = other._cgiRoot;
+		_locationPrefix = other._locationPrefix;
+	}
 	return (*this);
 }
 
@@ -47,6 +49,16 @@ CgiHandler::~CgiHandler(void)
 void	CgiHandler::setCgiRoot(const std::string &cgiRoot)
 {
 	_cgiRoot = cgiRoot;
+}
+
+/*
+ * Sets the location prefix dropped from a URI before the script is looked for
+ * under the CGI root. The event loop fills both from the location matching the
+ * request, so a script is found where its location says it lives.
+ */
+void	CgiHandler::setLocationPrefix(const std::string &prefix)
+{
+	_locationPrefix = prefix;
 }
 
 const std::string &CgiHandler::getCgiRoot(void) const
@@ -64,19 +76,6 @@ bool CgiHandler::hasExtension(const std::string &uri,
 		return (false);
 	return (uri.compare(uri.size() - extension.size(),
 			extension.size(), extension) == 0);
-}
-
-/*
- * Returns the canonical absolute path of path, or an empty string when it
- * cannot be resolved (for instance because it does not exist).
- */
-static std::string canonicalPath(const std::string &path)
-{
-	char	buffer[PATH_MAX];
-
-	if (realpath(path.c_str(), buffer) == NULL)
-		return ("");
-	return (std::string(buffer));
 }
 
 /*
@@ -130,49 +129,33 @@ static std::string joinPath(const std::string &root,
 }
 
 /*
- * Returns true when path canonically resolves inside root, so symlinks
- * cannot escape it. Paths that cannot be canonicalized are treated as inside.
+ * Returns true when path resolves inside root, so symlinks cannot escape it.
+ * Containment is the single rule pathIsInsideRoot enforces, which walks the
+ * parent chain with stat() because realpath() is not authorised by the subject
+ * and refuses a symlinked final component. A root that does not exist on disk
+ * confines nothing, so the request is refused: there is no interpreter tree to
+ * run a script out of, and the static side answers the same missing root the
+ * same way.
  */
 static bool isWithinRoot(const std::string &root, const std::string &path)
 {
-	std::string	canonicalRoot = canonicalPath(root);
-	std::string	resolved = canonicalPath(path);
-
-	if ((canonicalRoot.empty() || resolved.empty()) || resolved == canonicalRoot)
-		return (true);
-	return (resolved.compare(0, canonicalRoot.size() + 1, canonicalRoot + "/") == 0);
+	return (pathIsInsideRoot(root, path));
 }
 
 /*
- * Returns the last path component of path, ignoring trailing slashes.
- */
-static std::string baseName(const std::string &path)
-{
-	std::string	trimmed = path;
-
-	while (trimmed.size() > 1 && trimmed[trimmed.size() - 1] == '/')
-		trimmed.erase(trimmed.size() - 1);
-	std::string::size_type	slash = trimmed.rfind('/');
-	if (slash == std::string::npos)
-		return (trimmed);
-	return (trimmed.substr(slash + 1));
-}
-
-/*
- * Resolves the script path for a URI under the CGI root. The URI is
- * normalized, its leading mount segment (matching the CGI root name) is
- * dropped so "/cgi-bin/x.py" maps to "<root>/x.py", the rest is joined onto
- * the root, and the result is checked so symlinks cannot escape it. Returns an
- * empty string on escape.
+ * Resolves the script path for a URI under the CGI root. The prefix of the
+ * location serving the request is dropped first, so "/cgi/x.py" served by a
+ * location rooted in "www/cgi" maps to "www/cgi/x.py"; what is left is
+ * normalized, joined onto the root, and checked so symlinks cannot escape it.
+ * Returns an empty string on escape.
  */
 std::string CgiHandler::resolvePath(const std::string &uri) const
 {
 	std::vector<std::string>	segments;
 
-	if (!normalizeSegments(uri, segments))
+	if (!normalizeSegments(stripLocationPrefix(uri, _locationPrefix),
+			segments))
 		return ("");
-	if (!segments.empty() && segments.front() == baseName(_cgiRoot))
-		segments.erase(segments.begin());
 	std::string	path = joinPath(_cgiRoot, segments);
 	if (!isWithinRoot(_cgiRoot, path))
 		return ("");
@@ -185,10 +168,12 @@ bool CgiHandler::isCgiRequest(const std::string &uri) const
 }
 
 /*
- * Validates the script resolved from the URI (path stays inside the CGI
- * root, exists, is a regular file, is readable) and writes the resolved path
- * into scriptPath on success. Sets the response status code and returns false
- * when validation fails.
+ * Validates the script resolved from the URI and writes the resolved path into
+ * scriptPath on success. The path must stay inside the CGI root, the target
+ * must exist, be a regular file, and be readable. A missing script is answered
+ * 404 rather than forked into the interpreter, which would exit non-zero and
+ * turn every mistyped CGI URL into a fork+exec answered 502. Sets the response
+ * status code and returns false when the request is refused.
  */
 bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 		HttpResponse &response) const
@@ -255,25 +240,49 @@ static std::string headerToMetaVar(const std::string &key)
 /*
  * Builds the CGI environment for a request and the
  * resolved script path. Includes the request method, query string, protocol
- * and content metadata, and forwards every request header as an HTTP_ variable
- * except the ones already exposed as CONTENT_TYPE and CONTENT_LENGTH.
+ * and content metadata, the address the request arrived from and where it was
+ * addressed, and forwards every request header as an HTTP_ variable except the
+ * ones already exposed as CONTENT_TYPE and CONTENT_LENGTH.
+ *
+ * PATH_INFO is the path in URI space, and PATH_TRANSLATED the same path
+ * translated onto the filesystem, which is the split RFC 3875 describes; the
+ * script itself is named by SCRIPT_NAME in URI space and by SCRIPT_FILENAME on
+ * disk. The tester the scale ships reads PATH_INFO and refuses the request
+ * unless REQUEST_URI agrees with it, which this split satisfies.
  */
-std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request, const std::string &scriptPath) const
+std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request,
+        const std::string &scriptPath, int serverPort,
+        const std::string &remoteAddr) const
 {
     std::vector<std::string>    env;
     std::string                 protocol = request.getVersion();
     std::string                 contentType = request.getHeaderValue("Content-Type");
+    std::string                 host = request.getHeaderValue("Host");
+    std::string::size_type      colon = host.find(':');
+    std::string                 requestUri = request.getUri();
 
     if (protocol.empty())
         protocol = "HTTP/1.1";
+    if (colon != std::string::npos)
+        host.erase(colon);
+    if (host.empty())
+        host = "localhost";
+    if (!request.getQuery().empty())
+        requestUri += "?" + request.getQuery();
     env.push_back("GATEWAY_INTERFACE=CGI/1.1");
     env.push_back("SERVER_SOFTWARE=Webserv/1.0");
     env.push_back("SERVER_PROTOCOL=" + protocol);
+    env.push_back("SERVER_NAME=" + host);
+    env.push_back("SERVER_PORT=" + toString(static_cast<size_t>(serverPort)));
+    env.push_back("REMOTE_ADDR=" + remoteAddr);
     env.push_back("REDIRECT_STATUS=200");
     env.push_back("REQUEST_METHOD=" + request.getMethod());
+    env.push_back("REQUEST_URI=" + requestUri);
     env.push_back("QUERY_STRING=" + request.getQuery());
     env.push_back("SCRIPT_NAME=" + request.getUri());
     env.push_back("SCRIPT_FILENAME=" + scriptPath);
+    env.push_back("PATH_INFO=" + request.getUri());
+    env.push_back("PATH_TRANSLATED=" + scriptPath);
     env.push_back("CONTENT_LENGTH=" + toString(request.getBody().size()));
     if (!contentType.empty())
         env.push_back("CONTENT_TYPE=" + contentType);

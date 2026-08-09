@@ -12,6 +12,7 @@ SRC_FILES	= main.cpp \
 			  http/MimeType.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
+			  http/SessionStore.cpp \
 			  http/MultipartParser.cpp \
 			  handlers/IRequestHandler.cpp \
 			  handlers/StaticFileHandler.cpp \
@@ -141,6 +142,7 @@ AUTOINDEX_TEST_SRC	= tests/autoindex_test.cpp \
 AUTOINDEX_TEST_BIN	= test_autoindex
 
 HOST_SELECTION_TEST_SRC	= tests/host_selection_test.cpp \
+						  src/http/SessionStore.cpp \
 						  src/server/EventLoop.cpp \
 						  src/server/Router.cpp \
 						  src/network/Socket.cpp \
@@ -198,8 +200,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN)
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)

@@ -16,6 +16,7 @@
 #include "network/Socket.hpp"
 #include "network/Connection.hpp"
 #include "http/Router.hpp"
+#include "http/SessionStore.hpp"
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiProcess.hpp"
 #include "config/ServerConfig.hpp"
@@ -28,19 +29,20 @@ class EventLoop
 {
 	private:
 		std::vector<Socket*>					_sckt;
-		std::vector<int>						_boundPorts;
+		std::vector<std::pair<std::string, int> >	_boundEndpoints;
 		std::vector<ServerConfig>				_configs;
 		std::vector<struct pollfd>				_fds;
 		std::map<int, Connection>				_clients;
 		Router									_router;
 		CgiHandler								_cgiHandler;
+		SessionStore							_sessions;
 		std::map<int, CgiProcess*>				_cgi;
 		std::map<int, int>						_pipeToClient;
 
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
 
-		bool	isPortBound(int port) const;
+		bool	isEndpointBound(const std::string &host, int port) const;
 		long	maxBodySizeForPort(int port) const;
 		bool	isMasterSocket(int fd) const;
 		void	acceptClients(int fd);
@@ -48,21 +50,25 @@ class EventLoop
 		void	handleParseError(int fd);
 		void	handleRequest(int fd);
 		bool	handleSend(int fd);
+		void	openSession(Connection &conn);
 		bool	wantsKeepAlive(const HttpRequest &request) const;
 		void	setPollEvents(int fd, short events);
 		void	addPollFd(int fd, short events);
 		void	disablePollFd(int fd);
 		void	compactPollFds(void);
-		std::string	cgiInterpreterFor(const std::string &uri,
+		std::string	cgiInterpreterFor(const HttpRequest &request,
 					const ServerConfig &config) const;
-		void	startCgi(int fd, const std::string &interpreter);
+		void	startCgi(int fd, const std::string &interpreter,
+					const ServerConfig &config);
 		void	handleCgiIo(int fd, short revents);
 		void	finishCgi(int clientFd, CgiProcess *proc);
 		void	abortCgi(int clientFd);
 		void	unregisterCgiPipes(int clientFd);
 		void	timeoutCgi(int clientFd);
 		void	checkCgiTimeouts(void);
+		void	closeIdleConnections(void);
 		int		cgiPollTimeout(void);
+		int		pollTimeout(void);
 		void	sendCgiError(int fd, int status);
 		std::string
 				buildError(const Connection &conn,
@@ -75,6 +81,7 @@ class EventLoop
 
 		void	setupSockets(void);
 		void	run(void);
+		static void	requestStop(int signal);
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;
 		const ServerConfig&

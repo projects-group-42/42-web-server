@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/08 18:08:20 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,14 +15,14 @@
 #include "http/MimeType.hpp"
 #include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
-#include <fcntl.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#include <fstream>
 
 Router::Router(void)
 	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
+	_handlers["HEAD:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
 	_handlers["DELETE:/"] = &_staticHandler;
 }
@@ -31,6 +31,7 @@ Router::Router(const std::string &root)
 	: _staticHandler(root), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
+	_handlers["HEAD:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
 	_handlers["DELETE:/"] = &_staticHandler;
 }
@@ -39,6 +40,7 @@ Router::Router(const Router &copy)
 	: _staticHandler(copy._staticHandler), _handlers(copy._handlers), _responseBuilder(copy._responseBuilder)
 {
 	_handlers["GET:/"] = &_staticHandler;
+	_handlers["HEAD:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
 	_handlers["DELETE:/"] = &_staticHandler;
 }
@@ -51,6 +53,7 @@ Router &Router::operator=(const Router &other)
 		_handlers = other._handlers;
 		_responseBuilder = other._responseBuilder;
 		_handlers["GET:/"] = &_staticHandler;
+		_handlers["HEAD:/"] = &_staticHandler;
 		_handlers["POST:/"] = &_staticHandler;
 		_handlers["DELETE:/"] = &_staticHandler;
 	}
@@ -136,8 +139,11 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 
 /**
  * @brief Finds the location block that applies to a URI in a server block.
- * The location whose path is the longest matching prefix of the URI wins, the
- * same literal prefix rule nginx uses, so "/test" also matches "/testing.html".
+ * The location whose path is the longest matching prefix of the URI wins, and
+ * a prefix only matches on a path boundary: "/cgi" serves "/cgi/app.py" and
+ * "/cgi" itself, never "/cgi-bin/hello.php" or "/cgifoo". Matching those would
+ * hand a request to a block written for a different tree, and with cgi_pass in
+ * it that means executing a script the author never pointed at that path.
  * @param uri The request target.
  * @param config The server block serving the request.
  * @return The winning location, or NULL when no location matches.
@@ -150,10 +156,14 @@ const LocationConfig	*Router::matchLocation(const std::string &uri,
 	for (size_t i = 0; i < config.locations.size(); ++i)
 	{
 		const std::string	&locPath = config.locations[i].path;
+		size_t				size = locPath.size();
 
-		if (uri.compare(0, locPath.size(), locPath) != 0)
+		if (size == 0 || uri.compare(0, size, locPath) != 0)
 			continue;
-		if (best == NULL || locPath.size() > best->path.size())
+		if (uri.size() != size && uri[size] != '/'
+			&& locPath[size - 1] != '/')
+			continue;
+		if (best == NULL || size > best->path.size())
 			best = &config.locations[i];
 	}
 	return (best);
@@ -226,6 +236,27 @@ std::string	Router::resolveRoot(const std::string &uri,
 	if (!config.root.empty())
 		return (config.root);
 	return (DEFAULT_ROOT);
+}
+
+/**
+ * @brief Returns the prefix a location removes from a URI before resolving it.
+ * Only a location declaring a root of its own relocates what it serves, which
+ * is the mapping the subject describes: "/kapouet" rooted in "/tmp/www" serves
+ * "/kapouet/pouic/toto/pouet" from "/tmp/www/pouic/toto/pouet". A location
+ * inheriting the server root keeps the URI whole, so a tree laid out under a
+ * single server root still resolves the way it sits on disk.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The prefix to strip, or an empty string when nothing is stripped.
+ */
+std::string	Router::resolveLocationPrefix(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	if (best != NULL && !best->root.empty())
+		return (best->path);
+	return ("");
 }
 
 /**
@@ -354,7 +385,10 @@ static std::string	joinErrorPagePath(const std::string &root,
 /**
  * @brief Reads a regular file into a string.
  * Directories and special files are refused so a misconfigured error page
- * never turns into an unreadable body.
+ * never turns into an unreadable body. The file is read through a C++ stream
+ * rather than read() on a descriptor, because the subject forbids reading any
+ * descriptor that did not go through poll() and a regular file never enters
+ * the poll set.
  * @param path The file to read.
  * @param body The destination holding the file contents.
  * @return true when the whole file could be read.
@@ -363,19 +397,21 @@ static bool	readErrorPageFile(const std::string &path, std::string &body)
 {
 	struct stat	info;
 	char		buffer[4096];
-	ssize_t		bytes;
 
 	if (stat(path.c_str(), &info) == -1 || !S_ISREG(info.st_mode))
 		return (false);
 
-	int	fd = open(path.c_str(), O_RDONLY);
+	std::ifstream	file(path.c_str(), std::ios::in | std::ios::binary);
 
-	if (fd == -1)
+	if (!file.is_open())
 		return (false);
-	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0)
-		body.append(buffer, static_cast<size_t>(bytes));
-	close(fd);
-	if (bytes == -1)
+	while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0)
+	{
+		body.append(buffer, static_cast<size_t>(file.gcount()));
+		if (file.eof())
+			break ;
+	}
+	if (file.bad())
 	{
 		body.clear();
 		return (false);
@@ -432,6 +468,48 @@ bool	Router::redirects(const std::string &uri,
 	const LocationConfig	*best = matchLocation(uri, config);
 
 	return (best != NULL && best->returnCode != 0);
+}
+
+/**
+ * @brief The method a limit_except list is tested against.
+ * HEAD is answered by the GET path and differs only by dropping the body, so
+ * limit_except is checked as if it were GET; a location allowing GET therefore
+ * allows HEAD, the way nginx treats it. Every other method is tested as
+ * written.
+ * @param method The request method.
+ * @return The method to look up in an allowed-methods list.
+ */
+static std::string	limitMethod(const std::string &method)
+{
+	if (method == "HEAD")
+		return ("GET");
+	return (method);
+}
+
+/**
+ * @brief Tells whether the location matching a request refuses its method.
+ * Same reason as redirects(): CGI is dispatched before the router runs, so the
+ * caller driving it has to know the method is refused to keep a script from
+ * executing on a route that does not accept it. The 405 itself is written by
+ * route(), through applyMethodLimit.
+ * @param request The request being answered.
+ * @param config The server block serving the request.
+ * @return true when limit_except leaves the method of the request out.
+ */
+bool	Router::refusesMethod(const HttpRequest &request,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(request.getUri(), config);
+	std::string				method = limitMethod(request.getMethod());
+
+	if (best == NULL || best->allowedMethods.empty())
+		return (false);
+	for (size_t i = 0; i < best->allowedMethods.size(); ++i)
+	{
+		if (best->allowedMethods[i] == method)
+			return (false);
+	}
+	return (true);
 }
 
 /**
@@ -523,12 +601,13 @@ bool	Router::applyMethodLimit(const HttpRequest &request,
 			HttpResponse &response, const ServerConfig &config) const
 {
 	const LocationConfig	*best = matchLocation(request.getUri(), config);
+	std::string				method = limitMethod(request.getMethod());
 
 	if (best == NULL || best->allowedMethods.empty())
 		return (false);
 	for (size_t i = 0; i < best->allowedMethods.size(); ++i)
 	{
-		if (best->allowedMethods[i] == request.getMethod())
+		if (best->allowedMethods[i] == method)
 			return (false);
 	}
 	response.setStatusCode(405);
@@ -594,11 +673,8 @@ bool	Router::route(const HttpRequest &request,
 		applyErrorPage(request, response, config);
 		return (true);
 	}
-
-
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);
-
 	if (handler == NULL)
 	{
 		if (pathFound)
@@ -616,6 +692,8 @@ bool	Router::route(const HttpRequest &request,
 	{
 		setRoot(resolveRoot(request.getUri(), config));
 		setIndex(resolveIndex(request.getUri(), config));
+		_staticHandler.setLocationPrefix(
+				resolveLocationPrefix(request.getUri(), config));
 		_staticHandler.setAutoindex(
 				resolveAutoindex(request.getUri(), config));
 		_staticHandler.setMaxBodySize(
@@ -652,3 +730,4 @@ void	Router::applyErrorPage(const HttpRequest &request,
 	if (!contentType.empty())
 		response.setHeaders("content-type", contentType);
 }
+

@@ -241,7 +241,7 @@ static void	test_request_uri_is_escaped(void)
 
 	handler.setAutoindex(true);
 
-	std::string	uri = "/listable/<img src=x onerror=alert(1)>/..";
+	std::string	uri = "/listable/<img src=x onerror=alert(1)>/../";
 	std::string	body = get(handler, uri).getBody();
 
 	TEST(!contains(body, "<img src=x onerror=alert(1)>"),

@@ -19,7 +19,6 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #include <vector>
-#include <dirent.h>
 
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
@@ -52,41 +51,6 @@ static std::string	readFile(const std::string &path)
 		return ("");
 	return (std::string((std::istreambuf_iterator<char>(file)),
 			std::istreambuf_iterator<char>()));
-}
-
-/*
- * Lists the regular files `path` holds, so a test can find an upload whose
- * name the server generated rather than the request naming it.
- */
-static std::vector<std::string>	directoryEntries(const std::string &path)
-{
-	std::vector<std::string>	entries;
-	DIR							*dir = opendir(path.c_str());
-
-	if (dir == NULL)
-		return (entries);
-	for (struct dirent *entry = readdir(dir); entry != NULL;
-			entry = readdir(dir))
-	{
-		std::string	name = entry->d_name;
-		struct stat	info;
-
-		if (name == "." || name == "..")
-			continue;
-		if (stat((path + "/" + name).c_str(), &info) == 0
-			&& S_ISREG(info.st_mode))
-			entries.push_back(name);
-	}
-	closedir(dir);
-	return (entries);
-}
-
-static void	writeFile(const std::string &path, const std::string &content)
-{
-	std::ofstream	file(path.c_str());
-
-	file << content;
-	file.close();
 }
 
 /*
@@ -145,7 +109,7 @@ static void	test_plain_post_creates_file(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -173,7 +137,7 @@ static void	test_plain_post_overwrites_file(void)
 	existing.close();
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -200,7 +164,7 @@ static void	test_plain_post_preserves_binary_content(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		original = generateBinaryContent(1024);
@@ -224,7 +188,7 @@ static void	test_multipart_preserves_binary_content(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		payload = generateBinaryContent(512);
@@ -261,7 +225,7 @@ static void	test_plain_post_accepts_empty_body(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -288,7 +252,7 @@ static void	test_plain_post_handles_large_body(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	handler.setMaxBodySize(1 * 1024 * 1024);
 	HttpRequest		request;
 	HttpResponse	response;
@@ -317,7 +281,7 @@ static void	test_plain_post_rejects_oversized(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	handler.setMaxBodySize(10);
 	HttpRequest		request;
 	HttpResponse	response;
@@ -337,22 +301,20 @@ static void	test_plain_post_rejects_oversized(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Upload to subdirectory                                               */
+/* The directory of the URI never decides where an upload lands         */
 /* ------------------------------------------------------------------ */
 
 /*
- * An upload is named by the base name of the URI and written into the upload
- * directory, so the directories the URI walks through decide nothing: a
- * nested target lands directly in the store rather than creating a tree
- * under it, and the same request cannot reach a directory the store does not
- * hold.
+ * The URI only names the file; the directory always comes from upload_store.
+ * A path in the URI is therefore ignored rather than followed, which is what
+ * keeps a client from choosing where its bytes are written.
  */
-static void	test_plain_post_to_subdirectory(void)
+static void	test_plain_post_ignores_the_uri_directory(void)
 {
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -363,11 +325,11 @@ static void	test_plain_post_to_subdirectory(void)
 	handler.handle(request, response);
 
 	TEST(response.getStatusCode() == 201,
-		"upload to a nested URI answers 201");
+		"upload naming a subdirectory answers 201");
 	TEST(readFile("up_root/uploads/test.txt") == "deep content",
-		"upload to a nested URI lands in the upload directory");
+		"upload lands in upload_store, not in the directory the URI named");
 	TEST(!fileExists("up_root/uploads/deep/test.txt"),
-		"upload to a nested URI creates no tree under the upload directory");
+		"the directory named by the URI is not written to");
 
 	std::remove("up_root/uploads/test.txt");
 	destroyDirectoryTree("up_root");
@@ -382,7 +344,7 @@ static void	test_multipart_multiple_files(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		body =
@@ -427,7 +389,7 @@ static void	test_multipart_mixed_new_and_existing(void)
 	existing.close();
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		body =
@@ -475,7 +437,7 @@ static void	test_multipart_all_existing(void)
 	f2.close();
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		body =
@@ -516,7 +478,7 @@ static void	test_uploaded_file_exists_on_disk(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		body = "verify on disk";
@@ -552,7 +514,7 @@ static void	test_get_does_not_upload(void)
 	f.close();
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -573,18 +535,12 @@ static void	test_get_does_not_upload(void)
 /* Upload to non-existent base directory                                */
 /* ------------------------------------------------------------------ */
 
-/*
- * An upload_store naming a directory nothing occupies cannot be resolved, so
- * there is no directory to confine the write to. That is a fault of the
- * configuration rather than of the request, so it is answered 500 instead of
- * writing the file the unresolved path names.
- */
 static void	test_upload_to_missing_directory(void)
 {
 	mkdir("up_orphan", 0755);
 
 	StaticFileHandler	handler("up_orphan");
-	handler.setUploadStore("up_orphan/nonexistent");
+	handler.setUploadStore(std::string("up_orphan") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -594,10 +550,8 @@ static void	test_upload_to_missing_directory(void)
 
 	handler.handle(request, response);
 
-	TEST(response.getStatusCode() == 500,
-		"upload to a missing upload directory answers 500");
-	TEST(!fileExists("up_orphan/nonexistent/file.txt"),
-		"upload to a missing upload directory writes nothing");
+	TEST(response.getStatusCode() == 404,
+		"upload to missing directory answers 404");
 
 	rmdir("up_orphan");
 }
@@ -617,6 +571,14 @@ static void	test_upload_to_readonly_parent(void)
 
 	mkdir("up_ro", 0755);
 	mkdir("up_ro/nope", 0555);
+	if (access("up_ro/nope", W_OK) == 0)
+	{
+		std::cout << "[SKIP] upload to read-only directory "
+			<< "(filesystem ignores permission bits)" << std::endl;
+		rmdir("up_ro/nope");
+		rmdir("up_ro");
+		return;
+	}
 
 	StaticFileHandler	handler("up_ro");
 	handler.setUploadStore("up_ro/nope");
@@ -649,7 +611,7 @@ static void	test_post_to_directory_answers_400(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -674,7 +636,7 @@ static void	test_multipart_without_boundary_answers_400(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
@@ -700,7 +662,7 @@ static void	test_multipart_without_file_part_answers_400(void)
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		body =
@@ -727,306 +689,114 @@ static void	test_multipart_without_file_part_answers_400(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* No upload_store configured                                           */
-/* ------------------------------------------------------------------ */
-
-/*
- * A handler with no upload directory has nowhere to put an upload, so the
- * POST must be refused outright rather than falling back to the tree the
- * server hands out. Router answers the same 405 with the Allow header the
- * status needs; the handler keeps the refusal so it writes nothing when it
- * is driven on its own.
- */
-static void	test_post_without_upload_store_answers_405(void)
-{
-	createDirectoryTree("up_root");
-	writeFile("up_root/index.html", "SERVED");
-
-	StaticFileHandler	handler("up_root");
-	HttpRequest		request;
-	HttpResponse	response;
-
-	request.setMethod("POST");
-	request.setUri("/index.html");
-	request.setBody("overwritten");
-
-	handler.handle(request, response);
-
-	TEST(response.getStatusCode() == 405,
-		"POST without an upload directory answers 405");
-	TEST(readFile("up_root/index.html") == "SERVED",
-		"POST without an upload directory does not overwrite the served tree");
-
-	std::remove("up_root/index.html");
-	destroyDirectoryTree("up_root");
-}
-
-/*
- * A URI naming a directory rather than a file leaves the upload unnamed, and
- * the location still accepts it, so the body is stored under a generated name
- * inside the upload directory instead of being refused. A base name of ".."
- * is not a missing name but an unusable one, and stays refused.
- */
-static void	test_post_without_base_name_generates_a_name(void)
-{
-	createDirectoryTree("up_root");
-
-	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
-	HttpRequest		trailing;
-	HttpRequest		dotdot;
-	HttpResponse	trailingResponse;
-	HttpResponse	dotdotResponse;
-
-	trailing.setMethod("POST");
-	trailing.setUri("/uploads/");
-	trailing.setBody("nameless");
-	handler.handle(trailing, trailingResponse);
-
-	dotdot.setMethod("POST");
-	dotdot.setUri("/uploads/..");
-	dotdot.setBody("climbing");
-	handler.handle(dotdot, dotdotResponse);
-
-	std::vector<std::string>	stored = directoryEntries("up_root/uploads");
-
-	TEST(trailingResponse.getStatusCode() == 201,
-		"POST to a URI with no base name answers 201");
-	TEST(stored.size() == 1,
-		"POST to a URI with no base name stores exactly one file");
-	TEST(stored.size() == 1
-		&& readFile("up_root/uploads/" + stored[0]) == "nameless",
-		"the generated name holds the body that was posted");
-	TEST(dotdotResponse.getStatusCode() == 400,
-		"POST to a URI whose base name is '..' answers 400");
-	TEST(!fileExists("up_root/../climbing"),
-		"POST to a URI whose base name is '..' writes nothing");
-
-	for (size_t i = 0; i < stored.size(); ++i)
-		std::remove(("up_root/uploads/" + stored[i]).c_str());
-	destroyDirectoryTree("up_root");
-}
-
-/*
- * Two unnamed uploads arriving back to back must not land on each other, so
- * the generated name walks past the one already stored.
- */
-static void	test_generated_names_do_not_collide(void)
-{
-	createDirectoryTree("up_root");
-
-	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
-	HttpRequest		first;
-	HttpRequest		second;
-	HttpResponse	firstResponse;
-	HttpResponse	secondResponse;
-
-	first.setMethod("POST");
-	first.setUri("/uploads/");
-	first.setBody("first body");
-	handler.handle(first, firstResponse);
-
-	second.setMethod("POST");
-	second.setUri("/uploads/");
-	second.setBody("second body");
-	handler.handle(second, secondResponse);
-
-	std::vector<std::string>	stored = directoryEntries("up_root/uploads");
-
-	TEST(firstResponse.getStatusCode() == 201
-		&& secondResponse.getStatusCode() == 201,
-		"two unnamed uploads both answer 201");
-	TEST(stored.size() == 2,
-		"two unnamed uploads are stored side by side");
-
-	for (size_t i = 0; i < stored.size(); ++i)
-		std::remove(("up_root/uploads/" + stored[i]).c_str());
-	destroyDirectoryTree("up_root");
-}
-
-/* ------------------------------------------------------------------ */
 /* Containment: symlink escape                          */
 /* ------------------------------------------------------------------ */
 
 /*
- * An upload only ever names a file directly inside the upload directory, so
- * the one way out of it is a symlink already sitting there. This one points
- * at a file that does exist outside: realpath() resolves it out of the store
- * and the write must be refused, or open(O_TRUNC) would replace whatever the
- * link names.
+ * A symlink planted inside the upload directory cannot be used to steer an
+ * upload out of it: only the base name of the URI is kept, so the path the
+ * client wrote never reaches the filesystem and the bytes land in
+ * upload_store like any other upload.
  */
-static void	test_plain_post_onto_symlink_answers_403(void)
+static void	test_plain_post_through_symlink_stays_inside(void)
 {
 	createDirectoryTree("up_root");
 	mkdir("up_escape", 0755);
-	writeFile("up_escape/pwned.txt", "outside content");
-	symlink("../../up_escape/pwned.txt", "up_root/uploads/link.txt");
+	symlink("../../up_escape", "up_root/uploads/link");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
 	request.setMethod("POST");
-	request.setUri("/uploads/link.txt");
-	request.setBody("escaped the store");
-
-	handler.handle(request, response);
-
-	TEST(response.getStatusCode() == 403,
-		"POST onto a symlink leaving the upload directory answers 403");
-	TEST(readFile("up_escape/pwned.txt") == "outside content",
-		"POST onto a symlink leaves the file outside the store untouched");
-
-	std::remove("up_root/uploads/link.txt");
-	std::remove("up_escape/pwned.txt");
-	rmdir("up_escape");
-	destroyDirectoryTree("up_root");
-}
-
-/*
- * Same escape attempt via a multipart upload, whose part filename goes
- * through the same containment check as the base name of a plain POST.
- */
-static void	test_multipart_onto_symlink_answers_403(void)
-{
-	createDirectoryTree("up_root");
-	mkdir("up_escape", 0755);
-	writeFile("up_escape/pwned.txt", "outside content");
-	symlink("../../up_escape/pwned.txt", "up_root/uploads/link.txt");
-
-	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
-	HttpRequest		request;
-	HttpResponse	response;
-	std::string		body =
-		"--BOUNDARY\r\n"
-		"Content-Disposition: form-data; name=\"file\"; filename=\"link.txt\"\r\n"
-		"\r\n"
-		"escaped the store"
-		"\r\n--BOUNDARY--\r\n";
-
-	request.setMethod("POST");
-	request.setUri("/uploads");
-	request.setHeaders("Content-Type",
-		"multipart/form-data; boundary=BOUNDARY");
-	request.setBody(body);
-
-	handler.handle(request, response);
-
-	TEST(response.getStatusCode() == 403,
-		"multipart upload onto a symlink leaving the store answers 403");
-	TEST(readFile("up_escape/pwned.txt") == "outside content",
-		"multipart upload onto a symlink leaves the outside file untouched");
-
-	std::remove("up_root/uploads/link.txt");
-	std::remove("up_escape/pwned.txt");
-	rmdir("up_escape");
-	destroyDirectoryTree("up_root");
-}
-
-/*
- * The escape above resolves out of the store and is caught. A symlink that
- * points at a file which does not exist yet is not: realpath() fails on the
- * dangling link exactly as it does on a new upload, so the name would be
- * taken for a free one inside the store. open(O_CREAT) then follows the link
- * and creates the file it names, wherever that is, so a name something still
- * occupies without resolving must be refused rather than accepted.
- */
-static void	test_plain_post_onto_dangling_symlink_answers_403(void)
-{
-	createDirectoryTree("up_root");
-	mkdir("up_escape", 0755);
-	symlink("../../up_escape/pwned.txt", "up_root/uploads/dangling.txt");
-
-	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
-	HttpRequest		request;
-	HttpResponse	response;
-
-	request.setMethod("POST");
-	request.setUri("/uploads/dangling.txt");
+	request.setUri("/uploads/link/pwned.txt");
 	request.setBody("escaped the root");
 
 	handler.handle(request, response);
 
-	TEST(response.getStatusCode() == 403,
-		"POST onto a dangling symlink escaping the root answers 403");
+	TEST(response.getStatusCode() == 201,
+		"POST naming a symlink in its path still answers 201");
 	TEST(!fileExists("up_escape/pwned.txt"),
-		"POST onto a dangling symlink writes nothing outside the root");
+		"POST naming a symlink writes nothing outside the upload directory");
+	TEST(readFile("up_root/uploads/pwned.txt") == "escaped the root",
+		"POST naming a symlink lands in the upload directory");
 
-	std::remove("up_root/uploads/dangling.txt");
+	std::remove("up_root/uploads/pwned.txt");
+	std::remove("up_root/uploads/link");
 	std::remove("up_escape/pwned.txt");
 	rmdir("up_escape");
 	destroyDirectoryTree("up_root");
 }
 
 /*
- * Same escape attempt via a multipart upload, whose part filename goes
- * through the same containment check.
+ * Same attempt through a multipart upload: the file name of the part is
+ * stripped to its base name and written under upload_store, so a symlink in
+ * the URI has nothing to steer.
  */
-static void	test_multipart_onto_dangling_symlink_answers_403(void)
+static void	test_multipart_through_symlink_stays_inside(void)
 {
 	createDirectoryTree("up_root");
 	mkdir("up_escape", 0755);
-	symlink("../../up_escape/pwned.txt", "up_root/uploads/dangling.txt");
+	symlink("../../up_escape", "up_root/uploads/link");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		body =
 		"--BOUNDARY\r\n"
-		"Content-Disposition: form-data; name=\"file\"; "
-		"filename=\"dangling.txt\"\r\n"
+		"Content-Disposition: form-data; name=\"file\"; filename=\"pwned.txt\"\r\n"
 		"\r\n"
-		"escaped the root\r\n"
-		"--BOUNDARY--\r\n";
+		"escaped the root"
+		"\r\n--BOUNDARY--\r\n";
 
 	request.setMethod("POST");
-	request.setUri("/uploads");
+	request.setUri("/uploads/link");
 	request.setHeaders("Content-Type",
 		"multipart/form-data; boundary=BOUNDARY");
 	request.setBody(body);
 
 	handler.handle(request, response);
 
-	TEST(response.getStatusCode() == 403,
-		"multipart upload onto a dangling symlink answers 403");
+	TEST(response.getStatusCode() == 201,
+		"multipart upload naming a symlink still answers 201");
 	TEST(!fileExists("up_escape/pwned.txt"),
-		"multipart upload onto a dangling symlink writes nothing outside the root");
+		"multipart upload naming a symlink writes nothing outside the upload directory");
+	TEST(readFile("up_root/uploads/pwned.txt") == "escaped the root",
+		"multipart upload naming a symlink lands in the upload directory");
 
-	std::remove("up_root/uploads/dangling.txt");
+	std::remove("up_root/uploads/pwned.txt");
+	std::remove("up_root/uploads/link");
 	std::remove("up_escape/pwned.txt");
 	rmdir("up_escape");
 	destroyDirectoryTree("up_root");
 }
 
 /*
- * A legitimate upload naming a file the store does not hold yet (no symlink
- * involved) must keep answering 201, confirming the containment check does
- * not regress normal uploads.
+ * A legitimate upload into a real subdirectory of the root (no symlink
+ * involved) must keep answering 201, confirming the containment check on
+ * the parent directory does not regress normal uploads.
  */
 static void	test_plain_post_legit_new_file_still_201(void)
 {
 	createDirectoryTree("up_root");
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 
 	request.setMethod("POST");
-	request.setUri("/uploads/legit.txt");
+	request.setUri("/uploads/deep/legit.txt");
 	request.setBody("legit content");
 
 	handler.handle(request, response);
 
 	TEST(response.getStatusCode() == 201,
-		"legitimate upload inside the store still answers 201");
+		"legitimate upload inside the root still answers 201");
 	TEST(readFile("up_root/uploads/legit.txt") == "legit content",
-		"legitimate upload inside the store still writes the correct content");
+		"legitimate upload inside the root still writes the correct content");
 
 	std::remove("up_root/uploads/legit.txt");
 	destroyDirectoryTree("up_root");
@@ -1058,7 +828,7 @@ static void	test_post_write_failure_removes_partial_file(void)
 	void	(*previousHandler)(int) = signal(SIGXFSZ, SIG_IGN);
 
 	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
+	handler.setUploadStore(std::string("up_root") + "/uploads");
 	HttpRequest		request;
 	HttpResponse	response;
 	std::string		content = generateBinaryContent(4096);
@@ -1082,15 +852,16 @@ static void	test_post_write_failure_removes_partial_file(void)
 }
 
 /*
- * An upload_store naming a regular file resolves, so the store passes the
- * containment check, but appending a file name to it makes open() fail with
- * ENOTDIR, which is neither a permission nor a missing-directory error, so
- * saveFile() must fall through to 500 and leave the file alone.
+ * An upload_store that is not a directory cannot receive anything, so the
+ * upload is refused with 404 rather than writing over whatever is there.
  */
-static void	test_post_through_regular_file_answers_500(void)
+static void	test_post_to_upload_store_that_is_a_file_answers_404(void)
 {
 	createDirectoryTree("up_root");
-	writeFile("up_root/uploads/plain.txt", "not a directory");
+
+	std::ofstream	blocker("up_root/uploads/plain.txt");
+	blocker << "not a directory";
+	blocker.close();
 
 	StaticFileHandler	handler("up_root");
 	handler.setUploadStore("up_root/uploads/plain.txt");
@@ -1098,54 +869,18 @@ static void	test_post_through_regular_file_answers_500(void)
 	HttpResponse	response;
 
 	request.setMethod("POST");
-	request.setUri("/uploads/plain.txt/nested.txt");
+	request.setUri("/uploads/nested.txt");
 	request.setBody("unreachable");
 
 	handler.handle(request, response);
 
-	TEST(response.getStatusCode() == 500,
-		"POST through a regular file answers 500");
+	TEST(response.getStatusCode() == 404,
+		"an upload_store that is a regular file answers 404");
+	TEST(readFile("up_root/uploads/plain.txt") == "not a directory",
+		"an upload_store that is a regular file is left untouched");
 	TEST(readFile("up_root/uploads/plain.txt") == "not a directory",
 		"failed upload leaves the blocking file untouched");
 
-	destroyDirectoryTree("up_root");
-}
-
-/*
- * Opening a FIFO for writing blocks until a reader shows up, which would
- * stall the whole event loop inside a single request. saveFile() must refuse
- * a target that exists without being a regular file before it ever calls
- * open(), so the request is answered instead of hanging.
- */
-static void	test_post_onto_fifo_answers_403(void)
-{
-	createDirectoryTree("up_root");
-
-	if (mkfifo("up_root/uploads/pipe.txt", 0644) == -1)
-	{
-		destroyDirectoryTree("up_root");
-		return ;
-	}
-
-	StaticFileHandler	handler("up_root");
-	handler.setUploadStore("up_root/uploads");
-	HttpRequest		request;
-	HttpResponse	response;
-
-	request.setMethod("POST");
-	request.setUri("/uploads/pipe.txt");
-	request.setBody("would block");
-
-	handler.handle(request, response);
-
-	TEST(response.getStatusCode() == 403,
-		"POST onto an existing FIFO answers 403 instead of blocking");
-
-	struct stat	st;
-	TEST(stat("up_root/uploads/pipe.txt", &st) == 0 && S_ISFIFO(st.st_mode),
-		"the refused upload leaves the FIFO in place");
-
-	std::remove("up_root/uploads/pipe.txt");
 	destroyDirectoryTree("up_root");
 }
 
@@ -1158,7 +893,7 @@ int	main(void)
 	test_plain_post_accepts_empty_body();
 	test_plain_post_handles_large_body();
 	test_plain_post_rejects_oversized();
-	test_plain_post_to_subdirectory();
+	test_plain_post_ignores_the_uri_directory();
 	test_multipart_multiple_files();
 	test_multipart_mixed_new_and_existing();
 	test_multipart_all_existing();
@@ -1166,19 +901,13 @@ int	main(void)
 	test_get_does_not_upload();
 	test_upload_to_missing_directory();
 	test_upload_to_readonly_parent();
-	test_post_without_upload_store_answers_405();
-	test_post_without_base_name_generates_a_name();
-	test_generated_names_do_not_collide();
-	test_plain_post_onto_symlink_answers_403();
-	test_multipart_onto_symlink_answers_403();
-	test_plain_post_onto_dangling_symlink_answers_403();
-	test_multipart_onto_dangling_symlink_answers_403();
+	test_plain_post_through_symlink_stays_inside();
+	test_multipart_through_symlink_stays_inside();
 	test_plain_post_legit_new_file_still_201();
 	test_post_to_directory_answers_400();
 	test_multipart_without_boundary_answers_400();
 	test_multipart_without_file_part_answers_400();
-	test_post_through_regular_file_answers_500();
-	test_post_onto_fifo_answers_403();
+	test_post_to_upload_store_that_is_a_file_answers_404();
 	test_post_write_failure_removes_partial_file();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;

@@ -23,9 +23,23 @@ Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL))
 {
 }
 
+/*
+ * Builds a connection that remembers the address accept() reported for the
+ * peer, which is what the CGI environment publishes as REMOTE_ADDR.
+ * getpeername() is not one of the functions the subject authorises, so the
+ * address is only ever read at accept time.
+ */
+Connection::Connection(int client_fd, const std::string &remote_addr)
+	: _client_fd(client_fd), _remote_addr(remote_addr), _time(time(NULL)),
+	  _parser(), _keep_alive(false)
+{
+}
+
 Connection::Connection(const Connection &copy)
 	: _client_fd(copy._client_fd),
 	  _write_buffer(copy._write_buffer),
+	  _remote_addr(copy._remote_addr),
+	  _session_id(copy._session_id),
 	  _time(copy._time),
 	  _parser(copy._parser),
 	  _keep_alive(copy._keep_alive)
@@ -42,6 +56,8 @@ Connection &Connection::operator=(const Connection &other)
 		_client_fd = other._client_fd;
 		const_cast<Connection&>(other)._client_fd = -1;
 		_write_buffer = other._write_buffer;
+		_remote_addr = other._remote_addr;
+		_session_id = other._session_id;
 		_time = other._time;
 		_parser = other._parser;
 		_keep_alive = other._keep_alive;
@@ -57,10 +73,10 @@ Connection::~Connection(void)
 
 /*
  * Reads one ready chunk from the socket and feeds it to the parser. The result
- * of recv() is returned untouched and errno is never consulted, because it may
- * not be after a read: EventLoop::handleClient decides on the value alone, a
- * positive count being data, 0 the peer closing and -1 an error, the last two
- * dropping the client.
+ * of recv() is returned untouched, and errno is never consulted: the caller
+ * (EventLoop::handleClient) decides on the value alone — a positive count is
+ * data, 0 is the peer closing, -1 is an error, and both of the latter drop the
+ * client.
  */
 ssize_t Connection::receive_data(void)
 {
@@ -77,10 +93,10 @@ ssize_t Connection::receive_data(void)
 }
 
 /*
- * Writes one ready chunk of the pending response and drops the bytes that left
- * the buffer. As in receive_data, the result of send() is returned untouched
- * and errno is never consulted: EventLoop::handleSend decides on the value
- * alone, and anything but a positive count drops the client.
+ * Writes one ready chunk of the pending response and drops what left. As in
+ * receive_data, the result of send() is returned untouched and errno is never
+ * consulted: EventLoop::handleSend decides on the value alone, and anything
+ * but a positive count drops the client.
  */
 ssize_t Connection::send_data(void)
 {
@@ -164,6 +180,29 @@ int Connection::get_error_code(void) const
 const HttpRequest& Connection::getRequest(void) const
 {
 	return _parser.getRequest();
+}
+
+/*
+ * Returns the address of the peer as accept() reported it when the connection
+ * was created, or an empty string for a connection built without one.
+ */
+const std::string &Connection::getRemoteAddr(void) const
+{
+	return (_remote_addr);
+}
+
+/*
+ * Remembers the session the request being answered belongs to, so the response
+ * can carry its cookie whichever path builds it.
+ */
+void	Connection::set_session_id(const std::string &id)
+{
+	_session_id = id;
+}
+
+const std::string &Connection::get_session_id(void) const
+{
+	return (_session_id);
 }
 
 /*

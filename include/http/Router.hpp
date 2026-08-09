@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Router.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:49:25 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/08 17:59:05 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,8 +35,6 @@ class Router
 		const LocationConfig
 						*matchLocation(const std::string &uri,
 				const ServerConfig &config) const;
-		std::string		resolveRoot(const std::string &uri,
-				const ServerConfig &config) const;
 		std::string		resolveIndex(const std::string &uri,
 				const ServerConfig &config) const;
 		bool			resolveAutoindex(const std::string &uri,
@@ -64,26 +62,26 @@ class Router
 
 		bool	route(const HttpRequest &request,
 					HttpResponse &response, const ServerConfig &config);
-
-		std::string		resolveCgiInterpreter(const std::string &uri,
-					const ServerConfig &config) const;
-
-		bool			bodyExceedsLimit(const HttpRequest &request,
-					const ServerConfig &config) const;
-
-		bool			redirects(const std::string &uri,
-					const ServerConfig &config) const;
-
-		static bool	loadErrorPage(const ServerConfig &config,
-					const std::string &root, int status,
-					std::string &body, std::string &contentType);
-
-		void	addHandler(const std::string &method,
-					const std::string &path, IRequestHandler *handler);
-
+		bool				bodyExceedsLimit(const HttpRequest &request,
+							const ServerConfig &config) const;
+		bool				redirects(const std::string &uri,
+							const ServerConfig &config) const;
+		bool				refusesMethod(const HttpRequest &request,
+							const ServerConfig &config) const;
+		std::string			resolveRoot(const std::string &uri,
+							const ServerConfig &config) const;
+		std::string			resolveLocationPrefix(const std::string &uri,
+							const ServerConfig &config) const;
+		static bool			loadErrorPage(const ServerConfig &config,
+							const std::string &root, int status,
+							std::string &body, std::string &contentType);
+		void				addHandler(const std::string &method,
+							const std::string &path, IRequestHandler *handler);
 		void				setRoot(const std::string &root);
 		void				setIndex(const std::string &index);
 		const std::string	&getRoot(void) const;
+		std::string			resolveCgiInterpreter(const std::string &uri,
+							const ServerConfig &config) const;
 };
 
 #endif

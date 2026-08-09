@@ -30,13 +30,16 @@ static bool setNonBlocking(int fd)
 
 /*
  * Runs in the child after fork: redirects the pipe ends onto stdin/stdout,
- * closes the leftover pipe fds, then execve's the interpreter with the script
- * as argv[1] and the prepared CGI environment. Never returns; _exit is called
- * if any step fails.
+ * closes the leftover pipe fds, moves into the directory holding the script so
+ * it can reach its own files by relative path, then execve's the interpreter
+ * with the script name as argv[1] and the prepared CGI environment. Never
+ * returns; _exit is called if any step fails.
  */
 static void runChild(CgiPipes &pipes, const std::string &interpreter, const std::string &scriptPath, char **envp)
 {
-	char	*argv[3];
+	char					*argv[3];
+	std::string				script = scriptPath;
+	std::string::size_type	slash = scriptPath.find_last_of('/');
 
 	pipes.closeParentEnds();
 	if (dup2(pipes.bodyReadFd(), STDIN_FILENO) == -1)
@@ -44,8 +47,14 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 	if (dup2(pipes.outputWriteFd(), STDOUT_FILENO) == -1)
 		_exit(1);
 	pipes.closeChildEnds();
+	if (slash != std::string::npos)
+	{
+		if (chdir(scriptPath.substr(0, slash).c_str()) == -1)
+			_exit(1);
+		script = scriptPath.substr(slash + 1);
+	}
 	argv[0] = const_cast<char *>(interpreter.c_str());
-	argv[1] = const_cast<char *>(scriptPath.c_str());
+	argv[1] = const_cast<char *>(script.c_str());
 	argv[2] = NULL;
 	execve(interpreter.c_str(), argv, envp);
 	_exit(1);

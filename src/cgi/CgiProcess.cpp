@@ -13,7 +13,6 @@
 #include "cgi/CgiProcess.hpp"
 #include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <signal.h>
 #include <sys/wait.h>
 
@@ -100,9 +99,11 @@ bool CgiProcess::start(const std::string &interpreter, const std::string &script
 }
 
 /*
- * Reads one ready chunk of the child's output into the accumulator. On EOF or
- * on a hard read error it closes the output pipe and stops reading; EAGAIN is
- * ignored so the direction stays active for the next poll.
+ * Reads one ready chunk of the child's output into the accumulator. The return
+ * value of read() alone decides, because errno may not be consulted after a
+ * read: only a positive count carries data, while 0, the child closing its
+ * stdout, and -1, an error on a pipe poll() had reported as readable, both
+ * close the output pipe and end the reading direction.
  */
 void CgiProcess::onReadable(void)
 {
@@ -110,32 +111,27 @@ void CgiProcess::onReadable(void)
 	ssize_t	bytes = read(_pipes.outputReadFd(), buffer, sizeof(buffer));
 
 	if (bytes > 0)
+	{
 		_output.append(buffer, static_cast<size_t>(bytes));
-	else if (bytes == 0)
-	{
-		_pipes.closeOutputRead();
-		_reading = false;
+		return ;
 	}
-	else if (errno != EAGAIN && errno != EWOULDBLOCK)
-	{
-		_pipes.closeOutputRead();
-		_reading = false;
-	}
+	_pipes.closeOutputRead();
+	_reading = false;
 }
 
 /*
- * Writes one ready chunk of the request body into the child's stdin. When the
- * whole body has been sent, or on a hard write error, it closes the body pipe
- * and stops writing; EAGAIN is ignored so the direction stays active.
+ * Writes one ready chunk of the request body into the child's stdin. The return
+ * value of write() alone decides, because errno may not be consulted after a
+ * write: a call that moved no byte (0) or failed (-1) on a pipe poll() had
+ * reported as writable closes the body pipe, as does the body being fully sent.
  */
 void CgiProcess::onWritable(void)
 {
 	ssize_t	written = write(_pipes.bodyWriteFd(), _body.data() + _sent, _body.size() - _sent);
 
-	if (written == -1)
+	if (written <= 0)
 	{
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
-			stopWriting();
+		stopWriting();
 		return ;
 	}
 	_sent += static_cast<size_t>(written);

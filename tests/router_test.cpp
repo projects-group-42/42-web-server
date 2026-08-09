@@ -590,8 +590,9 @@ int	main(void)
 
 		root.allowedMethods.push_back("GET");
 		root.allowedMethods.push_back("POST");
+		root.uploadStore = ROOT_DIR;
 		config.locations.push_back(root);
-		routePost("/", "body", config, response);
+		routePost("/upload.txt", "body", config, response);
 		TEST(response.getStatusCode() != 405,
 			"a method named in limit_except is not refused");
 	}
@@ -605,18 +606,22 @@ int	main(void)
 		root.allowedMethods.push_back("GET");
 		uploads.allowedMethods.push_back("GET");
 		uploads.allowedMethods.push_back("POST");
+		uploads.uploadStore = ROOT_DIR;
 		config.locations.push_back(root);
 		config.locations.push_back(uploads);
-		routePost("/uploads", "body", config, response);
+		routePost("/uploads/upload.txt", "body", config, response);
 		TEST(response.getStatusCode() != 405,
 			"the longest matching location decides, not the first one");
 	}
 
 	{
 		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
 		HttpResponse	response;
 
-		routePost("/", "body", config, response);
+		root.uploadStore = ROOT_DIR;
+		config.locations.push_back(root);
+		routePost("/upload.txt", "body", config, response);
 		TEST(response.getStatusCode() != 405,
 			"a location without limit_except restricts no method");
 	}

@@ -383,7 +383,21 @@ int StaticFileHandler::saveFile(const std::string &resolvedPath,
 					std::ios::out | std::ios::binary | std::ios::trunc);
 
 	if (!file.is_open())
-		return (exists ? 403 : 404);
+	{
+		std::string				directory = ".";
+		std::string::size_type	slash = resolvedPath.find_last_of('/');
+		struct stat				directoryStat;
+
+		if (slash != std::string::npos)
+			directory = resolvedPath.substr(0, slash);
+		if (exists)
+			return (403);
+		if (stat(directory.c_str(), &directoryStat) != 0)
+			return (404);
+		if (access(directory.c_str(), W_OK) != 0)
+			return (403);
+		return (500);
+	}
 	file.write(content.data(), static_cast<std::streamsize>(content.size()));
 	file.flush();
 	if (!file.good())

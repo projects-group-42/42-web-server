@@ -837,6 +837,43 @@ static void	test_post_through_regular_file_answers_500(void)
 	destroyDirectoryTree("up_root");
 }
 
+/*
+ * Opening a FIFO for writing blocks until a reader shows up, which would
+ * stall the whole event loop inside a single request. saveFile() must refuse
+ * a target that exists without being a regular file before it ever calls
+ * open(), so the request is answered instead of hanging.
+ */
+static void	test_post_onto_fifo_answers_403(void)
+{
+	createDirectoryTree("up_root");
+
+	if (mkfifo("up_root/uploads/pipe.txt", 0644) == -1)
+	{
+		destroyDirectoryTree("up_root");
+		return ;
+	}
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads/pipe.txt");
+	request.setBody("would block");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 403,
+		"POST onto an existing FIFO answers 403 instead of blocking");
+
+	struct stat	st;
+	TEST(stat("up_root/uploads/pipe.txt", &st) == 0 && S_ISFIFO(st.st_mode),
+		"the refused upload leaves the FIFO in place");
+
+	std::remove("up_root/uploads/pipe.txt");
+	destroyDirectoryTree("up_root");
+}
+
 int	main(void)
 {
 	test_plain_post_creates_file();
@@ -861,6 +898,7 @@ int	main(void)
 	test_multipart_without_boundary_answers_400();
 	test_multipart_without_file_part_answers_400();
 	test_post_through_regular_file_answers_500();
+	test_post_onto_fifo_answers_403();
 	test_post_write_failure_removes_partial_file();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;

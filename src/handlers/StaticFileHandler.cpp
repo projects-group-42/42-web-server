@@ -89,7 +89,10 @@ const std::string &StaticFileHandler::getRoot(void) const
 
 /*
  * Serve a regular file, open it, read all bytes, set MIME type.
- * Returns HTTP status code.
+ * A read() failing part way through leaves the body holding only the bytes
+ * read so far, so the partial content is dropped instead of being answered as
+ * if it were the whole file. Returns the HTTP status code: 200 when the file
+ * was read, 403 when it could not be opened, 500 when a read failed.
  */
 int StaticFileHandler::serveRegularFile(const std::string &resolvedPath,
 		std::string &body, std::string &contentType)
@@ -104,6 +107,11 @@ int StaticFileHandler::serveRegularFile(const std::string &resolvedPath,
 		body.append(buf, bytes);
 
 	close(fd);
+	if (bytes == -1)
+	{
+		body.clear();
+		return (500);
+	}
 
 	contentType = mimeType_resolve(resolvedPath);
 	return (200);
@@ -339,7 +347,10 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
  * Creates or overwrites the file at `resolvedPath` with `content`.
  * Writes in a loop so a short write() does not truncate the content. A
  * write() returning -1 or 0 is a failure: the partial file is removed
- * before reporting 500, so no truncated file is left on disk. Returns
+ * before reporting 500, so no truncated file is left on disk. A target
+ * that already exists without being a regular file is refused before
+ * open(), since opening a FIFO or a device node for writing blocks until
+ * the other end is ready and would stall the event loop. Returns
  * the HTTP status code describing the outcome: 201 when the file did
  * not exist yet, 200 when an existing file was overwritten, 400 when
  * the target is a directory, 403/404/500 on the matching write
@@ -353,6 +364,8 @@ int StaticFileHandler::saveFile(const std::string &resolvedPath,
 
 	if (exists && S_ISDIR(pathStat.st_mode))
 		return (400);
+	if (exists && !S_ISREG(pathStat.st_mode))
+		return (403);
 
 	int	fd = open(resolvedPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd == -1)

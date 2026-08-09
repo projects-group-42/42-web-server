@@ -173,21 +173,33 @@ void EventLoop::acceptClients(int fd)
 	}
 }
 
+/*
+ * Reads one ready chunk from a client. The return value of recv() alone decides
+ * what follows, because errno may not be consulted after a read: anything but a
+ * positive count ends the connection, 0 being the peer closing and -1 an error
+ * on a socket poll() had just reported as readable. Returning false makes run()
+ * drop the client along with its poll entry.
+ */
 bool EventLoop::handleClient(int fd)
 {
-	ssize_t n = _clients[fd].receive_data();
-	if (n > 0)
+	ssize_t	n = _clients[fd].receive_data();
+
+	if (n == 0)
 	{
-		Logger::info("Data received from client.");
-		if (_clients[fd].get_psr_state() == COMPLETE)
-			handleRequest(fd);
-		else if (_clients[fd].get_psr_state() == ERROR)
-			handleParseError(fd);
-		return true;
+		Logger::info("Client closed the connection.");
+		return (false);
 	}
-	if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-		return true;
-	return false;
+	if (n < 0)
+	{
+		Logger::error("recv() failed, dropping client.");
+		return (false);
+	}
+	Logger::info("Data received from client.");
+	if (_clients[fd].get_psr_state() == COMPLETE)
+		handleRequest(fd);
+	else if (_clients[fd].get_psr_state() == ERROR)
+		handleParseError(fd);
+	return (true);
 }
 
 /**
@@ -330,33 +342,42 @@ void EventLoop::handleRequest(int fd)
  * complete, or already refused: a pipelined request is parsed here rather than
  * in handleClient, and a parser error found at this point has to be answered
  * here too, or the client is left waiting on a response that is never written.
+ *
+ * As in handleClient, the return value of send() alone decides, because errno
+ * may not be consulted after a write: a call that moved no byte (0) or failed
+ * (-1) on a socket poll() had reported as writable ends the connection. send()
+ * runs only while bytes are actually pending, so an empty buffer never produces
+ * a 0 of its own.
  */
 bool EventLoop::handleSend(int fd)
 {
 	Connection	&conn = _clients[fd];
-	ssize_t		sent = conn.send_data();
 
-	if (sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-		return true; // try again later
-	if (sent == -1)
-		return false; // error
-	if (!conn.has_data_to_send())
+	if (conn.has_data_to_send())
 	{
-		if (!conn.get_keep_alive())
+		ssize_t	sent = conn.send_data();
+
+		if (sent <= 0)
 		{
-			Logger::info("Response fully sent, closing connection.");
-			return false; // done, close
+			Logger::error("send() made no progress, dropping client.");
+			return (false);
 		}
-		conn.reset_for_next_request();
-		setPollEvents(fd, POLLIN);
-		Logger::info("Response fully sent, keeping connection alive.");
-		if (conn.get_psr_state() == COMPLETE)
-			handleRequest(fd);
-		else if (conn.get_psr_state() == ERROR)
-			handleParseError(fd);
-		return true;
+		if (conn.has_data_to_send())
+			return (true);
 	}
-	return true; // more to send
+	if (!conn.get_keep_alive())
+	{
+		Logger::info("Response fully sent, closing connection.");
+		return (false);
+	}
+	conn.reset_for_next_request();
+	setPollEvents(fd, POLLIN);
+	Logger::info("Response fully sent, keeping connection alive.");
+	if (conn.get_psr_state() == COMPLETE)
+		handleRequest(fd);
+	else if (conn.get_psr_state() == ERROR)
+		handleParseError(fd);
+	return (true);
 }
 
 /*

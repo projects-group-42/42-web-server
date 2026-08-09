@@ -35,6 +35,7 @@ static const char	*ROOT_DIR = "tests/tmp_router";
 static const char	*DOCS_DIR = "tests/tmp_router/docs";
 static const char	*ALT_DIR = "tests/tmp_router/alt";
 static const char	*ALT_DOCS_DIR = "tests/tmp_router/alt/docs";
+static const char	*UPLOAD_DIR = "tests/tmp_router/uploads";
 
 /**
  * @brief Writes `content` into `path`, creating or truncating the file.
@@ -50,6 +51,33 @@ static void	writeFile(const std::string &path, const std::string &content)
 }
 
 /**
+ * @brief Reads `path` back, returning an empty string when it cannot be read.
+ * @param path The file to read.
+ * @return The bytes the file holds.
+ */
+static std::string	readFile(const std::string &path)
+{
+	std::ifstream	file(path.c_str());
+
+	if (!file.is_open())
+		return ("");
+	return (std::string((std::istreambuf_iterator<char>(file)),
+			std::istreambuf_iterator<char>()));
+}
+
+/**
+ * @brief Reports whether `path` currently exists on the filesystem.
+ * @param path The name to look up.
+ * @return true when something occupies it.
+ */
+static bool	fileExists(const std::string &path)
+{
+	struct stat	info;
+
+	return (stat(path.c_str(), &info) == 0);
+}
+
+/**
  * @brief Builds the fixture tree the routing tests serve their requests from.
  */
 static void	setupFixture(void)
@@ -58,6 +86,7 @@ static void	setupFixture(void)
 	mkdir(DOCS_DIR, 0755);
 	mkdir(ALT_DIR, 0755);
 	mkdir(ALT_DOCS_DIR, 0755);
+	mkdir(UPLOAD_DIR, 0755);
 	writeFile(std::string(ROOT_DIR) + "/home.html", "SERVER INDEX");
 	writeFile(std::string(ROOT_DIR) + "/index.html", "DEFAULT INDEX");
 	writeFile(std::string(DOCS_DIR) + "/manual.html", "LOCATION INDEX");
@@ -77,6 +106,8 @@ static void	cleanupFixture(void)
 	std::remove((std::string(ROOT_DIR) + "/index.html").c_str());
 	std::remove((std::string(ROOT_DIR) + "/upload.txt").c_str());
 	std::remove((std::string(DOCS_DIR) + "/upload.txt").c_str());
+	std::remove((std::string(UPLOAD_DIR) + "/upload.txt").c_str());
+	rmdir(UPLOAD_DIR);
 	rmdir(ALT_DOCS_DIR);
 	rmdir(ALT_DIR);
 	rmdir(DOCS_DIR);
@@ -562,8 +593,9 @@ int	main(void)
 
 		root.allowedMethods.push_back("GET");
 		root.allowedMethods.push_back("POST");
+		root.uploadStore = UPLOAD_DIR;
 		config.locations.push_back(root);
-		routePost("/", "body", config, response);
+		routePost("/upload.txt", "body", config, response);
 		TEST(response.getStatusCode() != 405,
 			"a method named in limit_except is not refused");
 	}
@@ -577,20 +609,95 @@ int	main(void)
 		root.allowedMethods.push_back("GET");
 		uploads.allowedMethods.push_back("GET");
 		uploads.allowedMethods.push_back("POST");
+		uploads.uploadStore = UPLOAD_DIR;
 		config.locations.push_back(root);
 		config.locations.push_back(uploads);
-		routePost("/uploads", "body", config, response);
+		routePost("/uploads/upload.txt", "body", config, response);
 		TEST(response.getStatusCode() != 405,
 			"the longest matching location decides, not the first one");
 	}
 
 	{
 		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
 		HttpResponse	response;
 
-		routePost("/", "body", config, response);
+		root.uploadStore = UPLOAD_DIR;
+		config.locations.push_back(root);
+		routePost("/upload.txt", "body", config, response);
 		TEST(response.getStatusCode() != 405,
 			"a location without limit_except restricts no method");
+	}
+
+	/* ---------------------------------------------------------------- */
+	/* upload_store                                                     */
+	/* ---------------------------------------------------------------- */
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		HttpResponse	response;
+
+		root.uploadStore = UPLOAD_DIR;
+		config.locations.push_back(root);
+		std::remove((std::string(UPLOAD_DIR) + "/upload.txt").c_str());
+		routePost("/upload.txt", "stored", config, response);
+		TEST(response.getStatusCode() == 201,
+			"a POST to a location declaring upload_store is stored");
+		TEST(readFile(std::string(UPLOAD_DIR) + "/upload.txt") == "stored",
+			"the upload lands in the directory upload_store names");
+		TEST(!fileExists(std::string(ROOT_DIR) + "/upload.txt"),
+			"the upload never reaches the tree the root serves");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		HttpResponse	response;
+
+		config.locations.push_back(root);
+		writeFile(std::string(ROOT_DIR) + "/index.html", "DEFAULT INDEX");
+		routePost("/index.html", "overwritten", config, response);
+		TEST(response.getStatusCode() == 405,
+			"a POST to a location declaring no upload_store answers 405");
+		TEST(response.getHeaderValue("Allow") == "DELETE, GET",
+			"the refused upload names the methods the location does answer");
+		TEST(readFile(std::string(ROOT_DIR) + "/index.html") == "DEFAULT INDEX",
+			"the refused upload leaves the served file untouched");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		HttpResponse	response;
+
+		root.allowedMethods.push_back("GET");
+		root.allowedMethods.push_back("POST");
+		config.locations.push_back(root);
+		routePost("/upload.txt", "body", config, response);
+		TEST(response.getStatusCode() == 405,
+			"limit_except naming POST does not by itself allow an upload");
+		TEST(response.getHeaderValue("Allow") == "GET",
+			"the refused upload names only the methods limit_except keeps");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		LocationConfig	uploads("/uploads");
+		HttpResponse	first;
+		HttpResponse	second;
+
+		uploads.uploadStore = UPLOAD_DIR;
+		config.locations.push_back(root);
+		config.locations.push_back(uploads);
+		std::remove((std::string(UPLOAD_DIR) + "/upload.txt").c_str());
+		routePost("/uploads/upload.txt", "stored", config, first);
+		routePost("/upload.txt", "refused", config, second);
+		TEST(first.getStatusCode() == 201,
+			"the location declaring upload_store stores its upload");
+		TEST(second.getStatusCode() == 405,
+			"a sibling location declaring none does not inherit it");
 	}
 
 	cleanupFixture();

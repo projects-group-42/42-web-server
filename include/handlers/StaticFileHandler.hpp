@@ -27,14 +27,16 @@
  * StaticFileHandler
  *
  * Serves a filesystem resource under the document root. GET reads the
- * target file or directory index, POST writes the request body to the
- * target file, and DELETE removes the target file.
+ * target file or directory index, POST writes the request body into the
+ * upload directory the location declares, and DELETE removes the target
+ * file.
  */
 class StaticFileHandler : public IRequestHandler
 {
 	private:
 		std::string	_root;
 		std::string	_index;
+		std::string	_uploadStore;
 		bool		_autoindex;
 		long		_maxBodySize;
 
@@ -46,6 +48,8 @@ class StaticFileHandler : public IRequestHandler
 		int			serveDirectoryListing(const std::string &resolvedPath,
 						const std::string &requestUri, std::string &body);
 		std::string	rslv_req_realpath(const std::string &uri);
+		int			resolveUploadTarget(const std::string &filename,
+						std::string &target) const;
 		int			saveFile(const std::string &resolvedPath,
 						const std::string &content);
 		bool		isMultipartFormData(const HttpRequest &request,
@@ -61,8 +65,9 @@ class StaticFileHandler : public IRequestHandler
 								  HttpResponse &response);
 
 		/*
-		 * Writes the request body to the file resolved from the URI.
-		 * Returns 201 if the file was created, 200 if it was overwritten.
+		 * Writes the request body into the upload directory, under the base
+		 * name of the URI. Returns 201 if the file was created, 200 if it
+		 * was overwritten, and 405 when no upload directory is configured.
 		 */
 		bool				handlePost(const HttpRequest &request,
 								  HttpResponse &response);
@@ -84,6 +89,7 @@ class StaticFileHandler : public IRequestHandler
 		void				setIndex(const std::string &index);
 		void				setAutoindex(bool autoindex);
 		void				setMaxBodySize(long maxBodySize);
+		void				setUploadStore(const std::string &uploadStore);
 		const std::string	&getRoot(void) const;
 };
 

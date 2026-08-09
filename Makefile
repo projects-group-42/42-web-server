@@ -142,6 +142,7 @@ AUTOINDEX_TEST_SRC	= tests/autoindex_test.cpp \
 AUTOINDEX_TEST_BIN	= test_autoindex
 
 HOST_SELECTION_TEST_SRC	= tests/host_selection_test.cpp \
+						  src/http/SessionStore.cpp \
 						  src/server/EventLoop.cpp \
 						  src/server/Router.cpp \
 						  src/network/Socket.cpp \

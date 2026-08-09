@@ -1,5 +1,9 @@
 # Webserv — Subject Compliance Findings
 
+> **Documento superado.** Descreve a árvore em `43b19e5` (06/08/2026). A auditoria válida é
+> `AUDIT-2026-08-08.md`, que cruza o código com a régua **e** com o subject, roda os testers
+> oficiais do intra e registra o estado de cada uma das 13 issues daqui. Mantido como histórico.
+
 Audit of this repository against the 42 evaluation scale (`Intra Projects Edit.pdf`, scale_teams/9464839).
 
 Each finding below is written to be filed directly as a GitHub issue on the project board.

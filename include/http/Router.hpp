@@ -43,10 +43,15 @@ class Router
 				const ServerConfig &config) const;
 		long			resolveMaxBodySize(const std::string &uri,
 				const ServerConfig &config) const;
+		std::string		resolveUploadStore(const std::string &uri,
+				const ServerConfig &config) const;
 		bool			applyRedirect(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
 		bool			applyMethodLimit(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
+		bool			applyUploadLimit(const HttpRequest &request,
+				HttpResponse &response, const ServerConfig &config,
+				const std::string &implemented) const;
 		void			applyErrorPage(const HttpRequest &request,
 				HttpResponse &response, const ServerConfig &config) const;
 

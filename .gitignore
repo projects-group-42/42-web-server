@@ -33,3 +33,5 @@ Thumbs.db
 # uploads em runtime
 uploads/*
 !uploads/.gitkeep
+www/uploads/*
+!www/uploads/.gitkeep

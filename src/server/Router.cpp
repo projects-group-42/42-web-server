@@ -289,6 +289,26 @@ long	Router::resolveMaxBodySize(const std::string &uri,
 }
 
 /**
+ * @brief Picks the upload directory that applies to a URI in a server block.
+ * upload_store is declared per location, so a URI matching none accepts no
+ * upload at all rather than inheriting a directory the server never named.
+ * An empty result is what tells POST apart from a location that stores it.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The directory an upload is written to, or an empty string when the
+ * location matching the URI declares none.
+ */
+std::string	Router::resolveUploadStore(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	if (best != NULL)
+		return (best->uploadStore);
+	return ("");
+}
+
+/**
  * @brief Reports whether the body of a request is over the size its URI allows.
  * The parser only knows the widest client_max_body_size configured for the
  * port, since the server block and location serving a request are picked from
@@ -440,6 +460,54 @@ bool	Router::applyRedirect(const HttpRequest &request,
 }
 
 /**
+ * @brief Joins method names into the comma-separated form of an Allow header.
+ * @param methods The methods to name.
+ * @return The header value listing them in order.
+ */
+static std::string	joinMethods(const std::vector<std::string> &methods)
+{
+	std::string	allow;
+
+	for (size_t i = 0; i < methods.size(); ++i)
+	{
+		if (!allow.empty())
+			allow.append(", ");
+		allow.append(methods[i]);
+	}
+	return (allow);
+}
+
+/**
+ * @brief Drops one method from the value of an Allow header.
+ * A POST refused for want of an upload_store still has to name the methods
+ * the resource does answer, which is the rest of the list it belongs to.
+ * @param allow The header value to filter.
+ * @param excluded The method to leave out.
+ * @return The header value without the excluded method.
+ */
+static std::string	methodsExcept(const std::string &allow,
+			const std::string &excluded)
+{
+	std::vector<std::string>	kept;
+	size_t						start = 0;
+
+	while (start <= allow.size())
+	{
+		size_t	end = allow.find(", ", start);
+
+		if (end == std::string::npos)
+			end = allow.size();
+
+		std::string	method = allow.substr(start, end - start);
+
+		if (!method.empty() && method != excluded)
+			kept.push_back(method);
+		start = end + 2;
+	}
+	return (joinMethods(kept));
+}
+
+/**
  * @brief Refuses a method the location matching the request does not allow.
  * A location without limit_except restricts nothing, so its empty list lets
  * every implemented method through. When the method is refused the response is
@@ -455,7 +523,6 @@ bool	Router::applyMethodLimit(const HttpRequest &request,
 			HttpResponse &response, const ServerConfig &config) const
 {
 	const LocationConfig	*best = matchLocation(request.getUri(), config);
-	std::string				allow;
 
 	if (best == NULL || best->allowedMethods.empty())
 		return (false);
@@ -464,17 +531,52 @@ bool	Router::applyMethodLimit(const HttpRequest &request,
 		if (best->allowedMethods[i] == request.getMethod())
 			return (false);
 	}
-	for (size_t i = 0; i < best->allowedMethods.size(); ++i)
-	{
-		if (!allow.empty())
-			allow.append(", ");
-		allow.append(best->allowedMethods[i]);
-	}
 	response.setStatusCode(405);
-	response.setHeaders("Allow", allow);
+	response.setHeaders("Allow", joinMethods(best->allowedMethods));
 	response.setBody("");
 	Logger::warning("limit_except refused: " + request.getMethod() + " "
 			+ request.getUri());
+	return (true);
+}
+
+/**
+ * @brief Refuses a POST to a location that declares no upload directory.
+ * An upload is only ever written where upload_store names, so a location
+ * declaring none accepts none, and answering 405 keeps a POST from creating
+ * or truncating a file the config never offered for writing. The refusal
+ * belongs here rather than in the handler because the Allow header the status
+ * requires is built from the methods the location and the router do answer,
+ * which is the same list minus POST.
+ * A body over the limit its URI allows is refused whatever the location does
+ * with uploads, so it is left to the handler answering 413 rather than being
+ * reported as a method the resource does not accept.
+ * @param request The request being answered.
+ * @param response The response to fill when the upload is refused.
+ * @param config The server block serving the request.
+ * @param implemented The methods the router answers for the URI.
+ * @return true when the response was answered 405 and no handler may run,
+ * false when the POST may proceed.
+ */
+bool	Router::applyUploadLimit(const HttpRequest &request,
+			HttpResponse &response, const ServerConfig &config,
+			const std::string &implemented) const
+{
+	if (request.getMethod() != "POST")
+		return (false);
+	if (bodyExceedsLimit(request, config))
+		return (false);
+	if (!resolveUploadStore(request.getUri(), config).empty())
+		return (false);
+
+	const LocationConfig	*best = matchLocation(request.getUri(), config);
+	std::string				accepted = implemented;
+
+	if (best != NULL && !best->allowedMethods.empty())
+		accepted = joinMethods(best->allowedMethods);
+	response.setStatusCode(405);
+	response.setHeaders("Allow", methodsExcept(accepted, "POST"));
+	response.setBody("");
+	Logger::warning("upload refused, no upload_store: " + request.getUri());
 	return (true);
 }
 
@@ -493,6 +595,7 @@ bool	Router::route(const HttpRequest &request,
 		return (true);
 	}
 
+
 	IRequestHandler *handler = resolveHandler(
 			request.getMethod(), request.getUri(), pathFound, allow);
 
@@ -509,7 +612,7 @@ bool	Router::route(const HttpRequest &request,
 		Logger::warning("No handler for: " + request.getMethod() + " "
 				+ request.getUri());
 	}
-	else
+	else if (!applyUploadLimit(request, response, config, allow))
 	{
 		setRoot(resolveRoot(request.getUri(), config));
 		setIndex(resolveIndex(request.getUri(), config));
@@ -517,6 +620,8 @@ bool	Router::route(const HttpRequest &request,
 				resolveAutoindex(request.getUri(), config));
 		_staticHandler.setMaxBodySize(
 				resolveMaxBodySize(request.getUri(), config));
+		_staticHandler.setUploadStore(
+				resolveUploadStore(request.getUri(), config));
 		handler->handle(request, response);
 	}
 	applyErrorPage(request, response, config);

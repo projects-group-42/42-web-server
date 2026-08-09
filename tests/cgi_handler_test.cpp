@@ -19,6 +19,7 @@
 #include "cgi/CgiHandler.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
+#include "cgi_test_runner.hpp"
 
 static int	s_pass = 0;
 static int	s_fail = 0;
@@ -45,14 +46,13 @@ static void	writeScript(const std::string &path, const std::string &content)
  */
 static void	test_stdout_redirect(void)
 {
-	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					output;
 	bool						ok;
 
 	writeScript("cgi_echo.sh", "echo hello-cgi\n");
-	ok = handler.execute("/bin/sh", "cgi_echo.sh", "", env, output);
-	TEST(ok, "execute returns true on success");
+	ok = runCgi("/bin/sh", "cgi_echo.sh", "", env, output);
+	TEST(ok, "runCgi returns true on success");
 	TEST(output == "hello-cgi\n", "captures script stdout");
 	std::remove("cgi_echo.sh");
 }
@@ -62,14 +62,13 @@ static void	test_stdout_redirect(void)
  */
 static void	test_stdin_redirect(void)
 {
-	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					output;
 	bool						ok;
 
 	writeScript("cgi_cat.sh", "cat\n");
-	ok = handler.execute("/bin/sh", "cgi_cat.sh", "ping", env, output);
-	TEST(ok, "execute returns true when feeding stdin");
+	ok = runCgi("/bin/sh", "cgi_cat.sh", "ping", env, output);
+	TEST(ok, "runCgi returns true when feeding stdin");
 	TEST(output == "ping", "forwards request body to script stdin");
 	std::remove("cgi_cat.sh");
 }
@@ -80,15 +79,14 @@ static void	test_stdin_redirect(void)
  */
 static void	test_large_body(void)
 {
-	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					body(1024 * 1024, 'x');
 	std::string					output;
 	bool						ok;
 
 	writeScript("cgi_cat.sh", "cat\n");
-	ok = handler.execute("/bin/sh", "cgi_cat.sh", body, env, output);
-	TEST(ok, "execute returns true on a large body");
+	ok = runCgi("/bin/sh", "cgi_cat.sh", body, env, output);
+	TEST(ok, "runCgi returns true on a large body");
 	TEST(output == body, "streams a body larger than the pipe buffer");
 	std::remove("cgi_cat.sh");
 }
@@ -153,8 +151,8 @@ static void	test_env_reaches_script(void)
 	request.setVersion("HTTP/1.1");
 	env = handler.buildEnv(request, "cgi_env.sh");
 	writeScript("cgi_env.sh", "echo \"$REQUEST_METHOD:$QUERY_STRING\"\n");
-	ok = handler.execute("/bin/sh", "cgi_env.sh", request.getBody(), env, output);
-	TEST(ok, "execute returns true with an environment");
+	ok = runCgi("/bin/sh", "cgi_env.sh", request.getBody(), env, output);
+	TEST(ok, "runCgi returns true with an environment");
 	TEST(output == "GET:q=hello\n", "child process receives CGI variables");
 	std::remove("cgi_env.sh");
 }

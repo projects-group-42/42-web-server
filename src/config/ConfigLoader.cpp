@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 11:25:05 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/07 20:40:12 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/09 19:12:40 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <sstream>
 #include <stdexcept>
 
 /**
@@ -28,6 +29,69 @@ static bool	isAllDigits(const std::string &token)
 	if (token.empty())
 		return (false);
 	return (token.find_first_not_of("0123456789") == std::string::npos);
+}
+
+/**
+ * @brief Checks whether a name appears in a NULL-terminated list of names.
+ * @param name The name to look for.
+ * @param names The list to search, terminated by a NULL entry.
+ * @return true when the name is present in the list.
+ */
+static bool	nameIsListed(const std::string &name, const char *const *names)
+{
+	for (size_t i = 0; names[i] != NULL; ++i)
+	{
+		if (name == names[i])
+			return (true);
+	}
+	return (false);
+}
+
+/**
+ * @brief Ends the load on a directive the enclosing block does not accept.
+ * A name the loader implements elsewhere is reported as misplaced rather than
+ * unknown, so a server-only directive written inside a location says where it
+ * belongs instead of reading as a typo.
+ * @param d The directive taken from the AST.
+ * @param context The block that rejected it, named for the message.
+ * @throw std::runtime_error always.
+ */
+static void	refuseDirective(const ConfigDirective &d, const char *context)
+{
+	static const char *const	known[] = {
+		"listen", "server_name", "root", "index", "autoindex",
+		"client_max_body_size", "error_page", "cgi_pass", "limit_except",
+		"upload_store", "return", NULL
+	};
+	std::ostringstream			oss;
+
+	if (nameIsListed(d.name, known))
+		oss << "directive '" << d.name << "' is not allowed in a "
+			<< context << " block, at line " << d.line;
+	else
+		oss << "unknown directive '" << d.name << "' at line " << d.line;
+	throw std::runtime_error(oss.str());
+}
+
+/**
+ * @brief Ends the load on a block the enclosing scope does not accept.
+ * "server" and "location" are told apart from an unknown name so a block
+ * written at the wrong depth is reported as misplaced rather than unknown.
+ * @param b The block taken from the AST.
+ * @param context Where the block was found, named for the message.
+ * @throw std::runtime_error always.
+ */
+static void	refuseBlock(const ConfigBlock &b, const char *context)
+{
+	std::ostringstream	oss;
+
+	if (b.name == "server" || b.name == "location")
+		oss << "block '" << b.name << "' is not allowed " << context
+			<< ", at line " << b.line;
+	else
+		oss << "unknown block '" << b.name << "' " << context
+			<< ", at line " << b.line;
+	throw std::runtime_error(oss.str());
 }
 
 /**
@@ -113,7 +177,8 @@ std::string ConfigLoader::configPath(void)
  * block. Reads the raw file, tokenizes it, builds the AST and extracts the
  * directives and location blocks of every server found in it.
  * @return The populated ServerConfig list, in declaration order.
- * @throw std::runtime_error when the file cannot be read or is invalid.
+ * @throw std::runtime_error when the file cannot be read or is invalid, or
+ * when it holds a top-level block other than a server.
  */
 std::vector<ServerConfig> ConfigLoader::loader(void)
 {
@@ -129,7 +194,7 @@ std::vector<ServerConfig> ConfigLoader::loader(void)
 	     block_it != _tree.children.end(); ++block_it)
 	{
 		if (block_it->name != "server")
-			continue;
+			refuseBlock(*block_it, "at the top level");
 
 		ServerConfig	server;
 
@@ -265,7 +330,8 @@ std::string	ConfigLoader::parseRoot(const ConfigDirective &d)
  * present, or when several index directives are declared.
  * @param block The server block taken from the AST.
  * @param server The server block being filled.
- * @throw std::runtime_error when a directive is malformed.
+ * @throw std::runtime_error when a directive is malformed, or when the block
+ * declares a directive a server does not accept.
  */
 void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			ServerConfig &server)
@@ -296,6 +362,8 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
 			server.clientMaxBodySize = parseBodySize(*it);
 		else if (it->name == "error_page")
 			parseErrorPage(server.errorPages, *it);
+		else
+			refuseDirective(*it, "server");
 	}
 
 	if (indexes > 1)
@@ -332,7 +400,9 @@ void	ConfigLoader::parse_directives(const ConfigBlock &block,
  * falls back to the server value at request time.
  * @param block The server block taken from the AST.
  * @param server The server block being filled.
- * @throw std::runtime_error when a location block is malformed.
+ * @throw std::runtime_error when a location block is malformed, when it
+ * declares a directive a location does not accept, or when the server holds
+ * a block other than a location.
  */
 void	ConfigLoader::parse_locations(const ConfigBlock &block,
 			ServerConfig &server)
@@ -342,7 +412,7 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 	for (it = block.children.begin(); it != block.children.end(); ++it)
 	{
 		if (it->name != "location")
-			continue;
+			refuseBlock(*it, "inside a server block");
 		if (it->args.empty())
 			throw std::runtime_error("location block requires a path argument");
 
@@ -369,7 +439,12 @@ void	ConfigLoader::parse_locations(const ConfigBlock &block,
 				loc.uploadStore = parseUploadStore(*dit);
 			else if (dit->name == "return")
 				parseReturn(loc, *dit);
+			else
+				refuseDirective(*dit, "location");
 		}
+		std::vector<ConfigBlock>::const_iterator	cit;
+		for (cit = it->children.begin(); cit != it->children.end(); ++cit)
+			refuseBlock(*cit, "inside a location block");
 
 		if (loc.index.empty())
 			loc.index = server.index;

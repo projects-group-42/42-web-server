@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/01 18:00:00 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/07 20:40:12 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/09 19:12:40 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -89,6 +89,25 @@ static bool	loadThrows(const std::string &source)
 		return (true);
 	}
 	return (false);
+}
+
+static std::string	loadError(const std::string &source)
+{
+	try
+	{
+		loadSource(source);
+	}
+	catch (const std::exception &e)
+	{
+		std::remove(TMP_PATH);
+		return (std::string(e.what()));
+	}
+	return (std::string());
+}
+
+static bool	mentions(const std::string &haystack, const std::string &needle)
+{
+	return (haystack.find(needle) != std::string::npos);
 }
 
 /* ------------------------------------------------------------------ */
@@ -424,6 +443,100 @@ static void	test_malformed_upload_store_throws(void)
 		"server {\n    location /uploads {\n"
 		"        upload_store www/uploads extra;\n    }\n}\n"),
 	     "an extra argument is rejected instead of being silently dropped");
+}
+
+static void	test_unknown_server_directive_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    listen 8081;\n    unsupported_directive on;\n}\n"),
+	     "an unknown server-level directive is rejected");
+}
+
+static void	test_unknown_location_directive_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    listen 8081;\n    location / {\n        unsupported_directive on;\n    }\n}\n"),
+	     "an unknown location-level directive is rejected");
+}
+
+static void	test_unknown_directive_names_the_line(void)
+{
+	std::string	err = loadError(
+		"server {\n    listen 8081;\n    unsupported_directive on;\n}\n");
+
+	TEST(mentions(err, "unsupported_directive"),
+	     "the refusal names the directive that was not understood");
+	TEST(mentions(err, "3"),
+	     "the refusal names the line the directive was written on");
+}
+
+static void	test_misplaced_directive_is_not_called_unknown(void)
+{
+	std::string	err = loadError(
+		"server {\n    listen 8081;\n    location / {\n"
+		"        error_page 404 /404.html;\n    }\n}\n");
+
+	TEST(mentions(err, "not allowed"),
+	     "a server-only directive inside a location is refused as misplaced");
+	TEST(!mentions(err, "unknown"),
+	     "a directive the loader implements is never called unknown");
+}
+
+static void	test_location_only_directive_in_server_throws(void)
+{
+	std::string	err = loadError(
+		"server {\n    listen 8081;\n    upload_store www/uploads;\n}\n");
+
+	TEST(mentions(err, "not allowed"),
+	     "a location-only directive in a server is refused as misplaced");
+	TEST(!mentions(err, "unknown"),
+	     "upload_store is not reported as an unknown name");
+}
+
+static void	test_unknown_top_level_block_throws(void)
+{
+	TEST(loadThrows(
+		"unsupported_block {\n    listen 8081;\n}\n"
+		"server {\n    listen 8082;\n}\n"),
+	     "an unknown top-level block is rejected");
+}
+
+static void	test_location_at_top_level_throws(void)
+{
+	TEST(loadThrows("location / {\n    root www/;\n}\n"),
+	     "a location declared outside a server is rejected");
+}
+
+static void	test_unknown_block_inside_server_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    listen 8081;\n    nested_junk {\n"
+		"        whatever on;\n    }\n}\n"),
+	     "an unknown block inside a server is rejected");
+}
+
+static void	test_block_inside_location_throws(void)
+{
+	TEST(loadThrows(
+		"server {\n    listen 8081;\n    location / {\n"
+		"        location /deep {\n            root www/;\n"
+		"        }\n    }\n}\n"),
+	     "a block nested inside a location is rejected");
+}
+
+static void	test_supported_directives_still_load(void)
+{
+	ServerConfig	config = loadSource(
+		"server {\n    listen 8081;\n    server_name a.test;\n"
+		"    root www/;\n    index index.html;\n    autoindex on;\n"
+		"    client_max_body_size 1m;\n    error_page 404 /404.html;\n"
+		"    location /up {\n        upload_store www/uploads;\n"
+		"        limit_except GET POST;\n        cgi_pass .py /usr/bin/python3;\n"
+		"        return 301 /elsewhere;\n    }\n}\n");
+
+	CHECK_EQ(config.port, 8081, "every supported directive still loads");
+	CHECK_EQ(config.locations.size(), static_cast<size_t>(1),
+	         "the location declaring only supported directives is kept");
 }
 
 /* ------------------------------------------------------------------ */
@@ -1070,6 +1183,16 @@ int	main(void)
 	test_upload_store_is_per_location();
 	test_last_upload_store_wins();
 	test_malformed_upload_store_throws();
+	test_unknown_server_directive_throws();
+	test_unknown_location_directive_throws();
+	test_unknown_directive_names_the_line();
+	test_misplaced_directive_is_not_called_unknown();
+	test_location_only_directive_in_server_throws();
+	test_unknown_top_level_block_throws();
+	test_location_at_top_level_throws();
+	test_unknown_block_inside_server_throws();
+	test_block_inside_location_throws();
+	test_supported_directives_still_load();
 	test_missing_file_throws();
 	test_no_listen_uses_defaults();
 	test_last_listen_wins();

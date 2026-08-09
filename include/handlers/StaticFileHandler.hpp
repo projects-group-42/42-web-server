@@ -48,6 +48,8 @@ class StaticFileHandler : public IRequestHandler
 		int			serveDirectoryListing(const std::string &resolvedPath,
 						const std::string &requestUri, std::string &body);
 		std::string	rslv_req_realpath(const std::string &uri);
+		int			resolveUploadName(const std::string &uri,
+						std::string &filename) const;
 		int			resolveUploadTarget(const std::string &filename,
 						std::string &target) const;
 		int			saveFile(const std::string &resolvedPath,

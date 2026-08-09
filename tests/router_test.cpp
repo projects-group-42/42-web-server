@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #include "http/Router.hpp"
 #include "http/HttpRequest.hpp"
@@ -78,6 +79,29 @@ static bool	fileExists(const std::string &path)
 }
 
 /**
+ * @brief Removes every regular file `path` holds.
+ * An upload the router named itself cannot be removed by name, so the fixture
+ * clears the upload directory wholesale before removing it.
+ * @param path The directory to empty.
+ */
+static void	removeDirectoryContents(const std::string &path)
+{
+	DIR	*dir = opendir(path.c_str());
+
+	if (dir == NULL)
+		return ;
+	for (struct dirent *entry = readdir(dir); entry != NULL;
+			entry = readdir(dir))
+	{
+		std::string	name = entry->d_name;
+
+		if (name != "." && name != "..")
+			std::remove((path + "/" + name).c_str());
+	}
+	closedir(dir);
+}
+
+/**
  * @brief Builds the fixture tree the routing tests serve their requests from.
  */
 static void	setupFixture(void)
@@ -107,6 +131,7 @@ static void	cleanupFixture(void)
 	std::remove((std::string(ROOT_DIR) + "/upload.txt").c_str());
 	std::remove((std::string(DOCS_DIR) + "/upload.txt").c_str());
 	std::remove((std::string(UPLOAD_DIR) + "/upload.txt").c_str());
+	removeDirectoryContents(UPLOAD_DIR);
 	rmdir(UPLOAD_DIR);
 	rmdir(ALT_DOCS_DIR);
 	rmdir(ALT_DIR);
@@ -679,6 +704,30 @@ int	main(void)
 			"limit_except naming POST does not by itself allow an upload");
 		TEST(response.getHeaderValue("Allow") == "GET",
 			"the refused upload names only the methods limit_except keeps");
+	}
+
+	{
+		ServerConfig	config = makeServer("index.html");
+		LocationConfig	root("/");
+		HttpResponse	response;
+
+		root.uploadStore = UPLOAD_DIR;
+		config.locations.push_back(root);
+		routePost("/", "SHORT", config, response);
+		TEST(response.getStatusCode() < 400,
+			"a POST naming no file answers a non-error status");
+		TEST(!fileExists(std::string(ROOT_DIR) + "/index.html")
+			|| readFile(std::string(ROOT_DIR) + "/index.html")
+				== "DEFAULT INDEX",
+			"a POST naming no file leaves the directory index alone");
+
+		config.clientMaxBodySize = 2;
+
+		HttpResponse	oversized;
+
+		routePost("/", "way over the limit", config, oversized);
+		TEST(oversized.getStatusCode() == 413,
+			"the same POST over client_max_body_size still answers 413");
 	}
 
 	{

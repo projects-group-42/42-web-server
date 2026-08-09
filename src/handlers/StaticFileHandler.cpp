@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <vector>
 #include <cerrno>
+#include <ctime>
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html"), _uploadStore(""), _autoindex(false),
@@ -451,6 +452,57 @@ static std::string	fileBaseName(const std::string &name)
 }
 
 /*
+ * Builds a name for an upload the client left unnamed, free inside `store`.
+ * The clock gives the name its stem so two uploads a second apart never meet,
+ * and a counter walks past whatever already answers to it so two arriving
+ * within the same second do not either. lstat() rather than stat() decides a
+ * name is free, so a dangling symlink counts as taken instead of being
+ * followed later. Returns an empty string when no free name was found.
+ */
+static std::string	generatedUploadName(const std::string &store)
+{
+	std::ostringstream	stem;
+
+	stem << "upload-" << static_cast<long>(std::time(NULL));
+	for (int i = 0; i < 4096; ++i)
+	{
+		std::ostringstream	name;
+		struct stat			info;
+
+		name << stem.str() << "-" << i;
+		if (lstat((store + "/" + name.str()).c_str(), &info) != 0)
+			return (name.str());
+	}
+	return ("");
+}
+
+/*
+ * Picks the name a plain POST stores its body under. The base name of the URI
+ * names the file, and a URI naming none, as "POST /" and any target ending in
+ * '/' do, is given a generated name instead of being refused: the location
+ * accepts the body, only the client left it unnamed. A base name that names
+ * something other than a file, "." or "..", is not a missing name and is left
+ * for resolveUploadTarget() to refuse. Returns 200 with `filename` filled, or
+ * 500 when the store cannot be resolved or holds no free name.
+ */
+int StaticFileHandler::resolveUploadName(const std::string &uri,
+		std::string &filename) const
+{
+	filename = fileBaseName(uri);
+	if (!filename.empty())
+		return (200);
+
+	std::string	store = canonicalPath(_uploadStore);
+	if (store.empty())
+		return (500);
+
+	filename = generatedUploadName(store);
+	if (filename.empty())
+		return (500);
+	return (200);
+}
+
+/*
  * Resolves the base name of an upload into a path inside the upload
  * directory, confining the write the way rslv_req_realpath() confines a
  * read: the name carries no directory component, so the only way out of the
@@ -561,7 +613,8 @@ bool StaticFileHandler::handleMultipartUpload(const HttpRequest &request,
 
 /*
  * Writes the request body into the upload directory, under the base name of
- * the URI, so an upload never reaches the tree the server hands out. When the
+ * the URI, or under a generated one when the URI names no file, so an upload
+ * never reaches the tree the server hands out. When the
  * request carries multipart/form-data, delegates to handleMultipartUpload to
  * extract and save the file part(s) instead. Rejects with 413 when the body
  * exceeds the configured maximum size, and with 405 when the location
@@ -591,10 +644,12 @@ bool StaticFileHandler::handlePost(const HttpRequest &request,
 	if (isMultipartFormData(request, boundary))
 		return (handleMultipartUpload(request, boundary, response));
 
+	std::string	filename;
 	std::string	target;
-	int			status = resolveUploadTarget(
-			fileBaseName(request.getUri()), target);
+	int			status = resolveUploadName(request.getUri(), filename);
 
+	if (status == 200)
+		status = resolveUploadTarget(filename, target);
 	if (status != 200)
 	{
 		response.setStatusCode(status);

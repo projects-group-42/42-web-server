@@ -19,6 +19,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #include <vector>
+#include <dirent.h>
 
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
@@ -51,6 +52,33 @@ static std::string	readFile(const std::string &path)
 		return ("");
 	return (std::string((std::istreambuf_iterator<char>(file)),
 			std::istreambuf_iterator<char>()));
+}
+
+/*
+ * Lists the regular files `path` holds, so a test can find an upload whose
+ * name the server generated rather than the request naming it.
+ */
+static std::vector<std::string>	directoryEntries(const std::string &path)
+{
+	std::vector<std::string>	entries;
+	DIR							*dir = opendir(path.c_str());
+
+	if (dir == NULL)
+		return (entries);
+	for (struct dirent *entry = readdir(dir); entry != NULL;
+			entry = readdir(dir))
+	{
+		std::string	name = entry->d_name;
+		struct stat	info;
+
+		if (name == "." || name == "..")
+			continue;
+		if (stat((path + "/" + name).c_str(), &info) == 0
+			&& S_ISREG(info.st_mode))
+			entries.push_back(name);
+	}
+	closedir(dir);
+	return (entries);
 }
 
 static void	writeFile(const std::string &path, const std::string &content)
@@ -734,10 +762,12 @@ static void	test_post_without_upload_store_answers_405(void)
 }
 
 /*
- * A URI whose base name is empty or names the store itself resolves to no
- * file to write, so it is answered 400 rather than truncating a directory.
+ * A URI naming a directory rather than a file leaves the upload unnamed, and
+ * the location still accepts it, so the body is stored under a generated name
+ * inside the upload directory instead of being refused. A base name of ".."
+ * is not a missing name but an unusable one, and stays refused.
  */
-static void	test_post_without_base_name_answers_400(void)
+static void	test_post_without_base_name_generates_a_name(void)
 {
 	createDirectoryTree("up_root");
 
@@ -758,11 +788,60 @@ static void	test_post_without_base_name_answers_400(void)
 	dotdot.setBody("climbing");
 	handler.handle(dotdot, dotdotResponse);
 
-	TEST(trailingResponse.getStatusCode() == 400,
-		"POST to a URI with no base name answers 400");
+	std::vector<std::string>	stored = directoryEntries("up_root/uploads");
+
+	TEST(trailingResponse.getStatusCode() == 201,
+		"POST to a URI with no base name answers 201");
+	TEST(stored.size() == 1,
+		"POST to a URI with no base name stores exactly one file");
+	TEST(stored.size() == 1
+		&& readFile("up_root/uploads/" + stored[0]) == "nameless",
+		"the generated name holds the body that was posted");
 	TEST(dotdotResponse.getStatusCode() == 400,
 		"POST to a URI whose base name is '..' answers 400");
+	TEST(!fileExists("up_root/../climbing"),
+		"POST to a URI whose base name is '..' writes nothing");
 
+	for (size_t i = 0; i < stored.size(); ++i)
+		std::remove(("up_root/uploads/" + stored[i]).c_str());
+	destroyDirectoryTree("up_root");
+}
+
+/*
+ * Two unnamed uploads arriving back to back must not land on each other, so
+ * the generated name walks past the one already stored.
+ */
+static void	test_generated_names_do_not_collide(void)
+{
+	createDirectoryTree("up_root");
+
+	StaticFileHandler	handler("up_root");
+	handler.setUploadStore("up_root/uploads");
+	HttpRequest		first;
+	HttpRequest		second;
+	HttpResponse	firstResponse;
+	HttpResponse	secondResponse;
+
+	first.setMethod("POST");
+	first.setUri("/uploads/");
+	first.setBody("first body");
+	handler.handle(first, firstResponse);
+
+	second.setMethod("POST");
+	second.setUri("/uploads/");
+	second.setBody("second body");
+	handler.handle(second, secondResponse);
+
+	std::vector<std::string>	stored = directoryEntries("up_root/uploads");
+
+	TEST(firstResponse.getStatusCode() == 201
+		&& secondResponse.getStatusCode() == 201,
+		"two unnamed uploads both answer 201");
+	TEST(stored.size() == 2,
+		"two unnamed uploads are stored side by side");
+
+	for (size_t i = 0; i < stored.size(); ++i)
+		std::remove(("up_root/uploads/" + stored[i]).c_str());
 	destroyDirectoryTree("up_root");
 }
 
@@ -1088,7 +1167,8 @@ int	main(void)
 	test_upload_to_missing_directory();
 	test_upload_to_readonly_parent();
 	test_post_without_upload_store_answers_405();
-	test_post_without_base_name_answers_400();
+	test_post_without_base_name_generates_a_name();
+	test_generated_names_do_not_collide();
 	test_plain_post_onto_symlink_answers_403();
 	test_multipart_onto_symlink_answers_403();
 	test_plain_post_onto_dangling_symlink_answers_403();

@@ -78,6 +78,7 @@ class EventLoop
 
 		void	setupSockets(void);
 		void	run(void);
+		static void	requestStop(int signal);
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;
 		const ServerConfig&

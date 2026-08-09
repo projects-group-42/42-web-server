@@ -20,13 +20,22 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <csignal>
 #include <ctime>
 #include <cstdlib>
 
 static const std::string	DEFAULT_CGI_INTERPRETER = "/usr/bin/python3";
 static const long			CGI_TIMEOUT_MS = 5000;
 static const double			IDLE_TIMEOUT_S = 30.0;
+static const int			MAX_POLL_WAIT_MS = 1000;
 static const int			BACKLOG = 128;
+
+/*
+ * Lowered by requestStop() when a signal asks the server to stop, and read by
+ * run() between two turns of the loop. sig_atomic_t is the only type a handler
+ * may touch safely.
+ */
+static volatile sig_atomic_t	g_running = 1;
 
 /*
  * Returns the current wall-clock time in milliseconds. gettimeofday() is not
@@ -49,10 +58,30 @@ EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
 {
 }
 
+/*
+ * Releases everything the loop owns: the listening sockets and any CGI child
+ * still running, which the CgiProcess destructor kills and reaps. The clients
+ * close themselves through the Connection destructor.
+ */
 EventLoop::~EventLoop(void)
 {
+	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin();
+			it != _cgi.end(); ++it)
+		delete it->second;
+	_cgi.clear();
 	for (size_t i = 0; i < _sckt.size(); i++)
 		delete _sckt[i];
+}
+
+/*
+ * Signal handler asking the loop to stop. It only lowers a flag: run() sees it
+ * between two turns and returns, so the destructors do the freeing outside of
+ * signal context.
+ */
+void EventLoop::requestStop(int signal)
+{
+	(void)signal;
+	g_running = 0;
 }
 
 /*
@@ -720,20 +749,19 @@ int EventLoop::cgiPollTimeout(void)
 }
 
 /*
- * Returns the timeout the main poll() waits with: the nearest of the CGI
- * deadline and the next idle connection sweep. Without the second half a
- * silent client would only be noticed the next time some other traffic woke
- * the loop up.
+ * Returns the timeout the main poll() waits with: the CGI deadline when one is
+ * nearer, capped at MAX_POLL_WAIT_MS otherwise. The cap is what makes the loop
+ * come back regularly with nothing to do, which is when the idle sweep runs
+ * and when the stop flag is read. Waiting forever would leave a silent client
+ * holding its descriptor until some other traffic woke the loop, and would
+ * leave Ctrl+C unanswered for just as long.
  */
 int EventLoop::pollTimeout(void)
 {
 	int	cgi = cgiPollTimeout();
-	int	idle = static_cast<int>(IDLE_TIMEOUT_S * 1000);
 
-	if (_clients.empty())
-		return (cgi);
-	if (cgi == -1 || cgi > idle)
-		return (idle);
+	if (cgi == -1 || cgi > MAX_POLL_WAIT_MS)
+		return (MAX_POLL_WAIT_MS);
 	return (cgi);
 }
 
@@ -749,7 +777,7 @@ void EventLoop::run(void)
 		s_listening.revents = 0;
 		_fds.push_back(s_listening);
 	}
-	while (true)
+	while (g_running)
 	{
 		int ready = poll(_fds.data(), _fds.size(), pollTimeout());
 		if (ready == -1)

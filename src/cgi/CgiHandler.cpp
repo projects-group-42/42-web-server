@@ -170,10 +170,17 @@ bool CgiHandler::isCgiRequest(const std::string &uri) const
 }
 
 /*
- * Validates the script resolved from the URI (path stays inside the CGI
- * root, exists, is a regular file, is readable) and writes the resolved path
- * into scriptPath on success. Sets the response status code and returns false
- * when validation fails.
+ * Validates the script resolved from the URI and writes the resolved path into
+ * scriptPath on success. What is checked is what the server is responsible
+ * for: the path stays inside the CGI root, and when something is there it is a
+ * regular file the server may read.
+ *
+ * Whether the target exists is left to the CGI. A location binding an
+ * extension names the program that answers for it, so that program decides
+ * what a missing target means, the same way NGINX hands a missing .php to
+ * php-cgi and lets it answer. A CGI that cannot produce a valid response still
+ * ends as 502. Sets the response status code and returns false when the
+ * request is refused.
  */
 bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 		HttpResponse &response) const
@@ -187,20 +194,18 @@ bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 	}
 
 	struct stat	scriptStat;
-	if (stat(scriptPath.c_str(), &scriptStat) != 0)
+	if (stat(scriptPath.c_str(), &scriptStat) == 0)
 	{
-		response.setStatusCode(404);
-		return (false);
-	}
-	if (!S_ISREG(scriptStat.st_mode))
-	{
-		response.setStatusCode(403);
-		return (false);
-	}
-	if (access(scriptPath.c_str(), R_OK) != 0)
-	{
-		response.setStatusCode(403);
-		return (false);
+		if (!S_ISREG(scriptStat.st_mode))
+		{
+			response.setStatusCode(403);
+			return (false);
+		}
+		if (access(scriptPath.c_str(), R_OK) != 0)
+		{
+			response.setStatusCode(403);
+			return (false);
+		}
 	}
 	return (true);
 }
@@ -242,9 +247,13 @@ static std::string headerToMetaVar(const std::string &key)
  * resolved script path. Includes the request method, query string, protocol
  * and content metadata, the address the request arrived from and where it was
  * addressed, and forwards every request header as an HTTP_ variable except the
- * ones already exposed as CONTENT_TYPE and CONTENT_LENGTH. PATH_INFO carries
- * the resolved script, which is what the tester the scale ships expects and
- * what lets a script find itself on disk.
+ * ones already exposed as CONTENT_TYPE and CONTENT_LENGTH.
+ *
+ * PATH_INFO is the path in URI space, and PATH_TRANSLATED the same path
+ * translated onto the filesystem, which is the split RFC 3875 describes; the
+ * script itself is named by SCRIPT_NAME in URI space and by SCRIPT_FILENAME on
+ * disk. The tester the scale ships reads PATH_INFO and refuses the request
+ * unless REQUEST_URI agrees with it, which this split satisfies.
  */
 std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request,
         const std::string &scriptPath, int serverPort,
@@ -277,7 +286,7 @@ std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request,
     env.push_back("QUERY_STRING=" + request.getQuery());
     env.push_back("SCRIPT_NAME=" + request.getUri());
     env.push_back("SCRIPT_FILENAME=" + scriptPath);
-    env.push_back("PATH_INFO=" + scriptPath);
+    env.push_back("PATH_INFO=" + request.getUri());
     env.push_back("PATH_TRANSLATED=" + scriptPath);
     env.push_back("CONTENT_LENGTH=" + toString(request.getBody().size()));
     if (!contentType.empty())

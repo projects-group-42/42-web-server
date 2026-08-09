@@ -191,7 +191,8 @@ static void	test_build_env(void)
 	TEST(envHas(env, "CONTENT_LENGTH=7"), "buildEnv sets CONTENT_LENGTH from body size");
 	TEST(envHas(env, "CONTENT_TYPE=application/x-www-form-urlencoded"), "buildEnv sets CONTENT_TYPE");
 	TEST(envHas(env, "HTTP_HOST=localhost"), "buildEnv forwards headers as HTTP_ variables");
-	TEST(envHas(env, "PATH_INFO=cgi-bin/form.py"), "buildEnv sets PATH_INFO to the resolved script");
+	TEST(envHas(env, "PATH_INFO=/cgi-bin/form.py"), "buildEnv sets PATH_INFO in URI space");
+	TEST(envHas(env, "PATH_TRANSLATED=cgi-bin/form.py"), "buildEnv translates PATH_INFO onto the filesystem");
 	TEST(envHas(env, "SERVER_NAME=localhost"), "buildEnv sets SERVER_NAME from the Host header");
 	TEST(envHas(env, "SERVER_PORT=8080"), "buildEnv sets SERVER_PORT");
 	TEST(envHas(env, "REMOTE_ADDR=127.0.0.1"), "buildEnv sets REMOTE_ADDR");

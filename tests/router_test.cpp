@@ -310,8 +310,8 @@ int	main(void)
 		HttpResponse	response;
 
 		routeGet("/", config, response);
-		TEST(response.getStatusCode() == 403,
-			"a directory without its configured index answers 403");
+		TEST(response.getStatusCode() == 404,
+			"a directory without its configured index answers 404");
 	}
 
 	{

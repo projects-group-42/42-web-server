@@ -569,11 +569,18 @@ void EventLoop::startCgi(int fd, const std::string &interpreter,
  * request body to the child; readable steps drain its output. A finished
  * direction is unregistered from the poll set, and once both directions are
  * done the response is built and sent.
+ *
+ * Every step pushes the deadline forward, so what CGI_TIMEOUT_MS bounds is how
+ * long a child may go without moving a byte, not how long it may run. A child
+ * spinning in a loop writes nothing and is still killed on time, while a body
+ * of a hundred megabytes keeps the pipes busy and is allowed to finish.
  */
 void EventLoop::handleCgiIo(int fd, short revents)
 {
 	int			clientFd = _pipeToClient[fd];
 	CgiProcess	*proc = _cgi[clientFd];
+
+	proc->setDeadlineMs(nowMs() + CGI_TIMEOUT_MS);
 
 	if (fd == proc->bodyWriteFd())
 	{

@@ -16,6 +16,7 @@
 #include "network/Socket.hpp"
 #include "network/Connection.hpp"
 #include "http/Router.hpp"
+#include "http/SessionStore.hpp"
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiProcess.hpp"
 #include "config/ServerConfig.hpp"
@@ -34,6 +35,7 @@ class EventLoop
 		std::map<int, Connection>				_clients;
 		Router									_router;
 		CgiHandler								_cgiHandler;
+		SessionStore							_sessions;
 		std::map<int, CgiProcess*>				_cgi;
 		std::map<int, int>						_pipeToClient;
 
@@ -48,6 +50,7 @@ class EventLoop
 		void	handleParseError(int fd);
 		void	handleRequest(int fd);
 		bool	handleSend(int fd);
+		void	openSession(Connection &conn);
 		bool	wantsKeepAlive(const HttpRequest &request) const;
 		void	setPollEvents(int fd, short events);
 		void	addPollFd(int fd, short events);

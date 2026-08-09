@@ -303,6 +303,22 @@ void EventLoop::handleParseError(int fd)
 }
 
 /*
+ * Recognises the session the request belongs to, or opens one. The id travels
+ * in the SESSIONID cookie the server sets; a request arriving without one, or
+ * with an id this server does not know, starts a session of its own. The id is
+ * kept on the connection so both the router and the CGI path can put it back
+ * in the response.
+ */
+void EventLoop::openSession(Connection &conn)
+{
+	std::string	id = SessionStore::readCookie(
+					conn.getRequest().getHeaderValue("Cookie"), "SESSIONID");
+
+	_sessions.touch(id);
+	conn.set_session_id(id);
+}
+
+/*
  * Decides whether the client wants the connection kept open. HTTP/1.1
  * defaults to persistent unless "Connection: close" is sent; HTTP/1.0
  * defaults to closing unless "Connection: keep-alive" is sent.
@@ -342,6 +358,7 @@ void EventLoop::handleRequest(int fd)
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	builder.setKeepAlive(conn.get_keep_alive());
+	openSession(conn);
 
 	if (_router.bodyExceedsLimit(conn.getRequest(), chosenConfig))
 	{
@@ -364,6 +381,8 @@ void EventLoop::handleRequest(int fd)
 	{
 		HttpResponse response;
 		_router.route(conn.getRequest(), response, chosenConfig);
+		response.setHeaders("set-cookie",
+				_sessions.cookieFor(conn.get_session_id()));
 		std::string serialized = builder.builder(conn.getRequest(), response);
 		conn.set_write_buffer(serialized);
 	}
@@ -543,6 +562,17 @@ void EventLoop::startCgi(int fd, const std::string &interpreter,
 	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(),
 									scriptPath, conn.getLocalPort(),
 									conn.getRemoteAddr());
+	std::ostringstream			visits;
+
+	/*
+	 * The session the server keeps is handed to the script as well, so a CGI
+	 * can greet a returning visitor on the very first request, before the
+	 * browser has had a chance to send the cookie back.
+	 */
+	visits << _sessions.visits(conn.get_session_id());
+	env.push_back("SESSION_ID=" + conn.get_session_id());
+	env.push_back("SESSION_VISITS=" + visits.str());
+
 	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());
 
 	if (!proc->start(interpreter, scriptPath, env))
@@ -622,7 +652,12 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 
 	builder.setKeepAlive(conn.get_keep_alive());
 	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
+	{
+		if (response.getHeaderValue("set-cookie").empty())
+			response.setHeaders("set-cookie",
+					_sessions.cookieFor(conn.get_session_id()));
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
+	}
 	else
 		conn.set_write_buffer(buildError(conn, builder, 502));
 	setPollEvents(clientFd, POLLOUT);

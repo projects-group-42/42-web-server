@@ -12,6 +12,7 @@ SRC_FILES	= main.cpp \
 			  http/MimeType.cpp \
 			  http/RequestParser.cpp \
 			  http/ResponseBuilder.cpp \
+			  http/SessionStore.cpp \
 			  http/MultipartParser.cpp \
 			  handlers/IRequestHandler.cpp \
 			  handlers/StaticFileHandler.cpp \

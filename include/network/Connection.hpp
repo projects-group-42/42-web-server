@@ -24,6 +24,7 @@ class Connection
 		int				_client_fd;
 		std::string		_write_buffer;
 		std::string		_remote_addr;
+		std::string		_session_id;
 		time_t			_time;
 		RequestParser	_parser;
 		bool			_keep_alive;
@@ -51,5 +52,7 @@ class Connection
 		const HttpRequest&	getRequest(void) const;
 		int					getLocalPort(void) const;
 		const std::string	&getRemoteAddr(void) const;
+		void				set_session_id(const std::string &id);
+		const std::string	&get_session_id(void) const;
 };
 #endif

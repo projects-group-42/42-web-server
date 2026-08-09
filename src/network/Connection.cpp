@@ -39,6 +39,7 @@ Connection::Connection(const Connection &copy)
 	: _client_fd(copy._client_fd),
 	  _write_buffer(copy._write_buffer),
 	  _remote_addr(copy._remote_addr),
+	  _session_id(copy._session_id),
 	  _time(copy._time),
 	  _parser(copy._parser),
 	  _keep_alive(copy._keep_alive)
@@ -56,6 +57,7 @@ Connection &Connection::operator=(const Connection &other)
 		const_cast<Connection&>(other)._client_fd = -1;
 		_write_buffer = other._write_buffer;
 		_remote_addr = other._remote_addr;
+		_session_id = other._session_id;
 		_time = other._time;
 		_parser = other._parser;
 		_keep_alive = other._keep_alive;
@@ -181,11 +183,6 @@ const HttpRequest& Connection::getRequest(void) const
 }
 
 /*
- * Returns the local port this connection was accepted on, so the request can
- * be matched against the server blocks listening on it. Returns 0 when the
- * socket cannot be queried.
- */
-/*
  * Returns the address of the peer as accept() reported it when the connection
  * was created, or an empty string for a connection built without one.
  */
@@ -194,6 +191,25 @@ const std::string &Connection::getRemoteAddr(void) const
 	return (_remote_addr);
 }
 
+/*
+ * Remembers the session the request being answered belongs to, so the response
+ * can carry its cookie whichever path builds it.
+ */
+void	Connection::set_session_id(const std::string &id)
+{
+	_session_id = id;
+}
+
+const std::string &Connection::get_session_id(void) const
+{
+	return (_session_id);
+}
+
+/*
+ * Returns the local port this connection was accepted on, so the request can
+ * be matched against the server blocks listening on it. Returns 0 when the
+ * socket cannot be queried.
+ */
 int Connection::getLocalPort(void) const
 {
 	struct sockaddr_in	address;

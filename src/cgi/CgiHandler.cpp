@@ -25,12 +25,12 @@
 #include <errno.h>
 
 CgiHandler::CgiHandler(void)
-	: _cgiRoot("cgi-bin")
+	: _cgiRoot("cgi-bin"), _locationPrefix("")
 {
 }
 
 CgiHandler::CgiHandler(const std::string &cgiRoot)
-	: _cgiRoot(cgiRoot)
+	: _cgiRoot(cgiRoot), _locationPrefix("")
 {
 }
 
@@ -42,7 +42,10 @@ CgiHandler::CgiHandler(const CgiHandler &copy)
 CgiHandler &CgiHandler::operator=(const CgiHandler &other)
 {
 	if (this != &other)
+	{
 		_cgiRoot = other._cgiRoot;
+		_locationPrefix = other._locationPrefix;
+	}
 	return (*this);
 }
 
@@ -53,6 +56,16 @@ CgiHandler::~CgiHandler(void)
 void	CgiHandler::setCgiRoot(const std::string &cgiRoot)
 {
 	_cgiRoot = cgiRoot;
+}
+
+/*
+ * Sets the location prefix dropped from a URI before the script is looked for
+ * under the CGI root. The event loop fills both from the location matching the
+ * request, so a script is found where its location says it lives.
+ */
+void	CgiHandler::setLocationPrefix(const std::string &prefix)
+{
+	_locationPrefix = prefix;
 }
 
 const std::string &CgiHandler::getCgiRoot(void) const
@@ -139,35 +152,19 @@ static bool isWithinRoot(const std::string &root, const std::string &path)
 }
 
 /*
- * Returns the last path component of path, ignoring trailing slashes.
- */
-static std::string baseName(const std::string &path)
-{
-	std::string	trimmed = path;
-
-	while (trimmed.size() > 1 && trimmed[trimmed.size() - 1] == '/')
-		trimmed.erase(trimmed.size() - 1);
-	std::string::size_type	slash = trimmed.rfind('/');
-	if (slash == std::string::npos)
-		return (trimmed);
-	return (trimmed.substr(slash + 1));
-}
-
-/*
- * Resolves the script path for a URI under the CGI root. The URI is
- * normalized, its leading mount segment (matching the CGI root name) is
- * dropped so "/cgi-bin/x.py" maps to "<root>/x.py", the rest is joined onto
- * the root, and the result is checked so symlinks cannot escape it. Returns an
- * empty string on escape.
+ * Resolves the script path for a URI under the CGI root. The prefix of the
+ * location serving the request is dropped first, so "/cgi/x.py" served by a
+ * location rooted in "www/cgi" maps to "www/cgi/x.py"; what is left is
+ * normalized, joined onto the root, and checked so symlinks cannot escape it.
+ * Returns an empty string on escape.
  */
 std::string CgiHandler::resolvePath(const std::string &uri) const
 {
 	std::vector<std::string>	segments;
 
-	if (!normalizeSegments(uri, segments))
+	if (!normalizeSegments(stripLocationPrefix(uri, _locationPrefix),
+			segments))
 		return ("");
-	if (!segments.empty() && segments.front() == baseName(_cgiRoot))
-		segments.erase(segments.begin());
 	std::string	path = joinPath(_cgiRoot, segments);
 	if (!isWithinRoot(_cgiRoot, path))
 		return ("");
@@ -372,25 +369,45 @@ static std::string headerToMetaVar(const std::string &key)
 /*
  * Builds the CGI environment for a request and the
  * resolved script path. Includes the request method, query string, protocol
- * and content metadata, and forwards every request header as an HTTP_ variable
- * except the ones already exposed as CONTENT_TYPE and CONTENT_LENGTH.
+ * and content metadata, the address the request arrived from and where it was
+ * addressed, and forwards every request header as an HTTP_ variable except the
+ * ones already exposed as CONTENT_TYPE and CONTENT_LENGTH. PATH_INFO carries
+ * the resolved script, which is what the tester the scale ships expects and
+ * what lets a script find itself on disk.
  */
-std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request, const std::string &scriptPath) const
+std::vector<std::string> CgiHandler::buildEnv(const HttpRequest &request,
+        const std::string &scriptPath, int serverPort,
+        const std::string &remoteAddr) const
 {
     std::vector<std::string>    env;
     std::string                 protocol = request.getVersion();
     std::string                 contentType = request.getHeaderValue("Content-Type");
+    std::string                 host = request.getHeaderValue("Host");
+    std::string::size_type      colon = host.find(':');
+    std::string                 requestUri = request.getUri();
 
     if (protocol.empty())
         protocol = "HTTP/1.1";
+    if (colon != std::string::npos)
+        host.erase(colon);
+    if (host.empty())
+        host = "localhost";
+    if (!request.getQuery().empty())
+        requestUri += "?" + request.getQuery();
     env.push_back("GATEWAY_INTERFACE=CGI/1.1");
     env.push_back("SERVER_SOFTWARE=Webserv/1.0");
     env.push_back("SERVER_PROTOCOL=" + protocol);
+    env.push_back("SERVER_NAME=" + host);
+    env.push_back("SERVER_PORT=" + toString(static_cast<size_t>(serverPort)));
+    env.push_back("REMOTE_ADDR=" + remoteAddr);
     env.push_back("REDIRECT_STATUS=200");
     env.push_back("REQUEST_METHOD=" + request.getMethod());
+    env.push_back("REQUEST_URI=" + requestUri);
     env.push_back("QUERY_STRING=" + request.getQuery());
     env.push_back("SCRIPT_NAME=" + request.getUri());
     env.push_back("SCRIPT_FILENAME=" + scriptPath);
+    env.push_back("PATH_INFO=" + scriptPath);
+    env.push_back("PATH_TRANSLATED=" + scriptPath);
     env.push_back("CONTENT_LENGTH=" + toString(request.getBody().size()));
     if (!contentType.empty())
         env.push_back("CONTENT_TYPE=" + contentType);

@@ -39,7 +39,6 @@ class StaticFileHandler : public IRequestHandler
 		std::string	_locationPrefix;
 		bool		_autoindex;
 		long		_maxBodySize;
-		std::string	stripLocationPrefix(const std::string &uri) const;
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,

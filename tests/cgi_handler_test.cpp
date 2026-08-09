@@ -123,7 +123,7 @@ static void	test_build_env(void)
 	request.setHeaders("Content-Type", "application/x-www-form-urlencoded");
 	request.setHeaders("Host", "localhost");
 	request.setBody("name=42");
-	env = handler.buildEnv(request, "cgi-bin/form.py");
+	env = handler.buildEnv(request, "cgi-bin/form.py", 8080, "127.0.0.1");
 	TEST(envHas(env, "GATEWAY_INTERFACE=CGI/1.1"), "buildEnv sets GATEWAY_INTERFACE");
 	TEST(envHas(env, "REQUEST_METHOD=POST"), "buildEnv sets REQUEST_METHOD");
 	TEST(envHas(env, "QUERY_STRING=name=42&lang=c"), "buildEnv sets QUERY_STRING");
@@ -133,6 +133,11 @@ static void	test_build_env(void)
 	TEST(envHas(env, "CONTENT_LENGTH=7"), "buildEnv sets CONTENT_LENGTH from body size");
 	TEST(envHas(env, "CONTENT_TYPE=application/x-www-form-urlencoded"), "buildEnv sets CONTENT_TYPE");
 	TEST(envHas(env, "HTTP_HOST=localhost"), "buildEnv forwards headers as HTTP_ variables");
+	TEST(envHas(env, "PATH_INFO=cgi-bin/form.py"), "buildEnv sets PATH_INFO to the resolved script");
+	TEST(envHas(env, "SERVER_NAME=localhost"), "buildEnv sets SERVER_NAME from the Host header");
+	TEST(envHas(env, "SERVER_PORT=8080"), "buildEnv sets SERVER_PORT");
+	TEST(envHas(env, "REMOTE_ADDR=127.0.0.1"), "buildEnv sets REMOTE_ADDR");
+	TEST(envHas(env, "REQUEST_URI=/cgi-bin/form.py?name=42&lang=c"), "buildEnv sets REQUEST_URI with the query");
 }
 
 /*
@@ -151,7 +156,7 @@ static void	test_env_reaches_script(void)
 	request.setUri("/cgi-bin/env.py");
 	request.setQuery("q=hello");
 	request.setVersion("HTTP/1.1");
-	env = handler.buildEnv(request, "cgi_env.sh");
+	env = handler.buildEnv(request, "cgi_env.sh", 8080, "127.0.0.1");
 	writeScript("cgi_env.sh", "echo \"$REQUEST_METHOD:$QUERY_STRING\"\n");
 	ok = handler.execute("/bin/sh", "cgi_env.sh", request.getBody(), env, output);
 	TEST(ok, "execute returns true with an environment");
@@ -286,8 +291,10 @@ static void	test_parse_invalid_status(void)
 }
 
 /*
- * Checks a script is resolved both through the mount prefix "/cgi-bin/x.py"
- * and directly as "/x.py", so the CGI root name is not doubled in the path.
+ * Checks a script is resolved through the prefix of the location serving it,
+ * so "/cgi-bin/x.py" served by a location rooted in "cgi-bin" lands on
+ * "cgi-bin/x.py" instead of doubling the root, and a URI carrying no prefix
+ * resolves to the same path.
  */
 static void	test_validate_mount_prefix(void)
 {
@@ -297,9 +304,11 @@ static void	test_validate_mount_prefix(void)
 	std::string		bare;
 
 	writeScript("cgi-bin/probe_cgi.py", "print()\n");
+	handler.setLocationPrefix("/cgi-bin");
 	TEST(handler.validate("/cgi-bin/probe_cgi.py", prefixed, response),
 		"validate accepts the /cgi-bin prefixed URI");
 	TEST(prefixed == "cgi-bin/probe_cgi.py", "validate resolves prefixed URI without doubling the root");
+	handler.setLocationPrefix("");
 	TEST(handler.validate("/probe_cgi.py", bare, response),
 		"validate accepts the bare URI");
 	TEST(bare == "cgi-bin/probe_cgi.py", "validate resolves the bare URI to the same path");

@@ -53,9 +53,10 @@ class EventLoop
 		void	addPollFd(int fd, short events);
 		void	disablePollFd(int fd);
 		void	compactPollFds(void);
-		std::string	cgiInterpreterFor(const std::string &uri,
+		std::string	cgiInterpreterFor(const HttpRequest &request,
 					const ServerConfig &config) const;
-		void	startCgi(int fd, const std::string &interpreter);
+		void	startCgi(int fd, const std::string &interpreter,
+					const ServerConfig &config);
 		void	handleCgiIo(int fd, short revents);
 		void	finishCgi(int clientFd, CgiProcess *proc);
 		void	abortCgi(int clientFd);

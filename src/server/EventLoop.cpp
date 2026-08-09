@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <ctime>
 #include <cstdlib>
 
@@ -148,11 +149,28 @@ bool EventLoop::isMasterSocket(int fd) const
 	return (false);
 }
 
+/*
+ * Formats the IPv4 address of a peer as a dotted quad. inet_ntoa() is not one
+ * of the functions the subject authorises, and the four octets are all the CGI
+ * environment needs for REMOTE_ADDR.
+ */
+static std::string addressToString(const struct sockaddr_in &address)
+{
+	unsigned long		host = ntohl(address.sin_addr.s_addr);
+	std::ostringstream	oss;
+
+	oss << ((host >> 24) & 0xFF) << "." << ((host >> 16) & 0xFF) << "."
+		<< ((host >> 8) & 0xFF) << "." << (host & 0xFF);
+	return (oss.str());
+}
+
 void EventLoop::acceptClients(int fd)
 {
 	while (true)
 	{
-		int client = accept(fd, NULL, NULL);
+		struct sockaddr_in	peer;
+		socklen_t			length = sizeof(peer);
+		int client = accept(fd, (struct sockaddr *)&peer, &length);
 		if (client == -1)
 			break;
 		setNonBlocking(client);
@@ -161,7 +179,7 @@ void EventLoop::acceptClients(int fd)
 		pfd.events = POLLIN;
 		pfd.revents = 0;
 		_fds.push_back(pfd);
-		_clients[client] = Connection(client);
+		_clients[client] = Connection(client, addressToString(peer));
 		_clients[client].setMaxBodySize(
 			maxBodySizeForPort(_clients[client].getLocalPort()));
 		Logger::info("New client connected.");
@@ -300,12 +318,12 @@ void EventLoop::handleRequest(int fd)
 		return ;
 	}
 
-	std::string	interpreter = cgiInterpreterFor(conn.getRequest().getUri(),
+	std::string	interpreter = cgiInterpreterFor(conn.getRequest(),
 						chosenConfig);
 
 	if (!interpreter.empty())
 	{
-		startCgi(fd, interpreter);
+		startCgi(fd, interpreter, chosenConfig);
 		return ;
 	}
 
@@ -443,15 +461,19 @@ void EventLoop::sendCgiError(int fd, int status)
  * config declaring no cgi_pass still serves Python scripts. A location that
  * redirects runs nothing, since the redirect is the answer and the fallback
  * would otherwise execute the script before the router ever sees the request.
- * @param uri The request target.
+ * A method the location does not accept runs nothing either, for the same
+ * reason: the 405 is the answer, and it is the router that writes it.
+ * @param request The request being answered.
  * @param config The server block serving the request.
  * @return The binary to execute, or an empty string when the URI is not a CGI
  * request.
  */
-std::string	EventLoop::cgiInterpreterFor(const std::string &uri,
+std::string	EventLoop::cgiInterpreterFor(const HttpRequest &request,
 			const ServerConfig &config) const
 {
-	if (_router.redirects(uri, config))
+	const std::string	&uri = request.getUri();
+
+	if (_router.redirects(uri, config) || _router.refusesMethod(request, config))
 		return ("");
 
 	std::string	interpreter = _router.resolveCgiInterpreter(uri, config);
@@ -462,25 +484,32 @@ std::string	EventLoop::cgiInterpreterFor(const std::string &uri,
 }
 
 /*
- * Starts a CGI request without blocking the server: validates the script,
- * forks the interpreter the config bound to its extension, registers the CGI
- * pipe fds in the poll set, and parks the client fd (no interest) until the
- * child finishes. On validation or fork failure it queues the matching error
+ * Starts a CGI request without blocking the server: points the CGI handler at
+ * the root the matched location declares, validates the script, forks the
+ * interpreter the config bound to its extension, registers the CGI pipe fds in
+ * the poll set, and parks the client fd (no interest) until the child
+ * finishes. On validation or fork failure it queues the matching error
  * response instead.
  */
-void EventLoop::startCgi(int fd, const std::string &interpreter)
+void EventLoop::startCgi(int fd, const std::string &interpreter,
+		const ServerConfig &config)
 {
 	Connection		&conn = _clients[fd];
 	std::string		scriptPath;
 	HttpResponse	errorResponse;
+	const std::string	&uri = conn.getRequest().getUri();
 
-	if (!_cgiHandler.validate(conn.getRequest().getUri(), scriptPath, errorResponse))
+	_cgiHandler.setCgiRoot(_router.resolveRoot(uri, config));
+	_cgiHandler.setLocationPrefix(_router.resolveLocationPrefix(uri, config));
+	if (!_cgiHandler.validate(uri, scriptPath, errorResponse))
 	{
 		sendCgiError(fd, errorResponse.getStatusCode());
 		return ;
 	}
 
-	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(), scriptPath);
+	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(),
+									scriptPath, conn.getLocalPort(),
+									conn.getRemoteAddr());
 	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());
 
 	if (!proc->start(interpreter, scriptPath, env))

@@ -23,9 +23,22 @@ Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL))
 {
 }
 
+/*
+ * Builds a connection that remembers the address accept() reported for the
+ * peer, which is what the CGI environment publishes as REMOTE_ADDR.
+ * getpeername() is not one of the functions the subject authorises, so the
+ * address is only ever read at accept time.
+ */
+Connection::Connection(int client_fd, const std::string &remote_addr)
+	: _client_fd(client_fd), _remote_addr(remote_addr), _time(time(NULL)),
+	  _parser(), _keep_alive(false)
+{
+}
+
 Connection::Connection(const Connection &copy)
 	: _client_fd(copy._client_fd),
 	  _write_buffer(copy._write_buffer),
+	  _remote_addr(copy._remote_addr),
 	  _time(copy._time),
 	  _parser(copy._parser),
 	  _keep_alive(copy._keep_alive)
@@ -42,6 +55,7 @@ Connection &Connection::operator=(const Connection &other)
 		_client_fd = other._client_fd;
 		const_cast<Connection&>(other)._client_fd = -1;
 		_write_buffer = other._write_buffer;
+		_remote_addr = other._remote_addr;
 		_time = other._time;
 		_parser = other._parser;
 		_keep_alive = other._keep_alive;
@@ -171,6 +185,15 @@ const HttpRequest& Connection::getRequest(void) const
  * be matched against the server blocks listening on it. Returns 0 when the
  * socket cannot be queried.
  */
+/*
+ * Returns the address of the peer as accept() reported it when the connection
+ * was created, or an empty string for a connection built without one.
+ */
+const std::string &Connection::getRemoteAddr(void) const
+{
+	return (_remote_addr);
+}
+
 int Connection::getLocalPort(void) const
 {
 	struct sockaddr_in	address;

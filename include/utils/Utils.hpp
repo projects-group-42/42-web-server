@@ -18,6 +18,8 @@
 
 void		setNonBlocking(int fd);
 bool		pathIsInsideRoot(const std::string &root, const std::string &path);
+std::string	stripLocationPrefix(const std::string &uri,
+				const std::string &prefix);
 std::string	toLower(const std::string &str);
 std::string	getHttpDate(void);
 std::string	htmlEscape(const std::string &str);

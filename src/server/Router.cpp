@@ -449,6 +449,31 @@ bool	Router::redirects(const std::string &uri,
 }
 
 /**
+ * @brief Tells whether the location matching a request refuses its method.
+ * Same reason as redirects(): CGI is dispatched before the router runs, so the
+ * caller driving it has to know the method is refused to keep a script from
+ * executing on a route that does not accept it. The 405 itself is written by
+ * route(), through applyMethodLimit.
+ * @param request The request being answered.
+ * @param config The server block serving the request.
+ * @return true when limit_except leaves the method of the request out.
+ */
+bool	Router::refusesMethod(const HttpRequest &request,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(request.getUri(), config);
+
+	if (best == NULL || best->allowedMethods.empty())
+		return (false);
+	for (size_t i = 0; i < best->allowedMethods.size(); ++i)
+	{
+		if (best->allowedMethods[i] == request.getMethod())
+			return (false);
+	}
+	return (true);
+}
+
+/**
  * @brief Answers a request matching a location that declares a return.
  * The redirect is emitted before any handler runs, so the location needs no
  * root of its own and the target is never looked up on disk. Every method is

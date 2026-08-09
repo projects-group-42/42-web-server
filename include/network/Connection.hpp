@@ -23,6 +23,7 @@ class Connection
 	private:
 		int				_client_fd;
 		std::string		_write_buffer;
+		std::string		_remote_addr;
 		time_t			_time;
 		RequestParser	_parser;
 		bool			_keep_alive;
@@ -30,6 +31,7 @@ class Connection
 	public:
 		Connection(void);
 		Connection(int client_fd);
+		Connection(int client_fd, const std::string &remote_addr);
 		Connection(const Connection &copy);
 		Connection& operator=(const Connection &other);
 		~Connection(void);
@@ -48,5 +50,6 @@ class Connection
 		int					get_error_code(void) const;
 		const HttpRequest&	getRequest(void) const;
 		int					getLocalPort(void) const;
+		const std::string	&getRemoteAddr(void) const;
 };
 #endif

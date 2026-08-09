@@ -28,6 +28,7 @@ class CgiHandler
 {
 	private:
 		std::string	_cgiRoot;
+		std::string	_locationPrefix;
 		std::string	resolvePath(const std::string &uri) const;
 		bool        hasExtension(const std::string &uri, const std::string &extension) const;
 
@@ -39,10 +40,13 @@ class CgiHandler
 		~CgiHandler(void);
 
 		void				setCgiRoot(const std::string &cgiRoot);
+		void				setLocationPrefix(const std::string &prefix);
 		const std::string	&getCgiRoot(void) const;
 		bool				isCgiRequest(const std::string &uri) const;
 		bool				validate(const std::string &uri, std::string &scriptPath, HttpResponse &response) const;
-		std::vector<std::string>	buildEnv(const HttpRequest &request, const std::string &scriptPath) const;
+		std::vector<std::string>	buildEnv(const HttpRequest &request,
+							const std::string &scriptPath, int serverPort,
+							const std::string &remoteAddr) const;
 		bool				parseCgiOutput(const std::string &raw, HttpResponse &response) const;
 		bool                execute(const std::string &interpreter, const std::string &scriptPath, const std::string &body, const std::vector<std::string> &env, std::string &output) const;
 };

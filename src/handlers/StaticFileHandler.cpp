@@ -253,27 +253,6 @@ int StaticFileHandler::serveDirectoryListing(const std::string &resolvedPath,
 }
 
 /*
- * Removes the prefix of the location serving the request from `uri`, so the
- * rest of it is what gets resolved against the root that location declares.
- * This is the mapping the subject asks for: "/kapouet" rooted in "/tmp/www"
- * serves "/kapouet/pouic/toto/pouet" from "/tmp/www/pouic/toto/pouet". The
- * prefix is only dropped on a path boundary, so "/cgi" never eats into
- * "/cgifoo", and an empty prefix (a location inheriting the server root, or a
- * handler used outside the router) leaves the URI whole.
- */
-std::string StaticFileHandler::stripLocationPrefix(const std::string &uri) const
-{
-	size_t	size = _locationPrefix.size();
-
-	if (size == 0 || uri.compare(0, size, _locationPrefix) != 0)
-		return (uri);
-	if (uri.size() == size || uri[size] == '/'
-		|| _locationPrefix[size - 1] == '/')
-		return (uri.substr(size));
-	return (uri);
-}
-
-/*
  * Resolve `uri` into a filesystem path inside the document root.
  * The URI is split into segments, collapsing "." and ".." lexically; any ".."
  * that would climb above the root returns an empty string so the caller can
@@ -287,7 +266,8 @@ std::string StaticFileHandler::stripLocationPrefix(const std::string &uri) const
 std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 {
 	std::vector<std::string>	segments;
-	std::string					target = stripLocationPrefix(uri);
+	std::string					target = stripLocationPrefix(uri,
+									_locationPrefix);
 	std::string					path = _root;
 	size_t						i = 0;
 

@@ -75,6 +75,26 @@ bool pathIsInsideRoot(const std::string &root, const std::string &path)
 	return (false);
 }
 
+/*
+ * Removes the prefix of the location serving a request from `uri`, so what is
+ * left is resolved against the root that location declares. This is the
+ * mapping the subject asks for: "/kapouet" rooted in "/tmp/www" serves
+ * "/kapouet/pouic/toto/pouet" from "/tmp/www/pouic/toto/pouet". The prefix is
+ * only dropped on a path boundary, so "/cgi" never eats into "/cgifoo", and an
+ * empty prefix leaves the URI whole.
+ */
+std::string stripLocationPrefix(const std::string &uri,
+		const std::string &prefix)
+{
+	size_t	size = prefix.size();
+
+	if (size == 0 || uri.compare(0, size, prefix) != 0)
+		return (uri);
+	if (uri.size() == size || uri[size] == '/' || prefix[size - 1] == '/')
+		return (uri.substr(size));
+	return (uri);
+}
+
 std::string toLower(const std::string &str)
 {
 	std::string result = str;

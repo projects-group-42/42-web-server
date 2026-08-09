@@ -75,8 +75,9 @@ static bool	driveToCompletion(CgiProcess &proc)
 
 /*
  * Runs a CGI script to completion over the non-blocking CgiProcess API and
- * collects its stdout into output. Reaps the child before reporting the
- * result, so a run that stalled still leaves no zombie behind. Returns false
+ * collects its stdout into output. A child that did not finish is killed
+ * first, so the blocking reap that follows can never hang the test binary,
+ * and either way the child is reaped instead of left a zombie. Returns false
  * on fork or pipe failure, when the poll-driven pump did not finish, or when
  * the script did not exit cleanly with status 0.
  */
@@ -91,6 +92,8 @@ static bool	runCgi(const std::string &interpreter, const std::string &scriptPath
 	if (!proc.start(interpreter, scriptPath, env))
 		return (false);
 	driven = driveToCompletion(proc);
+	if (!driven)
+		proc.terminate();
 	status = proc.reap();
 	output = proc.output();
 	return (driven && status == 0);

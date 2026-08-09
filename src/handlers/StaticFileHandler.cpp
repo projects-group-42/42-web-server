@@ -244,6 +244,11 @@ static std::string canonicalPath(const std::string &path)
  * parent directory (when it does not, as happens for every upload) is then
  * checked against the canonical root, so a symlink cannot be used to escape
  * the document root either directly or by creating a new file through it.
+ * Falling back to the parent is only sound when nothing occupies the target
+ * name: a dangling symlink also fails to canonicalise, and confining it to
+ * the directory holding the link would let an upload create the file the
+ * link points at, anywhere on disk. Whatever still exists at the target name
+ * without resolving is therefore refused instead of trusting its parent.
  * A root that cannot be canonicalised (empty or missing) is refused outright:
  * without it there is nothing to confine the request to.
  */
@@ -284,6 +289,10 @@ std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 	std::string	resolved = canonicalPath(path);
 	if (resolved.empty())
 	{
+		struct stat	linkStat;
+
+		if (lstat(path.c_str(), &linkStat) == 0)
+			return ("");
 		size_t	slash = path.find_last_of('/');
 		if (slash != std::string::npos)
 			resolved = canonicalPath(path.substr(0, slash));

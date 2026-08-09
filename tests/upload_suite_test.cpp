@@ -731,6 +731,82 @@ static void	test_multipart_through_symlink_answers_403(void)
 }
 
 /*
+ * The escape above walks through a symlinked directory, so the parent of the
+ * target resolves outside the root and is caught. A symlink that is itself
+ * the target and points at a file that does not exist yet is not: realpath()
+ * fails on the dangling link exactly as it does on a new upload, and the
+ * parent it falls back to is the real directory holding the link, safely
+ * inside the root. open(O_CREAT) then follows the link and creates the file
+ * it names, wherever that is, so the dangling link must be refused.
+ */
+static void	test_plain_post_onto_dangling_symlink_answers_403(void)
+{
+	createDirectoryTree("up_root");
+	mkdir("up_escape", 0755);
+	symlink("../../up_escape/pwned.txt", "up_root/uploads/dangling.txt");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+
+	request.setMethod("POST");
+	request.setUri("/uploads/dangling.txt");
+	request.setBody("escaped the root");
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 403,
+		"POST onto a dangling symlink escaping the root answers 403");
+	TEST(!fileExists("up_escape/pwned.txt"),
+		"POST onto a dangling symlink writes nothing outside the root");
+
+	std::remove("up_root/uploads/dangling.txt");
+	std::remove("up_escape/pwned.txt");
+	rmdir("up_escape");
+	destroyDirectoryTree("up_root");
+}
+
+/*
+ * Same escape attempt via a multipart upload, whose filename is joined onto
+ * the request URI before going through the same containment check.
+ */
+static void	test_multipart_onto_dangling_symlink_answers_403(void)
+{
+	createDirectoryTree("up_root");
+	mkdir("up_escape", 0755);
+	symlink("../../up_escape/pwned.txt", "up_root/uploads/dangling.txt");
+
+	StaticFileHandler	handler("up_root");
+	HttpRequest		request;
+	HttpResponse	response;
+	std::string		body =
+		"--BOUNDARY\r\n"
+		"Content-Disposition: form-data; name=\"file\"; "
+		"filename=\"dangling.txt\"\r\n"
+		"\r\n"
+		"escaped the root\r\n"
+		"--BOUNDARY--\r\n";
+
+	request.setMethod("POST");
+	request.setUri("/uploads");
+	request.setHeaders("Content-Type",
+		"multipart/form-data; boundary=BOUNDARY");
+	request.setBody(body);
+
+	handler.handle(request, response);
+
+	TEST(response.getStatusCode() == 403,
+		"multipart upload onto a dangling symlink answers 403");
+	TEST(!fileExists("up_escape/pwned.txt"),
+		"multipart upload onto a dangling symlink writes nothing outside the root");
+
+	std::remove("up_root/uploads/dangling.txt");
+	std::remove("up_escape/pwned.txt");
+	rmdir("up_escape");
+	destroyDirectoryTree("up_root");
+}
+
+/*
  * A legitimate upload into a real subdirectory of the root (no symlink
  * involved) must keep answering 201, confirming the containment check on
  * the parent directory does not regress normal uploads.
@@ -893,6 +969,8 @@ int	main(void)
 	test_upload_to_readonly_parent();
 	test_plain_post_through_symlink_answers_403();
 	test_multipart_through_symlink_answers_403();
+	test_plain_post_onto_dangling_symlink_answers_403();
+	test_multipart_onto_dangling_symlink_answers_403();
 	test_plain_post_legit_new_file_still_201();
 	test_post_to_directory_answers_400();
 	test_multipart_without_boundary_answers_400();

@@ -37,6 +37,8 @@ class Router
 				const ServerConfig &config) const;
 		std::string		resolveRoot(const std::string &uri,
 				const ServerConfig &config) const;
+		std::string		resolveLocationPrefix(const std::string &uri,
+				const ServerConfig &config) const;
 		std::string		resolveIndex(const std::string &uri,
 				const ServerConfig &config) const;
 		bool			resolveAutoindex(const std::string &uri,

@@ -12,6 +12,7 @@
 
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiPipes.hpp"
+#include "utils/Utils.hpp"
 #include <sys/stat.h>
 #include <unistd.h>
 #include <limits.h>
@@ -72,19 +73,6 @@ bool CgiHandler::hasExtension(const std::string &uri,
 }
 
 /*
- * Returns the canonical absolute path of path, or an empty string when it
- * cannot be resolved (for instance because it does not exist).
- */
-static std::string canonicalPath(const std::string &path)
-{
-	char	buffer[PATH_MAX];
-
-	if (realpath(path.c_str(), buffer) == NULL)
-		return ("");
-	return (std::string(buffer));
-}
-
-/*
  * Splits uri into normalized path segments. Returns false when a
  * ".." would climb above the root, true otherwise.
  */
@@ -135,17 +123,19 @@ static std::string joinPath(const std::string &root,
 }
 
 /*
- * Returns true when path canonically resolves inside root, so symlinks
- * cannot escape it. Paths that cannot be canonicalized are treated as inside.
+ * Returns true when path resolves inside root, so symlinks cannot escape it.
+ * Containment is checked with pathIsInsideRoot, which walks the parent chain
+ * with stat() because realpath() is not authorised by the subject. A root that
+ * does not exist on disk confines nothing, and is treated as inside so the
+ * caller still answers 404 on the script itself rather than 403.
  */
 static bool isWithinRoot(const std::string &root, const std::string &path)
 {
-	std::string	canonicalRoot = canonicalPath(root);
-	std::string	resolved = canonicalPath(path);
+	struct stat	rootInfo;
 
-	if ((canonicalRoot.empty() || resolved.empty()) || resolved == canonicalRoot)
+	if (stat(root.c_str(), &rootInfo) != 0)
 		return (true);
-	return (resolved.compare(0, canonicalRoot.size() + 1, canonicalRoot + "/") == 0);
+	return (pathIsInsideRoot(root, path));
 }
 
 /*
@@ -210,16 +200,13 @@ static void runCgiChild(CgiPipes &pipes, const std::string &interpreter, const s
 }
 
 /*
- * Puts fd into non-blocking mode so a write can never stall the parent.
- * Returns false when the current flags cannot be read or updated.
+ * Puts fd into non-blocking mode so a write can never stall the parent. Only
+ * F_SETFL and O_NONBLOCK are used, which is all the subject authorises.
+ * Returns false when the mode cannot be set.
  */
-static bool setNonBlocking(int fd)
+static bool setPipeNonBlocking(int fd)
 {
-    int flags = fcntl(fd, F_GETFL, 0);
-
-    if (flags == -1)
-        return (false);
-    return (fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1);
+    return (fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
 }
 
 /*
@@ -237,7 +224,7 @@ static bool pumpCgiIo(CgiPipes &pipes, const std::string &body, std::string &out
     if (!writing)
         pipes.closeBodyWrite();
     else
-        setNonBlocking(pipes.bodyWriteFd());
+        setPipeNonBlocking(pipes.bodyWriteFd());
     while (reading || writing)
     {
         nfds_t  count = 0;

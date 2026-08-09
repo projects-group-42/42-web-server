@@ -36,8 +36,10 @@ class StaticFileHandler : public IRequestHandler
 		std::string	_root;
 		std::string	_index;
 		std::string _uploadStore;
+		std::string	_locationPrefix;
 		bool		_autoindex;
 		long		_maxBodySize;
+		std::string	stripLocationPrefix(const std::string &uri) const;
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
@@ -75,6 +77,7 @@ class StaticFileHandler : public IRequestHandler
 		void				setAutoindex(bool autoindex);
 		void				setMaxBodySize(long maxBodySize);
 		void				setUploadStore(const std::string &uploadStore);
+		void				setLocationPrefix(const std::string &prefix);
 		const std::string	&getRoot(void) const;
 };
 

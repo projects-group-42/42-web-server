@@ -14,21 +14,22 @@
 #include "http/MimeType.hpp"
 #include "http/MultipartParser.hpp"
 #include "utils/Utils.hpp"
-#include <limits.h>
-#include <stdlib.h>
+#include <cstdio>
 #include <dirent.h>
 #include <algorithm>
 #include <vector>
 #include <cerrno>
+#include <fstream>
 
 StaticFileHandler::StaticFileHandler(void)
 	: _root("www"), _index("index.html"), _uploadStore(""),
-	_autoindex(false), _maxBodySize(1 * 1024 * 1024)
+	_locationPrefix(""), _autoindex(false), _maxBodySize(1 * 1024 * 1024)
 {
 }
 
 StaticFileHandler::StaticFileHandler(const std::string &root)
-	: _root(root), _index("index.html"), _uploadStore(""), _autoindex(false),
+	: _root(root), _index("index.html"), _uploadStore(""),
+	  _locationPrefix(""), _autoindex(false),
 	  _maxBodySize(1 * 1024 * 1024)
 {
 }
@@ -47,6 +48,7 @@ StaticFileHandler &StaticFileHandler::operator=(const StaticFileHandler &other)
 		_autoindex = other._autoindex;
 		_maxBodySize = other._maxBodySize;
 		_uploadStore = other._uploadStore;
+		_locationPrefix = other._locationPrefix;
 	}
 	return (*this);
 }
@@ -88,6 +90,16 @@ void StaticFileHandler::setUploadStore(const std::string &uploadStore)
 	_uploadStore = uploadStore;
 }
 
+/*
+ * Sets the location prefix removed from a URI before it is resolved against
+ * the root. The Router fills it per request; an empty value keeps the URI
+ * whole.
+ */
+void StaticFileHandler::setLocationPrefix(const std::string &prefix)
+{
+	_locationPrefix = prefix;
+}
+
 const std::string &StaticFileHandler::getRoot(void) const
 {
 	return (_root);
@@ -95,22 +107,33 @@ const std::string &StaticFileHandler::getRoot(void) const
 
 /*
  * Serve a regular file, open it, read all bytes, set MIME type.
- * Returns HTTP status code.
+ * The file is read through a C++ stream rather than read() on a descriptor:
+ * the subject forbids reading any file descriptor that did not go through
+ * poll(), and a regular file never enters the poll set. Returns HTTP status
+ * code.
  */
 int StaticFileHandler::serveRegularFile(const std::string &resolvedPath,
 		std::string &body, std::string &contentType)
 {
-	int	fd = open(resolvedPath.c_str(), O_RDONLY);
-	if (fd == -1)
+	std::ifstream	file(resolvedPath.c_str(),
+					std::ios::in | std::ios::binary);
+
+	if (!file.is_open())
 		return (403);
 
-	char		buf[4096];
-	ssize_t		bytes;
-	while ((bytes = read(fd, buf, sizeof(buf))) > 0)
-		body.append(buf, bytes);
+	char	buf[4096];
 
-	close(fd);
-
+	while (file.read(buf, sizeof(buf)) || file.gcount() > 0)
+	{
+		body.append(buf, static_cast<size_t>(file.gcount()));
+		if (file.eof())
+			break ;
+	}
+	if (file.bad())
+	{
+		body.clear();
+		return (500);
+	}
 	contentType = mimeType_resolve(resolvedPath);
 	return (200);
 }
@@ -230,45 +253,54 @@ int StaticFileHandler::serveDirectoryListing(const std::string &resolvedPath,
 }
 
 /*
- * Return the canonical absolute path of `path`, or an empty string when it
- * cannot be resolved (for instance because it does not exist).
+ * Removes the prefix of the location serving the request from `uri`, so the
+ * rest of it is what gets resolved against the root that location declares.
+ * This is the mapping the subject asks for: "/kapouet" rooted in "/tmp/www"
+ * serves "/kapouet/pouic/toto/pouet" from "/tmp/www/pouic/toto/pouet". The
+ * prefix is only dropped on a path boundary, so "/cgi" never eats into
+ * "/cgifoo", and an empty prefix (a location inheriting the server root, or a
+ * handler used outside the router) leaves the URI whole.
  */
-static std::string canonicalPath(const std::string &path)
+std::string StaticFileHandler::stripLocationPrefix(const std::string &uri) const
 {
-	char	buffer[PATH_MAX];
+	size_t	size = _locationPrefix.size();
 
-	if (realpath(path.c_str(), buffer) == NULL)
-		return ("");
-	return (std::string(buffer));
+	if (size == 0 || uri.compare(0, size, _locationPrefix) != 0)
+		return (uri);
+	if (uri.size() == size || uri[size] == '/'
+		|| _locationPrefix[size - 1] == '/')
+		return (uri.substr(size));
+	return (uri);
 }
 
 /*
  * Resolve `uri` into a filesystem path inside the document root.
  * The URI is split into segments, collapsing "." and ".." lexically; any ".."
  * that would climb above the root returns an empty string so the caller can
- * answer 403. The canonical path of the target (when it exists) or of its
- * parent directory (when it does not, as happens for every upload) is then
- * checked against the canonical root, so a symlink cannot be used to escape
- * the document root either directly or by creating a new file through it.
- * A root that cannot be canonicalised (empty or missing) is refused outright:
- * without it there is nothing to confine the request to.
+ * answer 403. The target (when it exists) or its parent directory (when it
+ * does not, as happens for every upload) is then checked against the root with
+ * pathIsInsideRoot, so a symlink cannot be used to escape the document root
+ * either directly or by creating a new file through it. A root that is missing
+ * from disk is refused outright: without it there is nothing to confine the
+ * request to.
  */
 std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 {
 	std::vector<std::string>	segments;
+	std::string					target = stripLocationPrefix(uri);
 	std::string					path = _root;
 	size_t						i = 0;
 
-	while (i < uri.size())
+	while (i < target.size())
 	{
-		while (i < uri.size() && uri[i] == '/')
+		while (i < target.size() && target[i] == '/')
 			++i;
 		size_t	start = i;
-		while (i < uri.size() && uri[i] != '/')
+		while (i < target.size() && target[i] != '/')
 			++i;
 		if (i == start)
 			continue;
-		std::string	segment = uri.substr(start, i - start);
+		std::string	segment = target.substr(start, i - start);
 		if (segment == ".")
 			continue;
 		if (segment == "..")
@@ -283,19 +315,7 @@ std::string StaticFileHandler::rslv_req_realpath(const std::string &uri)
 	for (size_t j = 0; j < segments.size(); ++j)
 		path += "/" + segments[j];
 
-	std::string	root = canonicalPath(_root);
-	if (root.empty())
-		return ("");
-
-	std::string	resolved = canonicalPath(path);
-	if (resolved.empty())
-	{
-		size_t	slash = path.find_last_of('/');
-		if (slash != std::string::npos)
-			resolved = canonicalPath(path.substr(0, slash));
-	}
-	if (!resolved.empty() && resolved != root
-		&& resolved.compare(0, root.size() + 1, root + "/") != 0)
+	if (!pathIsInsideRoot(_root, path))
 		return ("");
 	return (path);
 }
@@ -343,13 +363,14 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 
 /*
  * Creates or overwrites the file at `resolvedPath` with `content`.
- * Writes in a loop so a short write() does not truncate the content. A
- * write() returning -1 or 0 is a failure: the partial file is removed
- * before reporting 500, so no truncated file is left on disk. Returns
- * the HTTP status code describing the outcome: 201 when the file did
- * not exist yet, 200 when an existing file was overwritten, 400 when
- * the target is a directory, 403/404/500 on the matching write
- * failures.
+ * The file is written through a C++ stream rather than write() on a
+ * descriptor, because the subject forbids writing any file descriptor that did
+ * not go through poll() and a regular file never enters the poll set. A stream
+ * that fails mid-write leaves a truncated file behind, so it is removed before
+ * reporting 500. Returns the HTTP status code describing the outcome: 201 when
+ * the file did not exist yet, 200 when an existing file was overwritten, 400
+ * when the target is a directory, 403 when it exists but cannot be opened, 404
+ * when its directory does not accept it, 500 on a failed write.
  */
 int StaticFileHandler::saveFile(const std::string &resolvedPath,
 		const std::string &content)
@@ -360,32 +381,20 @@ int StaticFileHandler::saveFile(const std::string &resolvedPath,
 	if (exists && S_ISDIR(pathStat.st_mode))
 		return (400);
 
-	int	fd = open(resolvedPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd == -1)
+	std::ofstream	file(resolvedPath.c_str(),
+					std::ios::out | std::ios::binary | std::ios::trunc);
+
+	if (!file.is_open())
+		return (exists ? 403 : 404);
+	file.write(content.data(), static_cast<std::streamsize>(content.size()));
+	file.flush();
+	if (!file.good())
 	{
-		if (errno == EACCES)
-			return (403);
-		if (errno == ENOENT)
-			return (404);
+		file.close();
+		std::remove(resolvedPath.c_str());
 		return (500);
 	}
-
-	const char	*data = content.c_str();
-	size_t		total = content.size();
-	size_t		offset = 0;
-
-	while (offset < total)
-	{
-		ssize_t	written = write(fd, data + offset, total - offset);
-		if (written <= 0)
-		{
-			close(fd);
-			unlink(resolvedPath.c_str());
-			return (500);
-		}
-		offset += static_cast<size_t>(written);
-	}
-	close(fd);
+	file.close();
 	return (exists ? 200 : 201);
 }
 
@@ -423,15 +432,24 @@ static std::string	fileBaseName(const std::string &name)
 	return (name.substr(slash + 1));
 }
 
+/*
+ * Checks that the location declares an upload directory and that it exists on
+ * disk, and hands the caller the path to write into. realpath() is not
+ * authorised by the subject, so the directory is taken as the config wrote it
+ * and only its existence is confirmed with stat().
+ */
 int StaticFileHandler::prepareUploadStore(std::string &canStore)
 {
+    struct stat storeStat;
+
     if (_uploadStore.empty())
         return 405; // no upload_store configured
 
-    canStore = canonicalPath(_uploadStore);
-    if (canStore.empty())
-        return 404; // upload_store not found / not canonicalisable
+    if (stat(_uploadStore.c_str(), &storeStat) != 0
+        || !S_ISDIR(storeStat.st_mode))
+        return 404; // upload_store missing or not a directory
 
+    canStore = _uploadStore;
     return 200;
 }
 
@@ -533,10 +551,12 @@ bool StaticFileHandler::handlePost(const HttpRequest &request,
 		response.setStatusCode(400);
 		return (true);
 	}
-	std::string canStore = canonicalPath(_uploadStore);
-	if (canStore.empty())
+	std::string canStore;
+	int			prep = prepareUploadStore(canStore);
+
+	if (prep != 200)
 	{
-		response.setStatusCode(404);
+		response.setStatusCode(prep);
 		return (true);
 	}
 
@@ -577,7 +597,7 @@ bool StaticFileHandler::handleDelete(const HttpRequest &request,
 		return (true);
 	}
 
-	if (unlink(resolvedPath.c_str()) == -1)
+	if (std::remove(resolvedPath.c_str()) == -1)
 	{
 		if (errno == EACCES || errno == EPERM)
 			response.setStatusCode(403);

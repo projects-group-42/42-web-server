@@ -15,6 +15,7 @@
 
 #include <stdexcept>
 #include <cstring>
+#include <cstdlib>
 #include <sstream>
 
 #include <sys/types.h>
@@ -50,6 +51,39 @@ void Socket::create(void)
 	Logger::info("Socket created with SO_REUSEADDR e O_NONBLOCK.");
 }
 
+/*
+ * Converts a dotted-quad IPv4 literal into a network-order address.
+ * inet_pton() is not one of the functions the subject authorises, and it is
+ * not needed either: ConfigLoader already refuses anything that is not a
+ * literal (or "localhost", which it maps to 127.0.0.1), so four decimal fields
+ * are all there is to read. Returns false when the token is not such a literal.
+ */
+static bool parseIpv4(const std::string &host, struct in_addr &out)
+{
+	unsigned long	octet[4];
+	std::string		field;
+	size_t			start = 0;
+	size_t			dot;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		dot = (i == 3) ? host.size() : host.find('.', start);
+		if (dot == std::string::npos || dot == start)
+			return (false);
+		field = host.substr(start, dot - start);
+		if (field.size() > 3
+			|| field.find_first_not_of("0123456789") != std::string::npos)
+			return (false);
+		octet[i] = std::strtoul(field.c_str(), NULL, 10);
+		if (octet[i] > 255)
+			return (false);
+		start = dot + 1;
+	}
+	out.s_addr = htonl(static_cast<unsigned int>(octet[0] << 24 | octet[1] << 16
+					| octet[2] << 8 | octet[3]));
+	return (true);
+}
+
 void Socket::bind(const std::string &host, int port)
 {
 	struct	sockaddr_in addr;
@@ -58,11 +92,11 @@ void Socket::bind(const std::string &host, int port)
 
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
-	if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1)
+	if (!parseIpv4(host, addr.sin_addr))
 	{
 		close(_fd);
 		_fd = -1;
-		throw std::runtime_error("inet_pton() fail: invalid host: " + host);
+		throw std::runtime_error("invalid host: " + host);
 	}
 	if (::bind(_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1)
 	{

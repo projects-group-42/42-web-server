@@ -18,15 +18,14 @@
 
 /*
  * Puts fd into non-blocking mode so a single read or write can never stall the
- * main loop. Returns false when the flags cannot be read or updated.
+ * main loop. The current flags are not read back first because the subject
+ * only authorises fcntl() with F_SETFL, O_NONBLOCK and FD_CLOEXEC, and these
+ * pipes are created here with no other flag to preserve. Returns false when
+ * the mode cannot be set.
  */
 static bool setNonBlocking(int fd)
 {
-	int	flags = fcntl(fd, F_GETFL, 0);
-
-	if (flags == -1)
-		return (false);
-	return (fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1);
+	return (fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
 }
 
 /*

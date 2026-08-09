@@ -19,7 +19,7 @@
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/time.h>
+#include <ctime>
 #include <cstdlib>
 
 static const std::string	DEFAULT_CGI_INTERPRETER = "/usr/bin/python3";
@@ -27,14 +27,15 @@ static const long			CGI_TIMEOUT_MS = 5000;
 static const int			BACKLOG = 128;
 
 /*
- * Returns the current wall-clock time in milliseconds.
+ * Returns the current wall-clock time in milliseconds. gettimeofday() is not
+ * one of the functions the subject authorises, so the value comes from
+ * std::time and carries a resolution of one second: the only deadline built on
+ * it is the CGI timeout, which then fires between four and five seconds after
+ * the child started instead of exactly five.
  */
 static long nowMs(void)
 {
-	struct timeval	tv;
-
-	gettimeofday(&tv, NULL);
-	return (static_cast<long>(tv.tv_sec) * 1000 + tv.tv_usec / 1000);
+	return (static_cast<long>(std::time(NULL)) * 1000);
 }
 
 EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT)
@@ -125,12 +126,6 @@ void EventLoop::setupSockets(void)
 		sckt->create();
 		sckt->bind(host, port);
 		sckt->listen(BACKLOG);
-
-		int	flags = fcntl(sckt->getFd(), F_GETFL, 0);
-		if (flags != -1 && (flags & O_NONBLOCK))
-			Logger::info("Socket is non-blocking.");
-		else
-			Logger::warning("Socket is blocking.");
 
 		std::ostringstream	oss;
 		oss << "Listening on " << host << ":" << port;

@@ -15,9 +15,8 @@
 #include "http/MimeType.hpp"
 #include "http/ResponseBuilder.hpp"
 #include "utils/Logger.hpp"
-#include <fcntl.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#include <fstream>
 
 Router::Router(void)
 	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
@@ -238,6 +237,27 @@ std::string	Router::resolveRoot(const std::string &uri,
 }
 
 /**
+ * @brief Returns the prefix a location removes from a URI before resolving it.
+ * Only a location declaring a root of its own relocates what it serves, which
+ * is the mapping the subject describes: "/kapouet" rooted in "/tmp/www" serves
+ * "/kapouet/pouic/toto/pouet" from "/tmp/www/pouic/toto/pouet". A location
+ * inheriting the server root keeps the URI whole, so a tree laid out under a
+ * single server root still resolves the way it sits on disk.
+ * @param uri The request target.
+ * @param config The server block serving the request.
+ * @return The prefix to strip, or an empty string when nothing is stripped.
+ */
+std::string	Router::resolveLocationPrefix(const std::string &uri,
+			const ServerConfig &config) const
+{
+	const LocationConfig	*best = matchLocation(uri, config);
+
+	if (best != NULL && !best->root.empty())
+		return (best->path);
+	return ("");
+}
+
+/**
  * @brief Picks the index file that applies to a URI in a server block.
  * ConfigLoader already copies the server index into every location that
  * declares none, so an empty location index only happens when the server
@@ -343,7 +363,10 @@ static std::string	joinErrorPagePath(const std::string &root,
 /**
  * @brief Reads a regular file into a string.
  * Directories and special files are refused so a misconfigured error page
- * never turns into an unreadable body.
+ * never turns into an unreadable body. The file is read through a C++ stream
+ * rather than read() on a descriptor, because the subject forbids reading any
+ * descriptor that did not go through poll() and a regular file never enters
+ * the poll set.
  * @param path The file to read.
  * @param body The destination holding the file contents.
  * @return true when the whole file could be read.
@@ -352,19 +375,21 @@ static bool	readErrorPageFile(const std::string &path, std::string &body)
 {
 	struct stat	info;
 	char		buffer[4096];
-	ssize_t		bytes;
 
 	if (stat(path.c_str(), &info) == -1 || !S_ISREG(info.st_mode))
 		return (false);
 
-	int	fd = open(path.c_str(), O_RDONLY);
+	std::ifstream	file(path.c_str(), std::ios::in | std::ios::binary);
 
-	if (fd == -1)
+	if (!file.is_open())
 		return (false);
-	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0)
-		body.append(buffer, static_cast<size_t>(bytes));
-	close(fd);
-	if (bytes == -1)
+	while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0)
+	{
+		body.append(buffer, static_cast<size_t>(file.gcount()));
+		if (file.eof())
+			break ;
+	}
+	if (file.bad())
 	{
 		body.clear();
 		return (false);
@@ -520,6 +545,8 @@ bool	Router::route(const HttpRequest &request,
 	{
 		setRoot(resolveRoot(request.getUri(), config));
 		setIndex(resolveIndex(request.getUri(), config));
+		_staticHandler.setLocationPrefix(
+				resolveLocationPrefix(request.getUri(), config));
 		_staticHandler.setAutoindex(
 				resolveAutoindex(request.getUri(), config));
 		_staticHandler.setMaxBodySize(

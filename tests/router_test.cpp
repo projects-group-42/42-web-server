@@ -62,7 +62,9 @@ static void	setupFixture(void)
 	writeFile(std::string(ROOT_DIR) + "/index.html", "DEFAULT INDEX");
 	writeFile(std::string(DOCS_DIR) + "/manual.html", "LOCATION INDEX");
 	writeFile(std::string(DOCS_DIR) + "/home.html", "INHERITED INDEX");
-	writeFile(std::string(ALT_DOCS_DIR) + "/home.html", "LOCATION ROOT");
+	writeFile(std::string(ALT_DIR) + "/home.html", "LOCATION ROOT");
+	writeFile(std::string(ALT_DOCS_DIR) + "/home.html", "NOT RELOCATED");
+	writeFile(std::string(ALT_DOCS_DIR) + "/deep.html", "RELOCATED DEEP");
 }
 
 /**
@@ -70,7 +72,9 @@ static void	setupFixture(void)
  */
 static void	cleanupFixture(void)
 {
+	std::remove((std::string(ALT_DIR) + "/home.html").c_str());
 	std::remove((std::string(ALT_DOCS_DIR) + "/home.html").c_str());
+	std::remove((std::string(ALT_DOCS_DIR) + "/deep.html").c_str());
 	std::remove((std::string(DOCS_DIR) + "/manual.html").c_str());
 	std::remove((std::string(DOCS_DIR) + "/home.html").c_str());
 	std::remove((std::string(ROOT_DIR) + "/home.html").c_str());
@@ -215,6 +219,31 @@ int	main(void)
 		routeGet("/docs/", config, response);
 		TEST(response.getBody() == "LOCATION ROOT",
 			"a location root overrides the server root");
+	}
+
+	/*
+	 * A location declaring a root of its own relocates what it serves: the
+	 * subject spells it out with "/kapouet" rooted in "/tmp/www" serving
+	 * "/kapouet/pouic/toto/pouet" from "/tmp/www/pouic/toto/pouet", so the
+	 * prefix of the location is dropped instead of being looked for under the
+	 * root a second time.
+	 */
+	{
+		ServerConfig	config = makeServer("home.html");
+		LocationConfig	docs("/docs");
+		HttpResponse	relocated;
+		HttpResponse	notRelocated;
+
+		docs.root = ALT_DIR;
+		config.locations.push_back(docs);
+
+		routeGet("/docs/docs/deep.html", config, relocated);
+		TEST(relocated.getBody() == "RELOCATED DEEP",
+			"the location prefix is dropped before the root is applied");
+
+		routeGet("/docs/home.html", config, notRelocated);
+		TEST(notRelocated.getBody() == "LOCATION ROOT",
+			"the rest of the URI resolves under the root of the location");
 	}
 
 	{

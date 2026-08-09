@@ -34,7 +34,7 @@ static bool	isAllDigits(const std::string &token)
 /**
  * @brief Checks that a string is a dotted-quad IPv4 literal (e.g. "127.0.0.1").
  * Each of the four octets must be numeric and within 0-255. This mirrors what
- * inet_pton() accepts in Socket::bind(), so an accepted host never fails later.
+ * Socket::bind() accepts, so an accepted host never fails later.
  * @param host The host string to validate.
  * @return true when the string is a valid IPv4 literal.
  */
@@ -173,7 +173,7 @@ int	ConfigLoader::parsePort(const std::string &token)
 /**
  * @brief Validates a host token and normalises it into an IPv4 literal.
  * "localhost" is mapped to 127.0.0.1; any other name is refused because
- * Socket::bind() resolves hosts with inet_pton(), which only accepts literals.
+ * Socket::bind() reads the host as an IPv4 literal and resolves no name.
  * @param token The raw host string taken from the listen directive.
  * @return The host as a dotted-quad IPv4 literal.
  * @throw std::runtime_error when the host is empty or cannot be resolved.

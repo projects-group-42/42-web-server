@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   StaticFileHandler.hpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/22 17:27:30 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/24 18:21:08 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/08 18:14:46 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,19 +27,18 @@
  * StaticFileHandler
  *
  * Serves a filesystem resource under the document root. GET reads the
- * target file or directory index, POST writes the request body into the
- * upload directory the location declares, and DELETE removes the target
- * file.
+ * target file or directory index, POST writes the request body to the
+ * target file, and DELETE removes the target file.
  */
 class StaticFileHandler : public IRequestHandler
 {
 	private:
 		std::string	_root;
 		std::string	_index;
-		std::string	_uploadStore;
+		std::string _uploadStore;
+		std::string	_locationPrefix;
 		bool		_autoindex;
 		long		_maxBodySize;
-
 		int			serveRegularFile(const std::string &resolvedPath,
 						std::string &body, std::string &contentType);
 		int			serveDirectory(const std::string &resolvedPath,
@@ -48,35 +47,20 @@ class StaticFileHandler : public IRequestHandler
 		int			serveDirectoryListing(const std::string &resolvedPath,
 						const std::string &requestUri, std::string &body);
 		std::string	rslv_req_realpath(const std::string &uri);
-		int			resolveUploadName(const std::string &uri,
-						std::string &filename) const;
-		int			resolveUploadTarget(const std::string &filename,
-						std::string &target) const;
 		int			saveFile(const std::string &resolvedPath,
 						const std::string &content);
 		bool		isMultipartFormData(const HttpRequest &request,
 						std::string &boundary) const;
 		bool		handleMultipartUpload(const HttpRequest &request,
 						const std::string &boundary, HttpResponse &response);
-
+		int prepareUploadStore(std::string &canStore);
+		int savePartToUploadStore(const std::string &canStore,
+						const std::string &filename, const std::string &content);
 	protected:
-		/*
-		 * Serves the resource resolved from the URI as the response body.
-		 */
 		bool				handleGet(const HttpRequest &request,
 								  HttpResponse &response);
-
-		/*
-		 * Writes the request body into the upload directory, under the base
-		 * name of the URI. Returns 201 if the file was created, 200 if it
-		 * was overwritten, and 405 when no upload directory is configured.
-		 */
 		bool				handlePost(const HttpRequest &request,
 								  HttpResponse &response);
-
-		/*
-		 * Removes the file resolved from the URI. Returns 200 on success.
-		 */
 		bool				handleDelete(const HttpRequest &request,
 								  HttpResponse &response);
 
@@ -92,6 +76,7 @@ class StaticFileHandler : public IRequestHandler
 		void				setAutoindex(bool autoindex);
 		void				setMaxBodySize(long maxBodySize);
 		void				setUploadStore(const std::string &uploadStore);
+		void				setLocationPrefix(const std::string &prefix);
 		const std::string	&getRoot(void) const;
 };
 

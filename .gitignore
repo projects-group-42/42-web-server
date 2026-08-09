@@ -35,3 +35,13 @@ uploads/*
 !uploads/.gitkeep
 www/uploads/*
 !www/uploads/.gitkeep
+# arvores temporarias que as suites de upload criam
+up_root/
+up_ro/
+up_escape/
+mp_root*/
+# subject baixado para consulta
+pt_br.subject.pdf
+# artefatos de auditoria (vao para o vault, nao para o repo)
+AUDIT-*.md
+SUBJECT-COMPLIANCE-FINDINGS.md

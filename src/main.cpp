@@ -27,10 +27,12 @@ int main(int argc, char **argv)
 	}
 
 	signal(SIGPIPE, SIG_IGN);
+	signal(SIGINT, EventLoop::requestStop);
+	signal(SIGTERM, EventLoop::requestStop);
 	try
 	{
 		ConfigLoader				config_file(argc == 2
-										? argv[1] : "conf/simple.conf");
+										? argv[1] : "conf/default.conf");
 		std::vector<ServerConfig>	configs = config_file.loader();
 		EventLoop					loop(configs);
 

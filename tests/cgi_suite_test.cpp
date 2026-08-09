@@ -13,13 +13,13 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <poll.h>
 #include <unistd.h>
 
 #include "cgi/CgiHandler.hpp"
 #include "cgi/CgiProcess.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
-#include "cgi_test_runner.hpp"
 
 static int	s_pass = 0;
 static int	s_fail = 0;
@@ -54,8 +54,71 @@ static std::string	findPhpCgi(void)
 	return ("");
 }
 
+/*
+ * Drives the process to completion the way the event loop does: polls the
+ * active pipe fds and calls a single incremental step per ready fd, never
+ * blocking on either direction.
+ */
+static void	driveToCompletion(CgiProcess &proc)
+{
+	while (!proc.finished())
+	{
+		struct pollfd	fds[2];
+		nfds_t			count = 0;
+		int				outIndex = -1;
+		int				bodyIndex = -1;
+
+		if (proc.isReading())
+		{
+			fds[count].fd = proc.outputReadFd();
+			fds[count].events = POLLIN;
+			fds[count].revents = 0;
+			outIndex = static_cast<int>(count);
+			++count;
+		}
+		if (proc.isWriting())
+		{
+			fds[count].fd = proc.bodyWriteFd();
+			fds[count].events = POLLOUT;
+			fds[count].revents = 0;
+			bodyIndex = static_cast<int>(count);
+			++count;
+		}
+		if (count == 0 || poll(fds, count, 5000) <= 0)
+			break;
+		if (proc.isWriting() && (fds[bodyIndex].revents & (POLLOUT | POLLERR | POLLHUP)))
+		{
+			if (fds[bodyIndex].revents & (POLLERR | POLLHUP))
+				proc.stopWriting();
+			else
+				proc.onWritable();
+		}
+		if (proc.isReading() && (fds[outIndex].revents & (POLLIN | POLLHUP | POLLERR)))
+			proc.onReadable();
+	}
+}
+
+/*
+ * Runs a script through a CgiProcess driven by driveToCompletion and reports
+ * the same pair the removed CgiHandler::execute() reported: whether the child
+ * exited cleanly, and what it wrote. The server ships no blocking CGI helper
+ * any more, so the loop lives here.
+ */
+static bool	runCgi(const std::string &interpreter, const std::string &scriptPath,
+			const std::string &body, const std::vector<std::string> &env,
+			std::string &output)
+{
+	CgiProcess	proc(-1, body);
+
+	if (!proc.start(interpreter, scriptPath, env))
+		return (false);
+	driveToCompletion(proc);
+	output = proc.output();
+	return (proc.reap() == 0);
+}
+
 /* ------------------------------------------------------------------------- */
-/*  runCgi() over CgiProcess — Python CGI scripts                            */
+/*  CGI execution — Python scripts                                            */
 /* ------------------------------------------------------------------------- */
 
 /*
@@ -79,7 +142,7 @@ static void	test_python_echo(void)
 	env.push_back("CONTENT_LENGTH=4");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/echo.py", "data", env, output);
-	TEST(ok, "python echo.py: runCgi returns true");
+	TEST(ok, "python echo.py: execute returns true");
 	TEST(!output.empty(), "python echo.py: captured output");
 	TEST(handler.parseCgiOutput(output, response), "python echo.py: parses CGI output");
 	TEST(response.getStatusCode() == 200, "python echo.py: status defaults to 200");
@@ -108,7 +171,7 @@ static void	test_python_headers(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/headers.py", "", env, output);
-	TEST(ok, "python headers.py: runCgi returns true");
+	TEST(ok, "python headers.py: execute returns true");
 	TEST(handler.parseCgiOutput(output, response), "python headers.py: parses CGI output");
 	TEST(response.getStatusCode() == 201, "python headers.py: reads 201 Status");
 	TEST(response.getHeaderValue("Content-Type") == "text/plain", "python headers.py: Content-Type correct");
@@ -138,7 +201,7 @@ static void	test_python_query_string(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/query_echo.py", "", env, output);
-	TEST(ok, "python query_echo: runCgi returns true");
+	TEST(ok, "python query_echo: execute returns true");
 	TEST(handler.parseCgiOutput(output, response), "python query_echo: parses CGI output");
 	TEST(response.getStatusCode() == 200, "python query_echo: status 200");
 	TEST(response.getBody() == "GET:a=1&b=2", "python query_echo: receives method and query");
@@ -168,7 +231,7 @@ static void	test_python_post_body(void)
 	env.push_back("CONTENT_TYPE=application/x-www-form-urlencoded");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/post_echo.py", body, env, output);
-	TEST(ok, "python post_echo: runCgi returns true");
+	TEST(ok, "python post_echo: execute returns true");
 	TEST(handler.parseCgiOutput(output, response), "python post_echo: parses CGI output");
 	TEST(response.getStatusCode() == 200, "python post_echo: status 200");
 	TEST(response.getHeaderValue("X-Body-Size") == "16", "python post_echo: X-Body-Size matches sent length");
@@ -176,11 +239,12 @@ static void	test_python_post_body(void)
 }
 
 /*
- * Runs the error_exit.py script, which exits with status 1. runCgi() must
+ * Runs the error_exit.py script, which exits with status 1. execute() must
  * return false because the child did not exit cleanly with 0.
  */
 static void	test_python_error_exit(void)
 {
+	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					output;
 	bool						ok;
@@ -194,7 +258,7 @@ static void	test_python_error_exit(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/error_exit.py", "", env, output);
-	TEST(!ok, "python error_exit: runCgi returns false on non-zero exit");
+	TEST(!ok, "python error_exit: execute returns false on non-zero exit");
 }
 
 /*
@@ -219,7 +283,7 @@ static void	test_python_stderr_mixed(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/stderr_mixed.py", "", env, output);
-	TEST(ok, "python stderr_mixed: runCgi returns true");
+	TEST(ok, "python stderr_mixed: execute returns true");
 	TEST(handler.parseCgiOutput(output, response), "python stderr_mixed: parses CGI output");
 	TEST(response.getStatusCode() == 200, "python stderr_mixed: status 200");
 	TEST(response.getHeaderValue("X-Debug") == "on", "python stderr_mixed: custom header present");
@@ -248,7 +312,7 @@ static void	test_python_large_output(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/large_output.py", "", env, output);
-	TEST(ok, "python large_output: runCgi returns true");
+	TEST(ok, "python large_output: execute returns true");
 	TEST(handler.parseCgiOutput(output, response), "python large_output: parses CGI output");
 	TEST(response.getStatusCode() == 200, "python large_output: status 200");
 	TEST(response.getBody().size() == 65536, "python large_output: body is 65536 bytes");
@@ -257,7 +321,7 @@ static void	test_python_large_output(void)
 
 /*
  * Runs the no_output.py script, which exits 0 without writing anything.
- * runCgi() returns true (exit 0), but parseCgiOutput rejects the empty
+ * execute() returns true (exit 0), but parseCgiOutput rejects the empty
  * output, which is the server's signal to answer 502.
  */
 static void	test_python_no_output(void)
@@ -277,7 +341,7 @@ static void	test_python_no_output(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/no_output.py", "", env, output);
-	TEST(ok, "python no_output: runCgi returns true (exit 0)");
+	TEST(ok, "python no_output: execute returns true (exit 0)");
 	TEST(output.empty(), "python no_output: output is empty");
 	TEST(!handler.parseCgiOutput(output, response), "python no_output: parseCgiOutput rejects empty output");
 }
@@ -303,7 +367,7 @@ static void	test_python_status_404(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/status_404.py", "", env, output);
-	TEST(ok, "python status_404: runCgi returns true");
+	TEST(ok, "python status_404: execute returns true");
 	TEST(handler.parseCgiOutput(output, response), "python status_404: parses CGI output");
 	TEST(response.getStatusCode() == 404, "python status_404: reads 404 status");
 	TEST(response.getHeaderValue("Content-Type") == "text/html", "python status_404: Content-Type correct");
@@ -332,7 +396,7 @@ static void	test_python_slow(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(PYTHON3, "cgi-bin/slow.py", "", env, output);
-	TEST(ok, "python slow: runCgi returns true after sleep");
+	TEST(ok, "python slow: execute returns true after sleep");
 	TEST(!output.empty(), "python slow: captured output after delay");
 	TEST(handler.parseCgiOutput(output, response), "python slow: parses CGI output");
 	TEST(response.getBody() == "slow cgi done", "python slow: body present");
@@ -540,7 +604,7 @@ static void	test_php_hello(void)
 	env.push_back("CONTENT_LENGTH=0");
 	env.push_back("REDIRECT_STATUS=200");
 	ok = runCgi(phpCgi, "cgi-bin/hello.php", "", env, output);
-	TEST(ok, "php hello.php: runCgi returns true");
+	TEST(ok, "php hello.php: execute returns true");
 	TEST(!output.empty(), "php hello.php: captured output");
 	TEST(handler.parseCgiOutput(output, response),
 		"php hello.php: parses CGI output");
@@ -552,7 +616,7 @@ static void	test_php_hello(void)
 
 int	main(void)
 {
-	/* runCgi() over CgiProcess with Python scripts */
+	/* CgiHandler::execute() with Python scripts */
 	test_python_echo();
 	test_python_headers();
 	test_python_query_string();
@@ -570,7 +634,7 @@ int	main(void)
 	test_proc_python_large_body();
 	test_proc_python_error_exit();
 
-	/* runCgi() over CgiProcess with PHP scripts */
+	/* CgiHandler::execute() with PHP scripts */
 	test_php_hello();
 
 	/* parseCgiOutput edge cases */

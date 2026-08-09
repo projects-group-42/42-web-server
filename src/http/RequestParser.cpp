@@ -480,6 +480,16 @@ bool RequestParser::prs_method(void)
 		setErrorState(400);
 		return false;
 	}
+	/*
+	 * The version is well formed but names a protocol this server does not
+	 * speak. RFC 9110 answers that with 505 rather than a generic 400.
+	 */
+	if (str_version != "HTTP/1.0" && str_version != "HTTP/1.1")
+	{
+		Logger::error("505 HTTP Version Not Supported");
+		setErrorState(505);
+		return false;
+	}
 	_request.setVersion(str_version);
 	return true;
 }
@@ -532,6 +542,32 @@ void RequestParser::feed(const char *buffer, ssize_t bytes_read)
 			Logger::error("Bad Request");
 			setErrorState(400);
 			return;
+		}
+		/*
+		 * Only "chunked" is understood. Any other transfer coding is refused
+		 * with 501 instead of being fed to the chunk parser, which used to
+		 * blame the client for a malformed chunk size it never sent. The value
+		 * is trimmed of the optional whitespace RFC 9112 allows around it, so a
+		 * legal "chunked" carrying a trailing space or tab is not mistaken for
+		 * an unsupported coding.
+		 */
+		if (_request.hasHeader("Transfer-Encoding"))
+		{
+			std::string	coding = toLower(_request.getHeaderValue(
+							"Transfer-Encoding"));
+			std::string::size_type	first = coding.find_first_not_of(" \t\r");
+			std::string::size_type	last = coding.find_last_not_of(" \t\r");
+
+			if (first == std::string::npos)
+				coding = "";
+			else
+				coding = coding.substr(first, last - first + 1);
+			if (coding != "chunked")
+			{
+				Logger::error("501 Not Implemented");
+				setErrorState(501);
+				return;
+			}
 		}
 		if (_request.hasHeader("Transfer-Encoding"))
 			_psr_state = CHUNK_SIZE;

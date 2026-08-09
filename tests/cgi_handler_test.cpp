@@ -17,9 +17,10 @@
 #include <cstdio>
 
 #include "cgi/CgiHandler.hpp"
+#include "cgi/CgiProcess.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
-#include "cgi_test_runner.hpp"
+#include <poll.h>
 
 static int	s_pass = 0;
 static int	s_fail = 0;
@@ -42,17 +43,74 @@ static void	writeScript(const std::string &path, const std::string &content)
 }
 
 /*
+ * Runs a script the way the event loop does: a CgiProcess whose two pipes are
+ * driven by poll(), one step at a time. The server no longer ships a blocking
+ * helper for this, so the tests own the loop and keep reporting the same pair
+ * the removed CgiHandler::execute() reported: whether the child exited cleanly
+ * and what it wrote.
+ */
+static bool	runCgi(const std::string &interpreter, const std::string &scriptPath,
+			const std::string &body, const std::vector<std::string> &env,
+			std::string &output)
+{
+	CgiProcess	proc(-1, body);
+
+	if (!proc.start(interpreter, scriptPath, env))
+		return (false);
+	while (!proc.finished())
+	{
+		struct pollfd	fds[2];
+		nfds_t			count = 0;
+		int				outIndex = -1;
+		int				bodyIndex = -1;
+
+		if (proc.isReading())
+		{
+			fds[count].fd = proc.outputReadFd();
+			fds[count].events = POLLIN;
+			fds[count].revents = 0;
+			outIndex = static_cast<int>(count);
+			++count;
+		}
+		if (proc.isWriting())
+		{
+			fds[count].fd = proc.bodyWriteFd();
+			fds[count].events = POLLOUT;
+			fds[count].revents = 0;
+			bodyIndex = static_cast<int>(count);
+			++count;
+		}
+		if (count == 0 || poll(fds, count, 5000) <= 0)
+			break ;
+		if (proc.isWriting()
+			&& (fds[bodyIndex].revents & (POLLOUT | POLLERR | POLLHUP)))
+		{
+			if (fds[bodyIndex].revents & (POLLERR | POLLHUP))
+				proc.stopWriting();
+			else
+				proc.onWritable();
+		}
+		if (proc.isReading()
+			&& (fds[outIndex].revents & (POLLIN | POLLHUP | POLLERR)))
+			proc.onReadable();
+	}
+	output = proc.output();
+	return (proc.reap() == 0);
+}
+
+/*
  * Runs a script that writes to stdout and checks the parent captured it.
  */
 static void	test_stdout_redirect(void)
 {
+	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					output;
 	bool						ok;
 
 	writeScript("cgi_echo.sh", "echo hello-cgi\n");
 	ok = runCgi("/bin/sh", "cgi_echo.sh", "", env, output);
-	TEST(ok, "runCgi returns true on success");
+	TEST(ok, "execute returns true on success");
 	TEST(output == "hello-cgi\n", "captures script stdout");
 	std::remove("cgi_echo.sh");
 }
@@ -62,13 +120,14 @@ static void	test_stdout_redirect(void)
  */
 static void	test_stdin_redirect(void)
 {
+	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					output;
 	bool						ok;
 
 	writeScript("cgi_cat.sh", "cat\n");
 	ok = runCgi("/bin/sh", "cgi_cat.sh", "ping", env, output);
-	TEST(ok, "runCgi returns true when feeding stdin");
+	TEST(ok, "execute returns true when feeding stdin");
 	TEST(output == "ping", "forwards request body to script stdin");
 	std::remove("cgi_cat.sh");
 }
@@ -79,6 +138,7 @@ static void	test_stdin_redirect(void)
  */
 static void	test_large_body(void)
 {
+	CgiHandler					handler;
 	std::vector<std::string>	env;
 	std::string					body(1024 * 1024, 'x');
 	std::string					output;
@@ -86,7 +146,7 @@ static void	test_large_body(void)
 
 	writeScript("cgi_cat.sh", "cat\n");
 	ok = runCgi("/bin/sh", "cgi_cat.sh", body, env, output);
-	TEST(ok, "runCgi returns true on a large body");
+	TEST(ok, "execute returns true on a large body");
 	TEST(output == body, "streams a body larger than the pipe buffer");
 	std::remove("cgi_cat.sh");
 }
@@ -121,7 +181,7 @@ static void	test_build_env(void)
 	request.setHeaders("Content-Type", "application/x-www-form-urlencoded");
 	request.setHeaders("Host", "localhost");
 	request.setBody("name=42");
-	env = handler.buildEnv(request, "cgi-bin/form.py");
+	env = handler.buildEnv(request, "cgi-bin/form.py", 8080, "127.0.0.1");
 	TEST(envHas(env, "GATEWAY_INTERFACE=CGI/1.1"), "buildEnv sets GATEWAY_INTERFACE");
 	TEST(envHas(env, "REQUEST_METHOD=POST"), "buildEnv sets REQUEST_METHOD");
 	TEST(envHas(env, "QUERY_STRING=name=42&lang=c"), "buildEnv sets QUERY_STRING");
@@ -131,6 +191,12 @@ static void	test_build_env(void)
 	TEST(envHas(env, "CONTENT_LENGTH=7"), "buildEnv sets CONTENT_LENGTH from body size");
 	TEST(envHas(env, "CONTENT_TYPE=application/x-www-form-urlencoded"), "buildEnv sets CONTENT_TYPE");
 	TEST(envHas(env, "HTTP_HOST=localhost"), "buildEnv forwards headers as HTTP_ variables");
+	TEST(envHas(env, "PATH_INFO=/cgi-bin/form.py"), "buildEnv sets PATH_INFO in URI space");
+	TEST(envHas(env, "PATH_TRANSLATED=cgi-bin/form.py"), "buildEnv translates PATH_INFO onto the filesystem");
+	TEST(envHas(env, "SERVER_NAME=localhost"), "buildEnv sets SERVER_NAME from the Host header");
+	TEST(envHas(env, "SERVER_PORT=8080"), "buildEnv sets SERVER_PORT");
+	TEST(envHas(env, "REMOTE_ADDR=127.0.0.1"), "buildEnv sets REMOTE_ADDR");
+	TEST(envHas(env, "REQUEST_URI=/cgi-bin/form.py?name=42&lang=c"), "buildEnv sets REQUEST_URI with the query");
 }
 
 /*
@@ -149,10 +215,10 @@ static void	test_env_reaches_script(void)
 	request.setUri("/cgi-bin/env.py");
 	request.setQuery("q=hello");
 	request.setVersion("HTTP/1.1");
-	env = handler.buildEnv(request, "cgi_env.sh");
+	env = handler.buildEnv(request, "cgi_env.sh", 8080, "127.0.0.1");
 	writeScript("cgi_env.sh", "echo \"$REQUEST_METHOD:$QUERY_STRING\"\n");
 	ok = runCgi("/bin/sh", "cgi_env.sh", request.getBody(), env, output);
-	TEST(ok, "runCgi returns true with an environment");
+	TEST(ok, "execute returns true with an environment");
 	TEST(output == "GET:q=hello\n", "child process receives CGI variables");
 	std::remove("cgi_env.sh");
 }
@@ -284,8 +350,10 @@ static void	test_parse_invalid_status(void)
 }
 
 /*
- * Checks a script is resolved both through the mount prefix "/cgi-bin/x.py"
- * and directly as "/x.py", so the CGI root name is not doubled in the path.
+ * Checks a script is resolved through the prefix of the location serving it,
+ * so "/cgi-bin/x.py" served by a location rooted in "cgi-bin" lands on
+ * "cgi-bin/x.py" instead of doubling the root, and a URI carrying no prefix
+ * resolves to the same path.
  */
 static void	test_validate_mount_prefix(void)
 {
@@ -295,9 +363,11 @@ static void	test_validate_mount_prefix(void)
 	std::string		bare;
 
 	writeScript("cgi-bin/probe_cgi.py", "print()\n");
+	handler.setLocationPrefix("/cgi-bin");
 	TEST(handler.validate("/cgi-bin/probe_cgi.py", prefixed, response),
 		"validate accepts the /cgi-bin prefixed URI");
 	TEST(prefixed == "cgi-bin/probe_cgi.py", "validate resolves prefixed URI without doubling the root");
+	handler.setLocationPrefix("");
 	TEST(handler.validate("/probe_cgi.py", bare, response),
 		"validate accepts the bare URI");
 	TEST(bare == "cgi-bin/probe_cgi.py", "validate resolves the bare URI to the same path");

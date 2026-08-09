@@ -19,22 +19,33 @@
 #include <stdexcept>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/time.h>
+#include <netinet/in.h>
+#include <csignal>
+#include <ctime>
 #include <cstdlib>
 
-static const std::string	DEFAULT_CGI_INTERPRETER = "/usr/bin/python3";
 static const long			CGI_TIMEOUT_MS = 5000;
+static const double			IDLE_TIMEOUT_S = 30.0;
+static const int			MAX_POLL_WAIT_MS = 1000;
 static const int			BACKLOG = 128;
 
 /*
- * Returns the current wall-clock time in milliseconds.
+ * Lowered by requestStop() when a signal asks the server to stop, and read by
+ * run() between two turns of the loop. sig_atomic_t is the only type a handler
+ * may touch safely.
+ */
+static volatile sig_atomic_t	g_running = 1;
+
+/*
+ * Returns the current wall-clock time in milliseconds. gettimeofday() is not
+ * one of the functions the subject authorises, so the value comes from
+ * std::time and carries a resolution of one second: the only deadline built on
+ * it is the CGI timeout, which then fires between four and five seconds after
+ * the child started instead of exactly five.
  */
 static long nowMs(void)
 {
-	struct timeval	tv;
-
-	gettimeofday(&tv, NULL);
-	return (static_cast<long>(tv.tv_sec) * 1000 + tv.tv_usec / 1000);
+	return (static_cast<long>(std::time(NULL)) * 1000);
 }
 
 EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT)
@@ -46,22 +57,45 @@ EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
 {
 }
 
+/*
+ * Releases everything the loop owns: the listening sockets and any CGI child
+ * still running, which the CgiProcess destructor kills and reaps. The clients
+ * close themselves through the Connection destructor.
+ */
 EventLoop::~EventLoop(void)
 {
+	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin();
+			it != _cgi.end(); ++it)
+		delete it->second;
+	_cgi.clear();
 	for (size_t i = 0; i < _sckt.size(); i++)
 		delete _sckt[i];
 }
 
 /*
- * Reports whether a listening socket is already bound to `port`. Server blocks
- * sharing a port share the socket, and the block serving a request is picked
- * from its Host header, so the port alone identifies the socket to open.
+ * Signal handler asking the loop to stop. It only lowers a flag: run() sees it
+ * between two turns and returns, so the destructors do the freeing outside of
+ * signal context.
  */
-bool EventLoop::isPortBound(int port) const
+void EventLoop::requestStop(int signal)
 {
-	for (size_t i = 0; i < _boundPorts.size(); i++)
+	(void)signal;
+	g_running = 0;
+}
+
+/*
+ * Reports whether a listening socket is already bound to `host:port`. Server
+ * blocks sharing an interface and a port share the socket, and the block
+ * serving a request is picked from its Host header. The interface is part of
+ * the identity: two blocks on the same port but on different addresses are two
+ * sockets, and comparing the port alone silently dropped the second one.
+ */
+bool EventLoop::isEndpointBound(const std::string &host, int port) const
+{
+	for (size_t i = 0; i < _boundEndpoints.size(); i++)
 	{
-		if (_boundPorts[i] == port)
+		if (_boundEndpoints[i].second == port
+			&& _boundEndpoints[i].first == host)
 			return (true);
 	}
 	return (false);
@@ -115,28 +149,36 @@ void EventLoop::setupSockets(void)
 		const std::string	&host = _configs[i].host;
 		int					port = _configs[i].port;
 
-		if (isPortBound(port))
+		if (isEndpointBound(host, port))
 			continue;
 
-		_sckt.push_back(new Socket());
+		Socket	*sckt = new Socket();
 
-		Socket	*sckt = _sckt.back();
-
-		sckt->create();
-		sckt->bind(host, port);
-		sckt->listen(BACKLOG);
-
-		int	flags = fcntl(sckt->getFd(), F_GETFL, 0);
-		if (flags != -1 && (flags & O_NONBLOCK))
-			Logger::info("Socket is non-blocking.");
-		else
-			Logger::warning("Socket is blocking.");
+		/*
+		 * One endpoint that cannot be bound (an interface this machine does not
+		 * carry, a port already taken) is logged and skipped rather than taking
+		 * the whole server down with it: the blocks that did bind still serve.
+		 * run() still refuses to start when nothing bound at all.
+		 */
+		try
+		{
+			sckt->create();
+			sckt->bind(host, port);
+			sckt->listen(BACKLOG);
+		}
+		catch (const std::exception &e)
+		{
+			Logger::warning("Skipping " + host + ": " + e.what());
+			delete sckt;
+			continue;
+		}
+		_sckt.push_back(sckt);
 
 		std::ostringstream	oss;
 		oss << "Listening on " << host << ":" << port;
 		Logger::info(oss.str());
 
-		_boundPorts.push_back(port);
+		_boundEndpoints.push_back(std::make_pair(host, port));
 	}
 }
 
@@ -153,11 +195,28 @@ bool EventLoop::isMasterSocket(int fd) const
 	return (false);
 }
 
+/*
+ * Formats the IPv4 address of a peer as a dotted quad. inet_ntoa() is not one
+ * of the functions the subject authorises, and the four octets are all the CGI
+ * environment needs for REMOTE_ADDR.
+ */
+static std::string addressToString(const struct sockaddr_in &address)
+{
+	unsigned long		host = ntohl(address.sin_addr.s_addr);
+	std::ostringstream	oss;
+
+	oss << ((host >> 24) & 0xFF) << "." << ((host >> 16) & 0xFF) << "."
+		<< ((host >> 8) & 0xFF) << "." << (host & 0xFF);
+	return (oss.str());
+}
+
 void EventLoop::acceptClients(int fd)
 {
 	while (true)
 	{
-		int client = accept(fd, NULL, NULL);
+		struct sockaddr_in	peer;
+		socklen_t			length = sizeof(peer);
+		int client = accept(fd, (struct sockaddr *)&peer, &length);
 		if (client == -1)
 			break;
 		setNonBlocking(client);
@@ -166,7 +225,7 @@ void EventLoop::acceptClients(int fd)
 		pfd.events = POLLIN;
 		pfd.revents = 0;
 		_fds.push_back(pfd);
-		_clients[client] = Connection(client);
+		_clients[client] = Connection(client, addressToString(peer));
 		_clients[client].setMaxBodySize(
 			maxBodySizeForPort(_clients[client].getLocalPort()));
 		Logger::info("New client connected.");
@@ -258,6 +317,22 @@ void EventLoop::handleParseError(int fd)
 }
 
 /*
+ * Recognises the session the request belongs to, or opens one. The id travels
+ * in the SESSIONID cookie the server sets; a request arriving without one, or
+ * with an id this server does not know, starts a session of its own. The id is
+ * kept on the connection so both the router and the CGI path can put it back
+ * in the response.
+ */
+void EventLoop::openSession(Connection &conn)
+{
+	std::string	id = SessionStore::readCookie(
+					conn.getRequest().getHeaderValue("Cookie"), "SESSIONID");
+
+	_sessions.touch(id);
+	conn.set_session_id(id);
+}
+
+/*
  * Decides whether the client wants the connection kept open. HTTP/1.1
  * defaults to persistent unless "Connection: close" is sent; HTTP/1.0
  * defaults to closing unless "Connection: keep-alive" is sent.
@@ -297,6 +372,7 @@ void EventLoop::handleRequest(int fd)
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	builder.setKeepAlive(conn.get_keep_alive());
+	openSession(conn);
 
 	if (_router.bodyExceedsLimit(conn.getRequest(), chosenConfig))
 	{
@@ -306,12 +382,12 @@ void EventLoop::handleRequest(int fd)
 		return ;
 	}
 
-	std::string	interpreter = cgiInterpreterFor(conn.getRequest().getUri(),
+	std::string	interpreter = cgiInterpreterFor(conn.getRequest(),
 						chosenConfig);
 
 	if (!interpreter.empty())
 	{
-		startCgi(fd, interpreter);
+		startCgi(fd, interpreter, chosenConfig);
 		return ;
 	}
 
@@ -319,6 +395,8 @@ void EventLoop::handleRequest(int fd)
 	{
 		HttpResponse response;
 		_router.route(conn.getRequest(), response, chosenConfig);
+		response.setHeaders("set-cookie",
+				_sessions.cookieFor(conn.get_session_id()));
 		std::string serialized = builder.builder(conn.getRequest(), response);
 		conn.set_write_buffer(serialized);
 	}
@@ -444,50 +522,68 @@ void EventLoop::sendCgiError(int fd, int status)
 /**
  * @brief Decides whether a URI is a CGI request and which binary runs it.
  * The cgi_pass directives of the location matching the URI answer both at
- * once, so a script only executes when the config declares a handler for its
- * extension and any other extension keeps being served as a static file. A
- * ".py" script no location binds falls back to the default interpreter, so a
- * config declaring no cgi_pass still serves Python scripts. A location that
- * redirects runs nothing, since the redirect is the answer and the fallback
- * would otherwise execute the script before the router ever sees the request.
- * @param uri The request target.
+ * once: a script executes only where the config binds an interpreter to its
+ * extension, and any other request is served as a static file. There is no
+ * default-interpreter fallback, so a location that never declares cgi_pass
+ * cannot be made to execute an uploaded ".py" file, which is otherwise a path
+ * to running attacker-supplied code out of an upload directory. A location
+ * that redirects runs nothing, since the redirect is the answer and the CGI
+ * would otherwise execute before the router ever sees the request. A method
+ * the location does not accept runs nothing either, for the same reason: the
+ * 405 is the answer, and it is the router that writes it.
+ * @param request The request being answered.
  * @param config The server block serving the request.
  * @return The binary to execute, or an empty string when the URI is not a CGI
  * request.
  */
-std::string	EventLoop::cgiInterpreterFor(const std::string &uri,
+std::string	EventLoop::cgiInterpreterFor(const HttpRequest &request,
 			const ServerConfig &config) const
 {
-	if (_router.redirects(uri, config))
+	const std::string	&uri = request.getUri();
+
+	if (_router.redirects(uri, config) || _router.refusesMethod(request, config))
 		return ("");
-
-	std::string	interpreter = _router.resolveCgiInterpreter(uri, config);
-
-	if (interpreter.empty() && _cgiHandler.isCgiRequest(uri))
-		return (DEFAULT_CGI_INTERPRETER);
-	return (interpreter);
+	return (_router.resolveCgiInterpreter(uri, config));
 }
 
 /*
- * Starts a CGI request without blocking the server: validates the script,
- * forks the interpreter the config bound to its extension, registers the CGI
- * pipe fds in the poll set, and parks the client fd (no interest) until the
- * child finishes. On validation or fork failure it queues the matching error
+ * Starts a CGI request without blocking the server: points the CGI handler at
+ * the root the matched location declares, validates the script, forks the
+ * interpreter the config bound to its extension, registers the CGI pipe fds in
+ * the poll set, and parks the client fd (no interest) until the child
+ * finishes. On validation or fork failure it queues the matching error
  * response instead.
  */
-void EventLoop::startCgi(int fd, const std::string &interpreter)
+void EventLoop::startCgi(int fd, const std::string &interpreter,
+		const ServerConfig &config)
 {
 	Connection		&conn = _clients[fd];
 	std::string		scriptPath;
 	HttpResponse	errorResponse;
+	const std::string	&uri = conn.getRequest().getUri();
 
-	if (!_cgiHandler.validate(conn.getRequest().getUri(), scriptPath, errorResponse))
+	_cgiHandler.setCgiRoot(_router.resolveRoot(uri, config));
+	_cgiHandler.setLocationPrefix(_router.resolveLocationPrefix(uri, config));
+	if (!_cgiHandler.validate(uri, scriptPath, errorResponse))
 	{
 		sendCgiError(fd, errorResponse.getStatusCode());
 		return ;
 	}
 
-	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(), scriptPath);
+	std::vector<std::string>	env = _cgiHandler.buildEnv(conn.getRequest(),
+									scriptPath, conn.getLocalPort(),
+									conn.getRemoteAddr());
+	std::ostringstream			visits;
+
+	/*
+	 * The session the server keeps is handed to the script as well, so a CGI
+	 * can greet a returning visitor on the very first request, before the
+	 * browser has had a chance to send the cookie back.
+	 */
+	visits << _sessions.visits(conn.get_session_id());
+	env.push_back("SESSION_ID=" + conn.get_session_id());
+	env.push_back("SESSION_VISITS=" + visits.str());
+
 	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());
 
 	if (!proc->start(interpreter, scriptPath, env))
@@ -514,11 +610,18 @@ void EventLoop::startCgi(int fd, const std::string &interpreter)
  * request body to the child; readable steps drain its output. A finished
  * direction is unregistered from the poll set, and once both directions are
  * done the response is built and sent.
+ *
+ * Every step pushes the deadline forward, so what CGI_TIMEOUT_MS bounds is how
+ * long a child may go without moving a byte, not how long it may run. A child
+ * spinning in a loop writes nothing and is still killed on time, while a body
+ * of a hundred megabytes keeps the pipes busy and is allowed to finish.
  */
 void EventLoop::handleCgiIo(int fd, short revents)
 {
 	int			clientFd = _pipeToClient[fd];
 	CgiProcess	*proc = _cgi[clientFd];
+
+	proc->setDeadlineMs(nowMs() + CGI_TIMEOUT_MS);
 
 	if (fd == proc->bodyWriteFd())
 	{
@@ -560,7 +663,12 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 
 	builder.setKeepAlive(conn.get_keep_alive());
 	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
+	{
+		if (response.getHeaderValue("set-cookie").empty())
+			response.setHeaders("set-cookie",
+					_sessions.cookieFor(conn.get_session_id()));
 		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
+	}
 	else
 		conn.set_write_buffer(buildError(conn, builder, 502));
 	setPollEvents(clientFd, POLLOUT);
@@ -641,6 +749,34 @@ void EventLoop::checkCgiTimeouts(void)
 }
 
 /*
+ * Closes every connection that has been silent for longer than the idle
+ * timeout. A client that opens a socket and says nothing, or stops halfway
+ * through a request header, would otherwise hold its descriptor for as long as
+ * the process lives. Connections waiting on a CGI are left alone: they are
+ * idle by definition while the child runs, and the CGI deadline already bounds
+ * them.
+ */
+void EventLoop::closeIdleConnections(void)
+{
+	std::vector<int>	expired;
+
+	for (std::map<int, Connection>::iterator it = _clients.begin();
+			it != _clients.end(); ++it)
+	{
+		if (_cgi.count(it->first))
+			continue;
+		if (it->second.last_activity() >= IDLE_TIMEOUT_S)
+			expired.push_back(it->first);
+	}
+	for (size_t i = 0; i < expired.size(); ++i)
+	{
+		disablePollFd(expired[i]);
+		_clients.erase(expired[i]);
+		Logger::info("Idle connection closed.");
+	}
+}
+
+/*
  * Returns the poll timeout in milliseconds: infinite when no CGI is running,
  * otherwise the time left until the nearest CGI deadline (never negative) so
  * poll wakes in time to kill a stuck child.
@@ -665,6 +801,23 @@ int EventLoop::cgiPollTimeout(void)
 	return (static_cast<int>(soonest));
 }
 
+/*
+ * Returns the timeout the main poll() waits with: the CGI deadline when one is
+ * nearer, capped at MAX_POLL_WAIT_MS otherwise. The cap is what makes the loop
+ * come back regularly with nothing to do, which is when the idle sweep runs
+ * and when the stop flag is read. Waiting forever would leave a silent client
+ * holding its descriptor until some other traffic woke the loop, and would
+ * leave Ctrl+C unanswered for just as long.
+ */
+int EventLoop::pollTimeout(void)
+{
+	int	cgi = cgiPollTimeout();
+
+	if (cgi == -1 || cgi > MAX_POLL_WAIT_MS)
+		return (MAX_POLL_WAIT_MS);
+	return (cgi);
+}
+
 void EventLoop::run(void)
 {
 	if (_sckt.empty())
@@ -677,9 +830,9 @@ void EventLoop::run(void)
 		s_listening.revents = 0;
 		_fds.push_back(s_listening);
 	}
-	while (true)
+	while (g_running)
 	{
-		int ready = poll(_fds.data(), _fds.size(), cgiPollTimeout());
+		int ready = poll(_fds.data(), _fds.size(), pollTimeout());
 		if (ready == -1)
 		{
 			if (errno == EINTR)
@@ -722,6 +875,8 @@ void EventLoop::run(void)
 			}
 		}
 		checkCgiTimeouts();
+		closeIdleConnections();
+		_sessions.sweep();
 		compactPollFds();
 	}
 }

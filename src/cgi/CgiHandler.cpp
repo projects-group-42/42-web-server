@@ -275,13 +275,10 @@ static bool pumpCgiIo(CgiPipes &pipes, const std::string &body, std::string &out
         {
             ssize_t written = write(pipes.bodyWriteFd(), body.data() + sent, body.size() - sent);
 
-            if (written == -1)
+            if (written <= 0)
             {
-                if (errno != EAGAIN && errno != EWOULDBLOCK)
-                {
-                    pipes.closeBodyWrite();
-                    writing = false;
-                }
+                pipes.closeBodyWrite();
+                writing = false;
             }
             else
             {

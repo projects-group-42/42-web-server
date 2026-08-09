@@ -55,6 +55,13 @@ Connection::~Connection(void)
 		close(_client_fd);
 }
 
+/*
+ * Reads one ready chunk from the socket and feeds it to the parser. The result
+ * of recv() is returned untouched, and errno is never consulted: the caller
+ * (EventLoop::handleClient) decides on the value alone — a positive count is
+ * data, 0 is the peer closing, -1 is an error, and both of the latter drop the
+ * client.
+ */
 ssize_t Connection::receive_data(void)
 {
 	char	buffer[4096];
@@ -69,6 +76,12 @@ ssize_t Connection::receive_data(void)
 	return (bytes_read);
 }
 
+/*
+ * Writes one ready chunk of the pending response and drops what left. As in
+ * receive_data, the result of send() is returned untouched and errno is never
+ * consulted: EventLoop::handleSend decides on the value alone, and anything
+ * but a positive count drops the client.
+ */
 ssize_t Connection::send_data(void)
 {
 	ssize_t	sent = send(_client_fd, _write_buffer.data(),

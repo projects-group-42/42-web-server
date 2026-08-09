@@ -140,7 +140,9 @@ int StaticFileHandler::serveRegularFile(const std::string &resolvedPath,
 
 /*
  * Serve a directory, try index files. When the directory holds no index and
- * autoindex is enabled, a generated listing is served instead of 404.
+ * autoindex is enabled, a generated listing is served instead. A directory
+ * with neither is refused with 403, the way NGINX answers it: the resource is
+ * there, the server just will not show it.
  * Returns HTTP status code and fills body/contentType.
  */
 int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
@@ -156,7 +158,7 @@ int StaticFileHandler::serveDirectory(const std::string &resolvedPath,
 	if (stat(indexPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
 		return (serveRegularFile(indexPath, body, contentType));
 	if (!_autoindex)
-		return (404);
+		return (403);
 
 	int	status = serveDirectoryListing(resolvedPath, requestUri, body);
 	if (status == 200)
@@ -330,8 +332,24 @@ bool StaticFileHandler::handleGet(const HttpRequest &request,
 	if (S_ISREG(pathStat.st_mode))
 		status = serveRegularFile(resolvedPath, body, contentType);
 	else if (S_ISDIR(pathStat.st_mode))
-		status = serveDirectory(resolvedPath, request.getUri(), body,
-				contentType);
+	{
+		const std::string	&uri = request.getUri();
+
+		/*
+		 * A directory addressed without its trailing slash is redirected to
+		 * the canonical form the way NGINX does, so the relative links inside
+		 * the page it serves resolve against the directory and not against
+		 * its parent.
+		 */
+		if (uri.empty() || uri[uri.size() - 1] != '/')
+		{
+			response.setStatusCode(301);
+			response.setHeaders("location", uri + "/");
+			response.setBody("");
+			return (true);
+		}
+		status = serveDirectory(resolvedPath, uri, body, contentType);
+	}
 	else
 		status = 403;
 

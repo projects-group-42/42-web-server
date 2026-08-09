@@ -17,7 +17,7 @@
 #include <string>
 
 ResponseBuilder::ResponseBuilder(void)
-	: _server_name("Webserv/1.0: PorFavorFuncione"), _keep_alive(false)
+	: _server_name("Webserv/1.0"), _keep_alive(false)
 {
 }
 
@@ -83,6 +83,11 @@ std::string ResponseBuilder::getStatusMessage(int status) const
 	}
 }
 
+/*
+ * Builds the status line. The version announced is the one the server speaks,
+ * not the one the client wrote: echoing the request back answered "HTTP/9.9
+ * 200 OK" to a client that made that up.
+ */
 std::string ResponseBuilder::getStatusLine(
 	const HttpRequest &request, const HttpResponse &response) const
 {
@@ -90,7 +95,8 @@ std::string ResponseBuilder::getStatusLine(
 	std::ostringstream str_status;
 	str_status << response.getStatusCode();
 
-	status_line.append(request.getVersion());
+	(void)request;
+	status_line.append(response.getVersion());
 	status_line.append(" ");
 	status_line.append(str_status.str());
 	status_line.append(" ");
@@ -111,6 +117,12 @@ void ResponseBuilder::setDefaultHeaders(HttpResponse &response) const
 	response.setHeaders("connection", _keep_alive ? "keep-alive" : "close");
 }
 
+/*
+ * Serialises a response. A HEAD is answered with the headers a GET would
+ * carry, Content-Length included, and no body at all: sending one leaves bytes
+ * on the wire the client reads as the start of the next response, which
+ * desynchronises a kept-alive connection.
+ */
 std::string ResponseBuilder::builder(
 	const HttpRequest &request, HttpResponse &response)
 {
@@ -130,7 +142,8 @@ std::string ResponseBuilder::builder(
 		result.append("\r\n");
 	}
 	result.append("\r\n");
-	result.append(response.getBody());
+	if (request.getMethod() != "HEAD")
+		result.append(response.getBody());
 	return (result);
 }
 

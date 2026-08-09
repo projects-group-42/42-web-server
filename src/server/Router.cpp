@@ -22,6 +22,7 @@ Router::Router(void)
 	: _staticHandler("www"), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
+	_handlers["HEAD:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
 	_handlers["DELETE:/"] = &_staticHandler;
 }
@@ -30,6 +31,7 @@ Router::Router(const std::string &root)
 	: _staticHandler(root), _responseBuilder("Webserv/1.0", false)
 {
 	_handlers["GET:/"] = &_staticHandler;
+	_handlers["HEAD:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
 	_handlers["DELETE:/"] = &_staticHandler;
 }
@@ -38,6 +40,7 @@ Router::Router(const Router &copy)
 	: _staticHandler(copy._staticHandler), _handlers(copy._handlers), _responseBuilder(copy._responseBuilder)
 {
 	_handlers["GET:/"] = &_staticHandler;
+	_handlers["HEAD:/"] = &_staticHandler;
 	_handlers["POST:/"] = &_staticHandler;
 	_handlers["DELETE:/"] = &_staticHandler;
 }
@@ -50,6 +53,7 @@ Router &Router::operator=(const Router &other)
 		_handlers = other._handlers;
 		_responseBuilder = other._responseBuilder;
 		_handlers["GET:/"] = &_staticHandler;
+		_handlers["HEAD:/"] = &_staticHandler;
 		_handlers["POST:/"] = &_staticHandler;
 		_handlers["DELETE:/"] = &_staticHandler;
 	}
@@ -135,8 +139,11 @@ IRequestHandler *Router::resolveHandler(const std::string &method,
 
 /**
  * @brief Finds the location block that applies to a URI in a server block.
- * The location whose path is the longest matching prefix of the URI wins, the
- * same literal prefix rule nginx uses, so "/test" also matches "/testing.html".
+ * The location whose path is the longest matching prefix of the URI wins, and
+ * a prefix only matches on a path boundary: "/cgi" serves "/cgi/app.py" and
+ * "/cgi" itself, never "/cgi-bin/hello.php" or "/cgifoo". Matching those would
+ * hand a request to a block written for a different tree, and with cgi_pass in
+ * it that means executing a script the author never pointed at that path.
  * @param uri The request target.
  * @param config The server block serving the request.
  * @return The winning location, or NULL when no location matches.
@@ -149,10 +156,14 @@ const LocationConfig	*Router::matchLocation(const std::string &uri,
 	for (size_t i = 0; i < config.locations.size(); ++i)
 	{
 		const std::string	&locPath = config.locations[i].path;
+		size_t				size = locPath.size();
 
-		if (uri.compare(0, locPath.size(), locPath) != 0)
+		if (size == 0 || uri.compare(0, size, locPath) != 0)
 			continue;
-		if (best == NULL || locPath.size() > best->path.size())
+		if (uri.size() != size && uri[size] != '/'
+			&& locPath[size - 1] != '/')
+			continue;
+		if (best == NULL || size > best->path.size())
 			best = &config.locations[i];
 	}
 	return (best);

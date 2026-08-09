@@ -25,6 +25,7 @@
 
 static const std::string	DEFAULT_CGI_INTERPRETER = "/usr/bin/python3";
 static const long			CGI_TIMEOUT_MS = 5000;
+static const double			IDLE_TIMEOUT_S = 30.0;
 static const int			BACKLOG = 128;
 
 /*
@@ -55,15 +56,18 @@ EventLoop::~EventLoop(void)
 }
 
 /*
- * Reports whether a listening socket is already bound to `port`. Server blocks
- * sharing a port share the socket, and the block serving a request is picked
- * from its Host header, so the port alone identifies the socket to open.
+ * Reports whether a listening socket is already bound to `host:port`. Server
+ * blocks sharing an interface and a port share the socket, and the block
+ * serving a request is picked from its Host header. The interface is part of
+ * the identity: two blocks on the same port but on different addresses are two
+ * sockets, and comparing the port alone silently dropped the second one.
  */
-bool EventLoop::isPortBound(int port) const
+bool EventLoop::isEndpointBound(const std::string &host, int port) const
 {
-	for (size_t i = 0; i < _boundPorts.size(); i++)
+	for (size_t i = 0; i < _boundEndpoints.size(); i++)
 	{
-		if (_boundPorts[i] == port)
+		if (_boundEndpoints[i].second == port
+			&& _boundEndpoints[i].first == host)
 			return (true);
 	}
 	return (false);
@@ -117,7 +121,7 @@ void EventLoop::setupSockets(void)
 		const std::string	&host = _configs[i].host;
 		int					port = _configs[i].port;
 
-		if (isPortBound(port))
+		if (isEndpointBound(host, port))
 			continue;
 
 		_sckt.push_back(new Socket());
@@ -132,7 +136,7 @@ void EventLoop::setupSockets(void)
 		oss << "Listening on " << host << ":" << port;
 		Logger::info(oss.str());
 
-		_boundPorts.push_back(port);
+		_boundEndpoints.push_back(std::make_pair(host, port));
 	}
 }
 
@@ -663,6 +667,34 @@ void EventLoop::checkCgiTimeouts(void)
 }
 
 /*
+ * Closes every connection that has been silent for longer than the idle
+ * timeout. A client that opens a socket and says nothing, or stops halfway
+ * through a request header, would otherwise hold its descriptor for as long as
+ * the process lives. Connections waiting on a CGI are left alone: they are
+ * idle by definition while the child runs, and the CGI deadline already bounds
+ * them.
+ */
+void EventLoop::closeIdleConnections(void)
+{
+	std::vector<int>	expired;
+
+	for (std::map<int, Connection>::iterator it = _clients.begin();
+			it != _clients.end(); ++it)
+	{
+		if (_cgi.count(it->first))
+			continue;
+		if (it->second.last_activity() >= IDLE_TIMEOUT_S)
+			expired.push_back(it->first);
+	}
+	for (size_t i = 0; i < expired.size(); ++i)
+	{
+		disablePollFd(expired[i]);
+		_clients.erase(expired[i]);
+		Logger::info("Idle connection closed.");
+	}
+}
+
+/*
  * Returns the poll timeout in milliseconds: infinite when no CGI is running,
  * otherwise the time left until the nearest CGI deadline (never negative) so
  * poll wakes in time to kill a stuck child.
@@ -687,6 +719,24 @@ int EventLoop::cgiPollTimeout(void)
 	return (static_cast<int>(soonest));
 }
 
+/*
+ * Returns the timeout the main poll() waits with: the nearest of the CGI
+ * deadline and the next idle connection sweep. Without the second half a
+ * silent client would only be noticed the next time some other traffic woke
+ * the loop up.
+ */
+int EventLoop::pollTimeout(void)
+{
+	int	cgi = cgiPollTimeout();
+	int	idle = static_cast<int>(IDLE_TIMEOUT_S * 1000);
+
+	if (_clients.empty())
+		return (cgi);
+	if (cgi == -1 || cgi > idle)
+		return (idle);
+	return (cgi);
+}
+
 void EventLoop::run(void)
 {
 	if (_sckt.empty())
@@ -701,7 +751,7 @@ void EventLoop::run(void)
 	}
 	while (true)
 	{
-		int ready = poll(_fds.data(), _fds.size(), cgiPollTimeout());
+		int ready = poll(_fds.data(), _fds.size(), pollTimeout());
 		if (ready == -1)
 		{
 			if (errno == EINTR)
@@ -744,6 +794,7 @@ void EventLoop::run(void)
 			}
 		}
 		checkCgiTimeouts();
+		closeIdleConnections();
 		compactPollFds();
 	}
 }

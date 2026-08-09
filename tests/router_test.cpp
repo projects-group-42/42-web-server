@@ -310,8 +310,8 @@ int	main(void)
 		HttpResponse	response;
 
 		routeGet("/", config, response);
-		TEST(response.getStatusCode() == 404,
-			"a directory without its configured index answers 404");
+		TEST(response.getStatusCode() == 403,
+			"a directory without its configured index answers 403");
 	}
 
 	{
@@ -484,9 +484,8 @@ int	main(void)
 		TEST(router.resolveCgiInterpreter("/cgi/app.py", config)
 				== "/usr/bin/python3",
 			"binding .php leaves the .py binding untouched");
-		TEST(router.resolveCgiInterpreter("/cgi-bin/hello.php", config)
-				== "/usr/bin/php-cgi",
-			"a /cgi-bin script resolves through the location prefixing it");
+		TEST(router.resolveCgiInterpreter("/cgi-bin/hello.php", config).empty(),
+			"a location prefix only matches on a path boundary, so /cgi leaves /cgi-bin alone");
 		TEST(router.resolveCgiInterpreter("/cgi/app.phps", config).empty(),
 			"an extension merely starting with .php is not bound");
 	}

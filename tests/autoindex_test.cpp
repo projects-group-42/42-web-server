@@ -149,8 +149,8 @@ static void	test_autoindex_off_is_404(void)
 
 	HttpResponse	response = get(handler, "/quiet/");
 
-	CHECK_EQ(response.getStatusCode(), 404,
-	         "directory without index and autoindex off returns 404");
+	CHECK_EQ(response.getStatusCode(), 403,
+	         "directory without index and autoindex off returns 403");
 }
 
 static void	test_autoindex_on_lists_entries(void)
@@ -241,7 +241,7 @@ static void	test_request_uri_is_escaped(void)
 
 	handler.setAutoindex(true);
 
-	std::string	uri = "/listable/<img src=x onerror=alert(1)>/..";
+	std::string	uri = "/listable/<img src=x onerror=alert(1)>/../";
 	std::string	body = get(handler, uri).getBody();
 
 	TEST(!contains(body, "<img src=x onerror=alert(1)>"),
@@ -369,7 +369,7 @@ static void	test_router_applies_location_autoindex(void)
 
 	CHECK_EQ(routeStatus(router, config, "/listable/"), 200,
 	         "router enables autoindex for a location that declares it on");
-	CHECK_EQ(routeStatus(router, config, "/quiet/"), 404,
+	CHECK_EQ(routeStatus(router, config, "/quiet/"), 403,
 	         "autoindex does not leak from the previous request");
 	CHECK_EQ(routeStatus(router, config, "/listable/"), 200,
 	         "the listable location still lists after a request that did not");
@@ -382,7 +382,7 @@ static void	test_router_inherits_server_autoindex(void)
 
 	CHECK_EQ(routeStatus(router, config, "/loose/"), 200,
 	         "a URI matching no location inherits the server autoindex");
-	CHECK_EQ(routeStatus(router, config, "/quiet/"), 404,
+	CHECK_EQ(routeStatus(router, config, "/quiet/"), 403,
 	         "a location declaring autoindex off overrides the server value");
 }
 

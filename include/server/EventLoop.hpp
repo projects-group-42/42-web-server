@@ -28,7 +28,7 @@ class EventLoop
 {
 	private:
 		std::vector<Socket*>					_sckt;
-		std::vector<int>						_boundPorts;
+		std::vector<std::pair<std::string, int> >	_boundEndpoints;
 		std::vector<ServerConfig>				_configs;
 		std::vector<struct pollfd>				_fds;
 		std::map<int, Connection>				_clients;
@@ -40,7 +40,7 @@ class EventLoop
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
 
-		bool	isPortBound(int port) const;
+		bool	isEndpointBound(const std::string &host, int port) const;
 		long	maxBodySizeForPort(int port) const;
 		bool	isMasterSocket(int fd) const;
 		void	acceptClients(int fd);
@@ -63,7 +63,9 @@ class EventLoop
 		void	unregisterCgiPipes(int clientFd);
 		void	timeoutCgi(int clientFd);
 		void	checkCgiTimeouts(void);
+		void	closeIdleConnections(void);
 		int		cgiPollTimeout(void);
+		int		pollTimeout(void);
 		void	sendCgiError(int fd, int status);
 		std::string
 				buildError(const Connection &conn,

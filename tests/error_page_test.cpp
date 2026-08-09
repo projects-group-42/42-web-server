@@ -365,7 +365,7 @@ static void	test_router_serves_page_without_handler(void)
 	CHECK_EQ(response.getBody(), page,
 		"a status raised without a handler still gets its page");
 	CHECK_EQ(response.getHeaderValue("Allow"),
-		std::string("DELETE, GET, POST"),
+		std::string("DELETE, GET, HEAD, POST"),
 		"replacing the body keeps the Allow header");
 
 	remove(file.c_str());

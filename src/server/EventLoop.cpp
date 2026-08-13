@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.cpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/13 02:03:20 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -506,6 +506,32 @@ void EventLoop::compactPollFds(void)
 }
 
 /*
+ * Drops a client connection: disarms its poll entry and erases it from
+ * _clients, whose Connection destructor closes the socket fd. The single
+ * place a client is ever removed, called from run() on a failed send/recv,
+ * from closeIdleConnections() on a timeout, and from abortCgi() when a client
+ * disconnects mid-CGI, so the fd and the Connection are always released
+ * together and never by three slightly different sequences.
+ */
+void EventLoop::dropClient(int fd)
+{
+	disablePollFd(fd);
+	_clients.erase(fd);
+}
+
+/*
+ * Drops a CGI pipe fd: disarms its poll entry and forgets which client it
+ * belonged to. The single place a pipe fd is ever removed, called from
+ * handleCgiIo() when a direction finishes and from unregisterCgiPipes() when
+ * a whole CGI is torn down early.
+ */
+void EventLoop::releasePipeFd(int fd)
+{
+	disablePollFd(fd);
+	_pipeToClient.erase(fd);
+}
+
+/*
  * Queues an error response on the client and arms it for sending. Used when a
  * CGI request cannot be started (invalid script or fork failure).
  */
@@ -630,20 +656,14 @@ void EventLoop::handleCgiIo(int fd, short revents)
 		else if (revents & POLLOUT)
 			proc->onWritable();
 		if (!proc->isWriting())
-		{
-			disablePollFd(fd);
-			_pipeToClient.erase(fd);
-		}
+			releasePipeFd(fd);
 	}
 	else
 	{
 		if (revents & (POLLIN | POLLHUP | POLLERR))
 			proc->onReadable();
 		if (!proc->isReading())
-		{
-			disablePollFd(fd);
-			_pipeToClient.erase(fd);
-		}
+			releasePipeFd(fd);
 	}
 	if (proc->finished())
 		finishCgi(clientFd, proc);
@@ -672,8 +692,7 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 	else
 		conn.set_write_buffer(buildError(conn, builder, 502));
 	setPollEvents(clientFd, POLLOUT);
-	_cgi.erase(clientFd);
-	delete proc;
+	releaseCgi(clientFd);
 	Logger::info("CGI finished, response queued.");
 }
 
@@ -682,48 +701,57 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
  */
 void EventLoop::unregisterCgiPipes(int clientFd)
 {
-	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); )
+	std::vector<int>	fds;
+
+	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); ++it)
 	{
 		if (it->second == clientFd)
-		{
-			disablePollFd(it->first);
-			_pipeToClient.erase(it++);
-		}
-		else
-			++it;
+			fds.push_back(it->first);
 	}
+	for (size_t i = 0; i < fds.size(); ++i)
+		releasePipeFd(fds[i]);
 }
 
 /*
- * Tears down a CGI whose client disconnected mid-execution: unregisters its
- * pipe fds, kills and reaps the child, and drops the client connection.
+ * Releases everything a CGI in flight for clientFd owns: its pipe fds (through
+ * unregisterCgiPipes, safe to call whether or not any are still registered)
+ * and the CgiProcess itself, whose destructor kills and reaps the child if it
+ * is still running. The single place a CGI is ever released, called when it
+ * finishes normally, when its client disconnects mid-execution, and when it
+ * times out, so the pipes and the child are always released together instead
+ * of by three copies of the same three lines.
  */
-void EventLoop::abortCgi(int clientFd)
+void EventLoop::releaseCgi(int clientFd)
 {
 	CgiProcess	*proc = _cgi[clientFd];
 
 	unregisterCgiPipes(clientFd);
 	_cgi.erase(clientFd);
 	delete proc;
-	disablePollFd(clientFd);
-	_clients.erase(clientFd);
+}
+
+/*
+ * Tears down a CGI whose client disconnected mid-execution: releases the CGI
+ * (pipes and child) and drops the client connection.
+ */
+void EventLoop::abortCgi(int clientFd)
+{
+	releaseCgi(clientFd);
+	dropClient(clientFd);
 	Logger::info("Client disconnected during CGI, process terminated.");
 }
 
 /*
- * Kills a CGI that ran past its deadline: unregisters its pipe fds, reaps the
- * child (through the CgiProcess destructor), queues a 504 Gateway Timeout, and
+ * Kills a CGI that ran past its deadline: releases the CGI (pipes and child,
+ * reaped through the CgiProcess destructor), queues a 504 Gateway Timeout, and
  * arms the client for sending.
  */
 void EventLoop::timeoutCgi(int clientFd)
 {
 	Connection		&conn = _clients[clientFd];
-	CgiProcess		*proc = _cgi[clientFd];
 	ResponseBuilder	builder;
 
-	unregisterCgiPipes(clientFd);
-	_cgi.erase(clientFd);
-	delete proc;
+	releaseCgi(clientFd);
 	builder.setKeepAlive(conn.get_keep_alive());
 	conn.set_write_buffer(buildError(conn, builder, 504));
 	setPollEvents(clientFd, POLLOUT);
@@ -770,8 +798,7 @@ void EventLoop::closeIdleConnections(void)
 	}
 	for (size_t i = 0; i < expired.size(); ++i)
 	{
-		disablePollFd(expired[i]);
-		_clients.erase(expired[i]);
+		dropClient(expired[i]);
 		Logger::info("Idle connection closed.");
 	}
 }
@@ -862,17 +889,9 @@ void EventLoop::run(void)
 				continue;
 			}
 			if ((revents & POLLOUT) && handleSend(fd) == false)
-			{
-				_clients.erase(fd);
-				_fds.erase(_fds.begin() + i);
-				i--;
-			}
+				dropClient(fd);
 			else if ((revents & POLLIN) && handleClient(fd) == false)
-			{
-				_clients.erase(fd);
-				_fds.erase(_fds.begin() + i);
-				i--;
-			}
+				dropClient(fd);
 		}
 		checkCgiTimeouts();
 		closeIdleConnections();

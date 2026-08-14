@@ -49,13 +49,32 @@ static long nowMs(void)
 	return (static_cast<long>(std::time(NULL)) * 1000);
 }
 
-EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT)
+EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT),
+	_idleTimeout(IDLE_TIMEOUT_S)
 {
 }
 
 EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
-	: _configs(configs), _router(DEFAULT_ROOT)
+	: _configs(configs), _router(DEFAULT_ROOT), _idleTimeout(IDLE_TIMEOUT_S)
 {
+}
+
+/*
+ * Sets how long a connection may stay silent before it is closed. Exists so
+ * the timeout can be driven down to something a test can wait for; the server
+ * itself runs with IDLE_TIMEOUT_S. A value of zero or less is refused, since
+ * it would close every connection on the turn of the loop that accepted it.
+ */
+void EventLoop::setIdleTimeout(double seconds)
+{
+	if (seconds <= 0.0)
+		return ;
+	_idleTimeout = seconds;
+}
+
+double EventLoop::getIdleTimeout(void) const
+{
+	return (_idleTimeout);
 }
 
 EventLoop::~EventLoop(void)
@@ -824,12 +843,39 @@ void EventLoop::checkCgiTimeouts(void)
 }
 
 /*
- * Closes every connection that has been silent for longer than the idle
+ * Answers a client that stopped halfway through a request with 408 and arms it
+ * for sending. The connection is marked as closing: what arrived is not a
+ * request the server can serve, and the bytes that never came would have said
+ * where the next one begins, so the stream cannot be picked up again.
+ */
+void EventLoop::timeoutClient(int fd)
+{
+	Connection		&conn = _clients[fd];
+	ResponseBuilder	builder;
+
+	conn.set_keep_alive(false);
+	conn.set_write_buffer(buildError(conn, builder, 408));
+	conn.mark_timed_out();
+	setPollEvents(fd, POLLOUT);
+	Logger::info("Client timed out mid-request, 408 queued.");
+}
+
+/*
+ * Sweeps the connections that have been silent for longer than the idle
  * timeout. A client that opens a socket and says nothing, or stops halfway
  * through a request header, would otherwise hold its descriptor for as long as
- * the process lives. Connections waiting on a CGI are left alone: they are
- * idle by definition while the child runs, and the CGI deadline already bounds
- * them.
+ * the process lives.
+ *
+ * One that stalled with a request in flight is told why it is being dropped,
+ * because there is a request on the wire that will never be answered
+ * otherwise; the response is queued here and the connection closes once it has
+ * left, or on the next expiry if the peer never reads it. One that is merely
+ * waiting between requests, or that never spoke at all, is closed without a
+ * word: there is nothing to answer, and a kept-alive connection running out is
+ * the ordinary end of its life rather than an error.
+ *
+ * Connections waiting on a CGI are left alone: they are idle by definition
+ * while the child runs, and the CGI deadline already bounds them.
  */
 void EventLoop::closeIdleConnections(void)
 {
@@ -840,11 +886,18 @@ void EventLoop::closeIdleConnections(void)
 	{
 		if (_cgi.count(it->first))
 			continue;
-		if (it->second.last_activity() >= IDLE_TIMEOUT_S)
+		if (it->second.is_idle(_idleTimeout))
 			expired.push_back(it->first);
 	}
 	for (size_t i = 0; i < expired.size(); ++i)
 	{
+		Connection	&conn = _clients[expired[i]];
+
+		if (!conn.timed_out() && conn.has_partial_request())
+		{
+			timeoutClient(expired[i]);
+			continue;
+		}
 		dropClient(expired[i]);
 		Logger::info("Idle connection closed.");
 	}

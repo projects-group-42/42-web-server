@@ -38,6 +38,7 @@ class EventLoop
 		SessionStore							_sessions;
 		std::map<int, CgiProcess*>				_cgi;
 		std::map<int, int>						_pipeToClient;
+		double									_idleTimeout;
 
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
@@ -73,6 +74,7 @@ class EventLoop
 		void	unregisterCgiPipes(int clientFd);
 		void	timeoutCgi(int clientFd);
 		void	checkCgiTimeouts(void);
+		void	timeoutClient(int fd);
 		void	closeIdleConnections(void);
 		int		cgiPollTimeout(void);
 		int		pollTimeout(void);
@@ -88,6 +90,8 @@ class EventLoop
 
 		void	setupSockets(void);
 		void	run(void);
+		void	setIdleTimeout(double seconds);
+		double	getIdleTimeout(void) const;
 		static void	setupSignals(void);
 		static void	requestStop(int signal);
 		std::string

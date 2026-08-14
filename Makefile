@@ -181,6 +181,20 @@ ERROR_PAGE_TEST_SRC	= tests/error_page_test.cpp \
 					  src/utils/Utils.cpp
 ERROR_PAGE_TEST_BIN	= test_error_page
 
+NGINX_COMPARE_TEST_SRC	= tests/nginx_compare_test.cpp \
+						  src/handlers/IRequestHandler.cpp \
+						  src/handlers/StaticFileHandler.cpp \
+						  src/server/Router.cpp \
+						  src/http/HttpRequest.cpp \
+						  src/http/HttpResponse.cpp \
+						  src/http/MimeType.cpp \
+						  src/http/MultipartParser.cpp \
+						  src/http/ResponseBuilder.cpp \
+						  src/config/ServerConfig.cpp \
+						  src/utils/Logger.cpp \
+						  src/utils/Utils.cpp
+NGINX_COMPARE_TEST_BIN	= test_nginx_compare
+
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
 DEPFLAGS	= -MMD -MP
@@ -200,7 +214,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN) $(NGINX_COMPARE_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
@@ -216,6 +230,7 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(AUTOINDEX_TEST_BIN)
 	./$(HOST_SELECTION_TEST_BIN)
 	./$(ERROR_PAGE_TEST_BIN)
+	./$(NGINX_COMPARE_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -262,6 +277,9 @@ $(HOST_SELECTION_TEST_BIN): $(HOST_SELECTION_TEST_SRC)
 $(ERROR_PAGE_TEST_BIN): $(ERROR_PAGE_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(NGINX_COMPARE_TEST_BIN): $(NGINX_COMPARE_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -282,6 +300,7 @@ fclean: clean
 	rm -f $(AUTOINDEX_TEST_BIN)
 	rm -f $(HOST_SELECTION_TEST_BIN)
 	rm -f $(ERROR_PAGE_TEST_BIN)
+	rm -f $(NGINX_COMPARE_TEST_BIN)
 
 re: fclean all
 

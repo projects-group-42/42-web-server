@@ -3,7 +3,7 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
 /*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
@@ -57,6 +57,9 @@ class EventLoop
 		void	addPollFd(int fd, short events);
 		void	disablePollFd(int fd);
 		void	compactPollFds(void);
+		void	dropClient(int fd);
+		void	releasePipeFd(int fd);
+		void	releaseCgi(int clientFd);
 		std::string	cgiInterpreterFor(const HttpRequest &request,
 					const ServerConfig &config) const;
 		void	startCgi(int fd, const std::string &interpreter,
@@ -85,6 +88,7 @@ class EventLoop
 		void	run(void);
 		void	setIdleTimeout(double seconds);
 		double	getIdleTimeout(void) const;
+		static void	setupSignals(void);
 		static void	requestStop(int signal);
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;

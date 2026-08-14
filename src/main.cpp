@@ -10,7 +10,6 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <csignal>
 #include <string>
 #include <vector>
 #include "utils/Logger.hpp"
@@ -26,9 +25,7 @@ int main(int argc, char **argv)
 		return (1);
 	}
 
-	signal(SIGPIPE, SIG_IGN);
-	signal(SIGINT, EventLoop::requestStop);
-	signal(SIGTERM, EventLoop::requestStop);
+	EventLoop::setupSignals();
 	try
 	{
 		ConfigLoader				config_file(argc == 2

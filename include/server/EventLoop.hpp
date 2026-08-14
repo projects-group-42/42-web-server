@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/13 02:03:17 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,6 +38,7 @@ class EventLoop
 		SessionStore							_sessions;
 		std::map<int, CgiProcess*>				_cgi;
 		std::map<int, int>						_pipeToClient;
+		double									_idleTimeout;
 
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
@@ -69,6 +70,7 @@ class EventLoop
 		void	unregisterCgiPipes(int clientFd);
 		void	timeoutCgi(int clientFd);
 		void	checkCgiTimeouts(void);
+		void	timeoutClient(int fd);
 		void	closeIdleConnections(void);
 		int		cgiPollTimeout(void);
 		int		pollTimeout(void);
@@ -84,6 +86,8 @@ class EventLoop
 
 		void	setupSockets(void);
 		void	run(void);
+		void	setIdleTimeout(double seconds);
+		double	getIdleTimeout(void) const;
 		static void	setupSignals(void);
 		static void	requestStop(int signal);
 		std::string

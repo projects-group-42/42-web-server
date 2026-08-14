@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:20:37 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 22:41:35 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,6 +28,7 @@ class Connection
 		time_t			_time;
 		RequestParser	_parser;
 		bool			_keep_alive;
+		bool			_timed_out;
 
 	public:
 		Connection(void);
@@ -47,6 +48,10 @@ class Connection
 		bool				get_keep_alive(void) const;
 		void				reset_for_next_request(void);
 		double				last_activity(void) const;
+		bool				is_idle(double timeout) const;
+		bool				has_partial_request(void) const;
+		void				mark_timed_out(void);
+		bool				timed_out(void) const;
 		t_psr_state			get_psr_state(void) const;
 		int					get_error_code(void) const;
 		const HttpRequest&	getRequest(void) const;

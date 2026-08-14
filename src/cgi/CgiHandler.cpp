@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiHandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/08 00:00:00 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/08 00:00:00 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/14 17:56:51 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -170,10 +170,9 @@ bool CgiHandler::isCgiRequest(const std::string &uri) const
 /*
  * Validates the script resolved from the URI and writes the resolved path into
  * scriptPath on success. The path must stay inside the CGI root, the target
- * must exist, be a regular file, and be readable. A missing script is answered
- * 404 rather than forked into the interpreter, which would exit non-zero and
- * turn every mistyped CGI URL into a fork+exec answered 502. Sets the response
- * status code and returns false when the request is refused.
+ * must be a regular file and readable (if it exists). Missing scripts are
+ * handed to the interpreter which will exit non-zero, resulting in a 502.
+ * Sets the response status code and returns false when the request is refused.
  */
 bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 		HttpResponse &response) const
@@ -187,17 +186,14 @@ bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 	}
 
 	struct stat	scriptStat;
-	if (stat(scriptPath.c_str(), &scriptStat) != 0)
+	if (stat(scriptPath.c_str(), &scriptStat) == 0)
 	{
-		response.setStatusCode(404);
-		return (false);
-	}
-	if (!S_ISREG(scriptStat.st_mode))
-	{
-		response.setStatusCode(403);
-		return (false);
-	}
-	if (access(scriptPath.c_str(), R_OK) != 0)
+		if (!S_ISREG(scriptStat.st_mode))
+		{
+			response.setStatusCode(403);
+			return (false);
+		}
+		if (access(scriptPath.c_str(), R_OK) != 0)
 	{
 		response.setStatusCode(403);
 		return (false);

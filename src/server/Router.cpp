@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 20:47:41 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/08 18:08:20 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/10 15:02:40 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -481,8 +481,8 @@ bool	Router::redirects(const std::string &uri,
  */
 static std::string	limitMethod(const std::string &method)
 {
-	if (method == "HEAD")
-		return ("GET");
+	//if (method == "HEAD")
+	//	return ("GET");
 	return (method);
 }
 

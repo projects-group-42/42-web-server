@@ -76,7 +76,9 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 	std::string				script = scriptPath;
 	std::string				scriptFilename;
 	std::string				pathTranslated;
+	std::string				interpreterPath = interpreter;
 	std::string::size_type	slash = scriptPath.find_last_of('/');
+	char					cwd[4096];
 
 	signal(SIGPIPE, SIG_DFL);
 	pipes.closeParentEnds();
@@ -85,6 +87,15 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 	if (dup2(pipes.outputWriteFd(), STDOUT_FILENO) == -1)
 		_exit(1);
 	pipes.closeChildEnds();
+	
+	// Convert interpreter path to absolute before chdir so it remains resolvable
+	if (interpreter[0] != '/')
+	{
+		if (getcwd(cwd, sizeof(cwd)) == NULL)
+			_exit(1);
+		interpreterPath = std::string(cwd) + "/" + interpreter;
+	}
+	
 	if (slash != std::string::npos)
 	{
 		if (chdir(scriptPath.substr(0, slash).c_str()) == -1)
@@ -92,10 +103,10 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 		script = scriptPath.substr(slash + 1);
 		rebaseScriptEnv(envp, script, scriptFilename, pathTranslated);
 	}
-	argv[0] = const_cast<char *>(interpreter.c_str());
+	argv[0] = const_cast<char *>(interpreterPath.c_str());
 	argv[1] = const_cast<char *>(script.c_str());
 	argv[2] = NULL;
-	execve(interpreter.c_str(), argv, envp);
+	execve(interpreterPath.c_str(), argv, envp);
 	_exit(1);
 }
 

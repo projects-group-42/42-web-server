@@ -12,7 +12,7 @@
 
 #ifndef EVENTLOOP_HPP
 #define EVENTLOOP_HPP
- 
+
 #include "network/Socket.hpp"
 #include "network/Connection.hpp"
 #include "http/Router.hpp"
@@ -24,7 +24,7 @@
 #include <map>
 #include <string>
 #include <poll.h>
- 
+
 class EventLoop
 {
 	private:
@@ -38,10 +38,10 @@ class EventLoop
 		SessionStore							_sessions;
 		std::map<int, CgiProcess*>				_cgi;
 		std::map<int, int>						_pipeToClient;
- 
+
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
- 
+
 		bool	isEndpointBound(const std::string &host, int port) const;
 		long	maxBodySizeForPort(int port) const;
 		bool	isMasterSocket(int fd) const;
@@ -76,12 +76,12 @@ class EventLoop
 		std::string
 				buildError(const Connection &conn,
 				const ResponseBuilder &builder, int status) const;
- 
+
 	public:
 		EventLoop(void);
 		EventLoop(const std::vector<ServerConfig> &configs);
 		~EventLoop(void);
- 
+
 		void	setupSockets(void);
 		void	run(void);
 		static void	requestStop(int signal);

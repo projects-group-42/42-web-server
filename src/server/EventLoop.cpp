@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/13 02:03:20 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/14 17:20:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,6 +28,7 @@ static const long			CGI_TIMEOUT_MS = 5000;
 static const double			IDLE_TIMEOUT_S = 30.0;
 static const int			MAX_POLL_WAIT_MS = 1000;
 static const int			BACKLOG = 128;
+static const long			SHUTDOWN_DRAIN_MS = 2000;
 
 /*
  * Lowered by requestStop() when a signal asks the server to stop, and read by
@@ -57,19 +58,47 @@ EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
 {
 }
 
-/*
- * Releases everything the loop owns: the listening sockets and any CGI child
- * still running, which the CgiProcess destructor kills and reaps. The clients
- * close themselves through the Connection destructor.
- */
 EventLoop::~EventLoop(void)
 {
-	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin();
-			it != _cgi.end(); ++it)
-		delete it->second;
-	_cgi.clear();
+	cleanup();
+}
+
+/**
+ * @brief Closes every listening socket and forgets the endpoints they held.
+ * Called first on the way out so the server stops accepting while it is still
+ * finishing what it already took, and again from cleanup() for a loop that
+ * never reached the shutdown path. Clearing the vector is what makes the
+ * second call free: an endpoint is only ever closed once.
+ */
+void EventLoop::closeListeners(void)
+{
 	for (size_t i = 0; i < _sckt.size(); i++)
+	{
+		disablePollFd(_sckt[i]->getFd());
 		delete _sckt[i];
+	}
+	_sckt.clear();
+	_boundEndpoints.clear();
+}
+
+/**
+ * @brief Releases everything the loop owns, through the same helpers the
+ * running server uses.
+ * The CGI children go through releaseCgi, so a child still running is killed
+ * and reaped exactly as it is mid-flight; the clients go through _clients,
+ * whose Connection destructor closes each socket; the listening sockets go
+ * through closeListeners. The destructor is one caller and gracefulShutdown
+ * the other, and running it twice is harmless: every container it empties is
+ * checked before it is walked.
+ */
+void EventLoop::cleanup(void)
+{
+	while (!_cgi.empty())
+		releaseCgi(_cgi.begin()->first);
+	_pipeToClient.clear();
+	_clients.clear();
+	_fds.clear();
+	closeListeners();
 }
 
 /**
@@ -863,6 +892,87 @@ int EventLoop::pollTimeout(void)
 	return (cgi);
 }
 
+/**
+ * @brief Gives the responses already serialised a bounded window to reach
+ * their clients.
+ * Every connection is first marked as closing, which is both the truth and
+ * what keeps the drain from growing new work: handleSend only re-arms a
+ * connection for reading, re-parses what is buffered and answers a pipelined
+ * request when the connection is persistent, and a request answered here could
+ * start a CGI the server is in the middle of shutting down. Marked closed, the
+ * same handleSend writes what is pending and reports the connection finished,
+ * which is exactly the drain.
+ *
+ * Only the connections that still hold bytes are polled, so the window ends as
+ * soon as the last one is written rather than always costing its full length.
+ * A poll that times out, fails, or is cut short by a second signal ends the
+ * drain: whoever is asking twice is asking for the server to stop now, and the
+ * connections still pending are closed by cleanup().
+ */
+void EventLoop::drainPendingWrites(void)
+{
+	std::map<int, Connection>::iterator	it;
+	long								deadline = nowMs() + SHUTDOWN_DRAIN_MS;
+
+	for (it = _clients.begin(); it != _clients.end(); ++it)
+		it->second.set_keep_alive(false);
+	while (true)
+	{
+		std::vector<struct pollfd>	pending;
+		std::vector<int>			finished;
+		long						remaining = deadline - nowMs();
+
+		if (remaining <= 0)
+			return ;
+		for (it = _clients.begin(); it != _clients.end(); ++it)
+		{
+			struct pollfd	pfd;
+
+			if (!it->second.has_data_to_send())
+				continue ;
+			pfd.fd = it->first;
+			pfd.events = POLLOUT;
+			pfd.revents = 0;
+			pending.push_back(pfd);
+		}
+		if (pending.empty())
+			return ;
+		if (poll(&pending[0], pending.size(),
+				static_cast<int>(remaining)) <= 0)
+			return ;
+		for (size_t i = 0; i < pending.size(); ++i)
+		{
+			if (pending[i].revents == 0)
+				continue ;
+			if (handleSend(pending[i].fd) == false)
+				finished.push_back(pending[i].fd);
+		}
+		for (size_t i = 0; i < finished.size(); ++i)
+			dropClient(finished[i]);
+	}
+}
+
+/**
+ * @brief Stops the server without cutting off the work it already accepted.
+ * The listening sockets close first, so nothing new is taken while the rest is
+ * being finished. The CGI children go next: a script has no response to lose,
+ * and leaving one running would only hold the shutdown for as long as it felt
+ * like writing, so each is killed and reaped on the spot and its client is left
+ * with nothing rather than with a half-written body. What is left is the
+ * responses already serialised, which drainPendingWrites has a bounded window
+ * to deliver, and cleanup() then releases whatever that window did not reach.
+ */
+void EventLoop::gracefulShutdown(void)
+{
+	Logger::info("Shutting down, no longer accepting connections.");
+	closeListeners();
+	while (!_cgi.empty())
+		releaseCgi(_cgi.begin()->first);
+	drainPendingWrites();
+	cleanup();
+	Logger::info("Server stopped.");
+}
+
 void EventLoop::run(void)
 {
 	if (_sckt.empty())
@@ -916,6 +1026,7 @@ void EventLoop::run(void)
 		_sessions.sweep();
 		compactPollFds();
 	}
+	gracefulShutdown();
 }
 
 /*

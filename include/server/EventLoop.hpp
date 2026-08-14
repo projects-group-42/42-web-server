@@ -6,7 +6,7 @@
 /*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/13 02:03:17 by dajesus-         ###   ########.fr       */
+/*   Updated: 2026/08/14 17:20:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,6 +59,10 @@ class EventLoop
 		void	dropClient(int fd);
 		void	releasePipeFd(int fd);
 		void	releaseCgi(int clientFd);
+		void	closeListeners(void);
+		void	drainPendingWrites(void);
+		void	gracefulShutdown(void);
+		void	cleanup(void);
 		std::string	cgiInterpreterFor(const HttpRequest &request,
 					const ServerConfig &config) const;
 		void	startCgi(int fd, const std::string &interpreter,

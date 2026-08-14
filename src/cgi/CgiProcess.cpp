@@ -57,11 +57,18 @@ static void rebaseScriptEnv(char **envp, const std::string &script,
 }
 
 /*
- * Runs in the child after fork: redirects the pipe ends onto stdin/stdout,
- * closes the leftover pipe fds, moves into the directory holding the script so
- * it can reach its own files by relative path, then execve's the interpreter
- * with the script name as argv[1] and the prepared CGI environment. Never
- * returns; _exit is called if any step fails.
+ * Runs in the child after fork: puts SIGPIPE back to its default, redirects the
+ * pipe ends onto stdin/stdout, closes the leftover pipe fds, moves into the
+ * directory holding the script so it can reach its own files by relative path,
+ * then execve's the interpreter with the script name as argv[1] and the
+ * prepared CGI environment. Never returns; _exit is called if any step fails.
+ *
+ * The default has to be restored because an ignored signal stays ignored
+ * through execve: the child would otherwise run the script under the server's
+ * own disposition, and a script still writing after the server has closed its
+ * output pipe would see write() fail over and over instead of dying, spinning
+ * until the CGI deadline kills it. A script runs with the dispositions any
+ * other program is started with.
  */
 static void runChild(CgiPipes &pipes, const std::string &interpreter, const std::string &scriptPath, char **envp)
 {
@@ -71,6 +78,7 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 	std::string				pathTranslated;
 	std::string::size_type	slash = scriptPath.find_last_of('/');
 
+	signal(SIGPIPE, SIG_DFL);
 	pipes.closeParentEnds();
 	if (dup2(pipes.bodyReadFd(), STDIN_FILENO) == -1)
 		_exit(1);

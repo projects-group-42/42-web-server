@@ -72,6 +72,24 @@ EventLoop::~EventLoop(void)
 		delete _sckt[i];
 }
 
+/**
+ * @brief Installs the signal dispositions the server runs under.
+ * SIGPIPE is ignored, so writing to a connection whose peer is already gone
+ * fails with -1 out of send() instead of killing the process on the spot: a
+ * client that closes abruptly is then just a write that made no progress, which
+ * handleSend answers by dropping that one client while the server keeps
+ * serving. A killed process is otherwise the default answer to that write, and
+ * one client hanging up would take every other connection down with it.
+ * SIGINT and SIGTERM are routed to requestStop so a stop is asked for rather
+ * than taken, and the loop unwinds through its destructors.
+ */
+void EventLoop::setupSignals(void)
+{
+	signal(SIGPIPE, SIG_IGN);
+	signal(SIGINT, EventLoop::requestStop);
+	signal(SIGTERM, EventLoop::requestStop);
+}
+
 /*
  * Signal handler asking the loop to stop. It only lowers a flag: run() sees it
  * between two turns and returns, so the destructors do the freeing outside of

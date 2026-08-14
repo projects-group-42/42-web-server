@@ -18,6 +18,7 @@ test_autoindex
 test_host_selection
 test_error_page
 test_sigpipe
+test_shutdown
 tests/tmp_router/
 # build artifacts
 obj/

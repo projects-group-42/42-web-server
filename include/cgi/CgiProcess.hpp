@@ -41,6 +41,7 @@ class CgiProcess
 		bool		_writing;
 		bool		_reading;
 		bool		_reaped;
+		bool		_overflow;
 		long		_deadlineMs;
 
 		CgiProcess(const CgiProcess &copy);
@@ -63,6 +64,7 @@ class CgiProcess
 		bool				isReading(void) const;
 		bool				isWriting(void) const;
 		bool				finished(void) const;
+		bool				outputOverflowed(void) const;
 		int					clientFd(void) const;
 		int					outputReadFd(void) const;
 		int					bodyWriteFd(void) const;

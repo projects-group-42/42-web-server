@@ -31,6 +31,16 @@ static bool setNonBlocking(int fd)
 }
 
 /*
+ * Caps how much stdout a single CGI run may accumulate before it is treated as
+ * misbehaving and killed. Without a cap, a script that keeps producing output
+ * forever would keep pushing its own inactivity deadline back (every chunk
+ * read counts as progress) while _output grows without bound, eventually
+ * failing an allocation and taking the whole server down with it. 10MB is
+ * generous for any well-behaved script's response.
+ */
+static const size_t CGI_OUTPUT_LIMIT = 10 * 1024 * 1024;
+
+/*
  * Anchors a path to the current working directory when it is relative, and
  * returns it unchanged when it is already absolute. The child chdir()s into the
  * directory holding the script before exec'ing, so an interpreter written
@@ -122,7 +132,8 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 
 CgiProcess::CgiProcess(int clientFd, const std::string &body)
 	: _pid(-1), _clientFd(clientFd), _body(body), _sent(0),
-	  _writing(false), _reading(false), _reaped(true), _deadlineMs(0)
+	  _writing(false), _reading(false), _reaped(true), _overflow(false),
+	  _deadlineMs(0)
 {
 }
 
@@ -194,6 +205,12 @@ bool CgiProcess::start(const std::string &interpreter, const std::string &script
  * value of read() alone decides: only a positive count carries data, while 0
  * (the child closed its stdout) and -1 (an error on a pipe poll() had reported
  * as readable) both close the output pipe and end the reading direction.
+ *
+ * A script that keeps writing past CGI_OUTPUT_LIMIT is cut off here rather
+ * than kept reading: the accumulated output is dropped immediately (it will
+ * never be served, so there is no reason to keep holding it), the read end is
+ * closed, and the overflow flag tells the event loop to kill the child rather
+ * than wait for it to finish on its own.
  */
 void CgiProcess::onReadable(void)
 {
@@ -203,6 +220,13 @@ void CgiProcess::onReadable(void)
 	if (bytes > 0)
 	{
 		_output.append(buffer, static_cast<size_t>(bytes));
+		if (_output.size() > CGI_OUTPUT_LIMIT)
+		{
+			std::string().swap(_output);
+			_overflow = true;
+			_pipes.closeOutputRead();
+			_reading = false;
+		}
 		return ;
 	}
 	_pipes.closeOutputRead();
@@ -311,6 +335,11 @@ bool CgiProcess::isWriting(void) const
 bool CgiProcess::finished(void) const
 {
 	return (!_reading && !_writing);
+}
+
+bool CgiProcess::outputOverflowed(void) const
+{
+	return (_overflow);
 }
 
 int CgiProcess::clientFd(void) const

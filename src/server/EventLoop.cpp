@@ -738,8 +738,34 @@ void EventLoop::handleCgiIo(int fd, short revents)
 		if (!proc->isReading())
 			releasePipeFd(fd);
 	}
+	if (proc->outputOverflowed())
+	{
+		finishCgiOverflow(clientFd);
+		return ;
+	}
 	if (proc->finished())
 		finishCgi(clientFd, proc);
+}
+
+/*
+ * Kills a CGI whose stdout grew past CGI_OUTPUT_LIMIT: it stopped being
+ * trusted the moment it crossed the cap, so it is killed outright through
+ * releaseCgi (SIGKILL, then reaped) instead of waiting for it to close its
+ * own pipes, and the client gets a 502 instead of the server risking an
+ * unbounded allocation. Checked before finished() in handleCgiIo() because an
+ * overflow leaves both directions closed on our side, which finished() alone
+ * cannot tell apart from a normal, well-behaved completion.
+ */
+void EventLoop::finishCgiOverflow(int clientFd)
+{
+	Connection		&conn = _clients[clientFd];
+	ResponseBuilder	builder;
+
+	releaseCgi(clientFd);
+	builder.setKeepAlive(conn.get_keep_alive());
+	conn.set_write_buffer(buildError(conn, builder, 502));
+	setPollEvents(clientFd, POLLOUT);
+	Logger::warning("CGI output exceeded the size limit, process killed and 502 queued.");
 }
 
 /*

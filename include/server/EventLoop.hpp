@@ -70,6 +70,7 @@ class EventLoop
 					const ServerConfig &config);
 		void	handleCgiIo(int fd, short revents);
 		void	finishCgi(int clientFd, CgiProcess *proc);
+		void	finishCgiOverflow(int clientFd);
 		void	abortCgi(int clientFd);
 		void	unregisterCgiPipes(int clientFd);
 		void	timeoutCgi(int clientFd);

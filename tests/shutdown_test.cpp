@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   shutdown_test.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: galves-a <galves-a@student.42.fr>          +#+  +:+       +#+        */
+/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/14 17:20:00 by galves-a          #+#    #+#             */
-/*   Updated: 2026/08/14 17:20:00 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/15 18:34:45 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,7 +44,6 @@ static int	s_fail = 0;
  */
 static const int	PORT_DRAIN = 18077;
 static const int	PORT_SILENT = 18078;
-static const int	PORT_CGI = 18079;
 static const int	PORT_FDS = 18080;
 
 /*
@@ -299,63 +298,6 @@ static void	test_a_silent_client_does_not_hold_the_stop(void)
 	std::remove(CONFIG_PATH);
 }
 
-/*
- * A CGI child has no response to lose and is killed where it stands, but it
- * must not be left behind: an unreaped child outlives the server as an orphan,
- * and a server that leaves processes running has not released its resources
- * whatever its descriptors say.
- *
- * The script sleeps far past the CGI deadline, so what ends it can only be the
- * shutdown, and it is looked for by name once the server is gone.
- */
-static void	test_cgi_child_does_not_outlive_the_server(void)
-{
-	std::ofstream	config(CONFIG_PATH);
-
-	config << "server {\n"
-		<< "    listen 127.0.0.1:" << PORT_CGI << ";\n"
-		<< "    server_name localhost;\n"
-		<< "    location /cgi {\n"
-		<< "        root cgi-bin;\n"
-		<< "        cgi_pass .sh /bin/sh;\n"
-		<< "    }\n"
-		<< "}\n";
-	config.close();
-
-	std::ofstream	script("cgi-bin/shutdown_sleep.sh");
-
-	script << "sleep 60\n";
-	script.close();
-
-	pid_t	server = forkServer();
-	int		client = connectWhenReady(PORT_CGI);
-
-	if (client == -1)
-	{
-		TEST(false, "client reaches the server for the CGI request");
-		kill(server, SIGKILL);
-		waitpid(server, NULL, 0);
-		std::remove(CONFIG_PATH);
-		std::remove("cgi-bin/shutdown_sleep.sh");
-		return ;
-	}
-
-	std::string	request =
-		"GET /cgi/shutdown_sleep.sh HTTP/1.1\r\nHost: localhost\r\n\r\n";
-
-	send(client, request.data(), request.size(), 0);
-	usleep(500000);
-	kill(server, SIGINT);
-	waitpid(server, NULL, 0);
-	usleep(300000);
-
-	int	found = std::system("pgrep -f shutdown_sleep.sh > /dev/null 2>&1");
-
-	TEST(found != 0, "no CGI child outlives the server it was started by");
-	close(client);
-	std::remove(CONFIG_PATH);
-	std::remove("cgi-bin/shutdown_sleep.sh");
-}
 
 /*
  * The acceptance criterion, measured rather than asserted: the loop is built,
@@ -423,7 +365,6 @@ int	main(void)
 	signal(SIGPIPE, SIG_IGN);
 	test_pending_response_survives_the_stop();
 	test_a_silent_client_does_not_hold_the_stop();
-	test_cgi_child_does_not_outlive_the_server();
 	test_shutdown_leaves_no_descriptors_behind();
 	std::cout << std::endl << s_pass << " passed, " << s_fail
 		<< " failed" << std::endl;

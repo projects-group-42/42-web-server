@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 16:24:41 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -179,6 +179,17 @@ bool RequestParser::parseContentLength(void)
 t_psr_state RequestParser::get_psr_state(void) const
 {
 	return (_psr_state);
+}
+
+/*
+ * Reports whether bytes are still waiting to be understood. A parser that has
+ * not left REQUEST_LINE holds bytes here only while the request line arrived
+ * split, which is what tells a connection stalled halfway through a request
+ * apart from one that has simply said nothing yet.
+ */
+bool RequestParser::hasBufferedData(void) const
+{
+	return (!_buffer.empty());
 }
 
 const HttpRequest& RequestParser::getRequest(void) const

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.cpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:05:52 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/07 01:29:29 by galves-a         ###   ########.fr       */
+/*   Updated: 2026/08/14 17:20:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,6 +28,7 @@ static const long			CGI_TIMEOUT_MS = 5000;
 static const double			IDLE_TIMEOUT_S = 30.0;
 static const int			MAX_POLL_WAIT_MS = 1000;
 static const int			BACKLOG = 128;
+static const long			SHUTDOWN_DRAIN_MS = 2000;
 
 /*
  * Lowered by requestStop() when a signal asks the server to stop, and read by
@@ -48,28 +49,75 @@ static long nowMs(void)
 	return (static_cast<long>(std::time(NULL)) * 1000);
 }
 
-EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT)
+EventLoop::EventLoop(void) : _configs(), _router(DEFAULT_ROOT),
+	_idleTimeout(IDLE_TIMEOUT_S)
 {
 }
 
 EventLoop::EventLoop(const std::vector<ServerConfig> &configs)
-	: _configs(configs), _router(DEFAULT_ROOT)
+	: _configs(configs), _router(DEFAULT_ROOT), _idleTimeout(IDLE_TIMEOUT_S)
 {
 }
 
 /*
- * Releases everything the loop owns: the listening sockets and any CGI child
- * still running, which the CgiProcess destructor kills and reaps. The clients
- * close themselves through the Connection destructor.
+ * Sets how long a connection may stay silent before it is closed. Exists so
+ * the timeout can be driven down to something a test can wait for; the server
+ * itself runs with IDLE_TIMEOUT_S. A value of zero or less is refused, since
+ * it would close every connection on the turn of the loop that accepted it.
  */
+void EventLoop::setIdleTimeout(double seconds)
+{
+	if (seconds <= 0.0)
+		return ;
+	_idleTimeout = seconds;
+}
+
+double EventLoop::getIdleTimeout(void) const
+{
+	return (_idleTimeout);
+}
+
 EventLoop::~EventLoop(void)
 {
-	for (std::map<int, CgiProcess*>::iterator it = _cgi.begin();
-			it != _cgi.end(); ++it)
-		delete it->second;
-	_cgi.clear();
+	cleanup();
+}
+
+/**
+ * @brief Closes every listening socket and forgets the endpoints they held.
+ * Called first on the way out so the server stops accepting while it is still
+ * finishing what it already took, and again from cleanup() for a loop that
+ * never reached the shutdown path. Clearing the vector is what makes the
+ * second call free: an endpoint is only ever closed once.
+ */
+void EventLoop::closeListeners(void)
+{
 	for (size_t i = 0; i < _sckt.size(); i++)
+	{
+		disablePollFd(_sckt[i]->getFd());
 		delete _sckt[i];
+	}
+	_sckt.clear();
+	_boundEndpoints.clear();
+}
+
+/**
+ * @brief Releases everything the loop owns, through the same helpers the
+ * running server uses.
+ * The CGI children go through releaseCgi, so a child still running is killed
+ * and reaped exactly as it is mid-flight; the clients go through _clients,
+ * whose Connection destructor closes each socket; the listening sockets go
+ * through closeListeners. The destructor is one caller and gracefulShutdown
+ * the other, and running it twice is harmless: every container it empties is
+ * checked before it is walked.
+ */
+void EventLoop::cleanup(void)
+{
+	while (!_cgi.empty())
+		releaseCgi(_cgi.begin()->first);
+	_pipeToClient.clear();
+	_clients.clear();
+	_fds.clear();
+	closeListeners();
 }
 
 /**
@@ -524,6 +572,32 @@ void EventLoop::compactPollFds(void)
 }
 
 /*
+ * Drops a client connection: disarms its poll entry and erases it from
+ * _clients, whose Connection destructor closes the socket fd. The single
+ * place a client is ever removed, called from run() on a failed send/recv,
+ * from closeIdleConnections() on a timeout, and from abortCgi() when a client
+ * disconnects mid-CGI, so the fd and the Connection are always released
+ * together and never by three slightly different sequences.
+ */
+void EventLoop::dropClient(int fd)
+{
+	disablePollFd(fd);
+	_clients.erase(fd);
+}
+
+/*
+ * Drops a CGI pipe fd: disarms its poll entry and forgets which client it
+ * belonged to. The single place a pipe fd is ever removed, called from
+ * handleCgiIo() when a direction finishes and from unregisterCgiPipes() when
+ * a whole CGI is torn down early.
+ */
+void EventLoop::releasePipeFd(int fd)
+{
+	disablePollFd(fd);
+	_pipeToClient.erase(fd);
+}
+
+/*
  * Queues an error response on the client and arms it for sending. Used when a
  * CGI request cannot be started (invalid script or fork failure).
  */
@@ -648,20 +722,14 @@ void EventLoop::handleCgiIo(int fd, short revents)
 		else if (revents & POLLOUT)
 			proc->onWritable();
 		if (!proc->isWriting())
-		{
-			disablePollFd(fd);
-			_pipeToClient.erase(fd);
-		}
+			releasePipeFd(fd);
 	}
 	else
 	{
 		if (revents & (POLLIN | POLLHUP | POLLERR))
 			proc->onReadable();
 		if (!proc->isReading())
-		{
-			disablePollFd(fd);
-			_pipeToClient.erase(fd);
-		}
+			releasePipeFd(fd);
 	}
 	if (proc->finished())
 		finishCgi(clientFd, proc);
@@ -690,8 +758,7 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 	else
 		conn.set_write_buffer(buildError(conn, builder, 502));
 	setPollEvents(clientFd, POLLOUT);
-	_cgi.erase(clientFd);
-	delete proc;
+	releaseCgi(clientFd);
 	Logger::info("CGI finished, response queued.");
 }
 
@@ -700,48 +767,57 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
  */
 void EventLoop::unregisterCgiPipes(int clientFd)
 {
-	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); )
+	std::vector<int>	fds;
+
+	for (std::map<int, int>::iterator it = _pipeToClient.begin(); it != _pipeToClient.end(); ++it)
 	{
 		if (it->second == clientFd)
-		{
-			disablePollFd(it->first);
-			_pipeToClient.erase(it++);
-		}
-		else
-			++it;
+			fds.push_back(it->first);
 	}
+	for (size_t i = 0; i < fds.size(); ++i)
+		releasePipeFd(fds[i]);
 }
 
 /*
- * Tears down a CGI whose client disconnected mid-execution: unregisters its
- * pipe fds, kills and reaps the child, and drops the client connection.
+ * Releases everything a CGI in flight for clientFd owns: its pipe fds (through
+ * unregisterCgiPipes, safe to call whether or not any are still registered)
+ * and the CgiProcess itself, whose destructor kills and reaps the child if it
+ * is still running. The single place a CGI is ever released, called when it
+ * finishes normally, when its client disconnects mid-execution, and when it
+ * times out, so the pipes and the child are always released together instead
+ * of by three copies of the same three lines.
  */
-void EventLoop::abortCgi(int clientFd)
+void EventLoop::releaseCgi(int clientFd)
 {
 	CgiProcess	*proc = _cgi[clientFd];
 
 	unregisterCgiPipes(clientFd);
 	_cgi.erase(clientFd);
 	delete proc;
-	disablePollFd(clientFd);
-	_clients.erase(clientFd);
+}
+
+/*
+ * Tears down a CGI whose client disconnected mid-execution: releases the CGI
+ * (pipes and child) and drops the client connection.
+ */
+void EventLoop::abortCgi(int clientFd)
+{
+	releaseCgi(clientFd);
+	dropClient(clientFd);
 	Logger::info("Client disconnected during CGI, process terminated.");
 }
 
 /*
- * Kills a CGI that ran past its deadline: unregisters its pipe fds, reaps the
- * child (through the CgiProcess destructor), queues a 504 Gateway Timeout, and
+ * Kills a CGI that ran past its deadline: releases the CGI (pipes and child,
+ * reaped through the CgiProcess destructor), queues a 504 Gateway Timeout, and
  * arms the client for sending.
  */
 void EventLoop::timeoutCgi(int clientFd)
 {
 	Connection		&conn = _clients[clientFd];
-	CgiProcess		*proc = _cgi[clientFd];
 	ResponseBuilder	builder;
 
-	unregisterCgiPipes(clientFd);
-	_cgi.erase(clientFd);
-	delete proc;
+	releaseCgi(clientFd);
 	builder.setKeepAlive(conn.get_keep_alive());
 	conn.set_write_buffer(buildError(conn, builder, 504));
 	setPollEvents(clientFd, POLLOUT);
@@ -767,12 +843,39 @@ void EventLoop::checkCgiTimeouts(void)
 }
 
 /*
- * Closes every connection that has been silent for longer than the idle
+ * Answers a client that stopped halfway through a request with 408 and arms it
+ * for sending. The connection is marked as closing: what arrived is not a
+ * request the server can serve, and the bytes that never came would have said
+ * where the next one begins, so the stream cannot be picked up again.
+ */
+void EventLoop::timeoutClient(int fd)
+{
+	Connection		&conn = _clients[fd];
+	ResponseBuilder	builder;
+
+	conn.set_keep_alive(false);
+	conn.set_write_buffer(buildError(conn, builder, 408));
+	conn.mark_timed_out();
+	setPollEvents(fd, POLLOUT);
+	Logger::info("Client timed out mid-request, 408 queued.");
+}
+
+/*
+ * Sweeps the connections that have been silent for longer than the idle
  * timeout. A client that opens a socket and says nothing, or stops halfway
  * through a request header, would otherwise hold its descriptor for as long as
- * the process lives. Connections waiting on a CGI are left alone: they are
- * idle by definition while the child runs, and the CGI deadline already bounds
- * them.
+ * the process lives.
+ *
+ * One that stalled with a request in flight is told why it is being dropped,
+ * because there is a request on the wire that will never be answered
+ * otherwise; the response is queued here and the connection closes once it has
+ * left, or on the next expiry if the peer never reads it. One that is merely
+ * waiting between requests, or that never spoke at all, is closed without a
+ * word: there is nothing to answer, and a kept-alive connection running out is
+ * the ordinary end of its life rather than an error.
+ *
+ * Connections waiting on a CGI are left alone: they are idle by definition
+ * while the child runs, and the CGI deadline already bounds them.
  */
 void EventLoop::closeIdleConnections(void)
 {
@@ -783,13 +886,19 @@ void EventLoop::closeIdleConnections(void)
 	{
 		if (_cgi.count(it->first))
 			continue;
-		if (it->second.last_activity() >= IDLE_TIMEOUT_S)
+		if (it->second.is_idle(_idleTimeout))
 			expired.push_back(it->first);
 	}
 	for (size_t i = 0; i < expired.size(); ++i)
 	{
-		disablePollFd(expired[i]);
-		_clients.erase(expired[i]);
+		Connection	&conn = _clients[expired[i]];
+
+		if (!conn.timed_out() && conn.has_partial_request())
+		{
+			timeoutClient(expired[i]);
+			continue;
+		}
+		dropClient(expired[i]);
 		Logger::info("Idle connection closed.");
 	}
 }
@@ -836,6 +945,87 @@ int EventLoop::pollTimeout(void)
 	return (cgi);
 }
 
+/**
+ * @brief Gives the responses already serialised a bounded window to reach
+ * their clients.
+ * Every connection is first marked as closing, which is both the truth and
+ * what keeps the drain from growing new work: handleSend only re-arms a
+ * connection for reading, re-parses what is buffered and answers a pipelined
+ * request when the connection is persistent, and a request answered here could
+ * start a CGI the server is in the middle of shutting down. Marked closed, the
+ * same handleSend writes what is pending and reports the connection finished,
+ * which is exactly the drain.
+ *
+ * Only the connections that still hold bytes are polled, so the window ends as
+ * soon as the last one is written rather than always costing its full length.
+ * A poll that times out, fails, or is cut short by a second signal ends the
+ * drain: whoever is asking twice is asking for the server to stop now, and the
+ * connections still pending are closed by cleanup().
+ */
+void EventLoop::drainPendingWrites(void)
+{
+	std::map<int, Connection>::iterator	it;
+	long								deadline = nowMs() + SHUTDOWN_DRAIN_MS;
+
+	for (it = _clients.begin(); it != _clients.end(); ++it)
+		it->second.set_keep_alive(false);
+	while (true)
+	{
+		std::vector<struct pollfd>	pending;
+		std::vector<int>			finished;
+		long						remaining = deadline - nowMs();
+
+		if (remaining <= 0)
+			return ;
+		for (it = _clients.begin(); it != _clients.end(); ++it)
+		{
+			struct pollfd	pfd;
+
+			if (!it->second.has_data_to_send())
+				continue ;
+			pfd.fd = it->first;
+			pfd.events = POLLOUT;
+			pfd.revents = 0;
+			pending.push_back(pfd);
+		}
+		if (pending.empty())
+			return ;
+		if (poll(&pending[0], pending.size(),
+				static_cast<int>(remaining)) <= 0)
+			return ;
+		for (size_t i = 0; i < pending.size(); ++i)
+		{
+			if (pending[i].revents == 0)
+				continue ;
+			if (handleSend(pending[i].fd) == false)
+				finished.push_back(pending[i].fd);
+		}
+		for (size_t i = 0; i < finished.size(); ++i)
+			dropClient(finished[i]);
+	}
+}
+
+/**
+ * @brief Stops the server without cutting off the work it already accepted.
+ * The listening sockets close first, so nothing new is taken while the rest is
+ * being finished. The CGI children go next: a script has no response to lose,
+ * and leaving one running would only hold the shutdown for as long as it felt
+ * like writing, so each is killed and reaped on the spot and its client is left
+ * with nothing rather than with a half-written body. What is left is the
+ * responses already serialised, which drainPendingWrites has a bounded window
+ * to deliver, and cleanup() then releases whatever that window did not reach.
+ */
+void EventLoop::gracefulShutdown(void)
+{
+	Logger::info("Shutting down, no longer accepting connections.");
+	closeListeners();
+	while (!_cgi.empty())
+		releaseCgi(_cgi.begin()->first);
+	drainPendingWrites();
+	cleanup();
+	Logger::info("Server stopped.");
+}
+
 void EventLoop::run(void)
 {
 	if (_sckt.empty())
@@ -880,23 +1070,16 @@ void EventLoop::run(void)
 				continue;
 			}
 			if ((revents & POLLOUT) && handleSend(fd) == false)
-			{
-				_clients.erase(fd);
-				_fds.erase(_fds.begin() + i);
-				i--;
-			}
+				dropClient(fd);
 			else if ((revents & POLLIN) && handleClient(fd) == false)
-			{
-				_clients.erase(fd);
-				_fds.erase(_fds.begin() + i);
-				i--;
-			}
+				dropClient(fd);
 		}
 		checkCgiTimeouts();
 		closeIdleConnections();
 		_sessions.sweep();
 		compactPollFds();
 	}
+	gracefulShutdown();
 }
 
 /*

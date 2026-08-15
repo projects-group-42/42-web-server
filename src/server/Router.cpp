@@ -471,22 +471,6 @@ bool	Router::redirects(const std::string &uri,
 }
 
 /**
- * @brief The method a limit_except list is tested against.
- * HEAD is answered by the GET path and differs only by dropping the body, so
- * limit_except is checked as if it were GET; a location allowing GET therefore
- * allows HEAD, the way nginx treats it. Every other method is tested as
- * written.
- * @param method The request method.
- * @return The method to look up in an allowed-methods list.
- */
-static std::string	limitMethod(const std::string &method)
-{
-	if (method == "HEAD")
-		return ("GET");
-	return (method);
-}
-
-/**
  * @brief Tells whether the location matching a request refuses its method.
  * Same reason as redirects(): CGI is dispatched before the router runs, so the
  * caller driving it has to know the method is refused to keep a script from
@@ -500,7 +484,7 @@ bool	Router::refusesMethod(const HttpRequest &request,
 			const ServerConfig &config) const
 {
 	const LocationConfig	*best = matchLocation(request.getUri(), config);
-	std::string				method = limitMethod(request.getMethod());
+	const std::string		&method = request.getMethod();
 
 	if (best == NULL || best->allowedMethods.empty())
 		return (false);
@@ -601,7 +585,7 @@ bool	Router::applyMethodLimit(const HttpRequest &request,
 			HttpResponse &response, const ServerConfig &config) const
 {
 	const LocationConfig	*best = matchLocation(request.getUri(), config);
-	std::string				method = limitMethod(request.getMethod());
+	const std::string		&method = request.getMethod();
 
 	if (best == NULL || best->allowedMethods.empty())
 		return (false);

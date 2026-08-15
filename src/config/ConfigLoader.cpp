@@ -686,6 +686,10 @@ void	ConfigLoader::parseCgiPass(
  * every argument skipped the list would come out empty, and an empty list means
  * "no restriction" to the Router, so a single typo would quietly leave the
  * location open. A method named twice is stored once, so Allow never repeats it.
+ * HEAD is named like any other method rather than being implied by GET, so a
+ * location can be restricted to GET alone; the two are only interchangeable
+ * once a request is being answered, where HEAD runs the GET path and drops the
+ * body.
  * @param methods The destination holding the allowed methods of the location.
  * @param d The limit_except directive taken from the AST.
  * @throw std::runtime_error when the directive carries no method or names one
@@ -700,9 +704,10 @@ void	ConfigLoader::parseLimitExcept(std::vector<std::string> &methods,
 	{
 		const std::string	&method = d.args[i];
 
-		if (method != "GET" && method != "POST" && method != "DELETE")
+		if (method != "GET" && method != "HEAD" && method != "POST"
+			&& method != "DELETE")
 			throw std::runtime_error("limit_except: unsupported method '"
-				+ method + "' (expected GET, POST or DELETE)");
+				+ method + "' (expected GET, HEAD, POST or DELETE)");
 		if (std::find(methods.begin(), methods.end(), method) == methods.end())
 			methods.push_back(method);
 	}

@@ -106,9 +106,9 @@ void EventLoop::closeListeners(void)
  * The CGI children go through releaseCgi, so a child still running is killed
  * and reaped exactly as it is mid-flight; the clients go through _clients,
  * whose Connection destructor closes each socket; the listening sockets go
- * through closeListeners. The destructor is one caller and gracefulShutdown
- * the other, and running it twice is harmless: every container it empties is
- * checked before it is walked.
+ * through closeListeners. The destructor is one caller and run() the other,
+ * once the shutdown drain's deadline passes, and running it twice is
+ * harmless: every container it empties is checked before it is walked.
  */
 void EventLoop::cleanup(void)
 {
@@ -992,88 +992,72 @@ int EventLoop::pollTimeout(void)
 }
 
 /**
- * @brief Gives the responses already serialised a bounded window to reach
- * their clients.
- * Every connection is first marked as closing, which is both the truth and
- * what keeps the drain from growing new work: handleSend only re-arms a
- * connection for reading, re-parses what is buffered and answers a pipelined
- * request when the connection is persistent, and a request answered here could
- * start a CGI the server is in the middle of shutting down. Marked closed, the
- * same handleSend writes what is pending and reports the connection finished,
- * which is exactly the drain.
- *
- * Only the connections that still hold bytes are polled, so the window ends as
- * soon as the last one is written rather than always costing its full length.
- * A poll that times out, fails, or is cut short by a second signal ends the
- * drain: whoever is asking twice is asking for the server to stop now, and the
- * connections still pending are closed by cleanup().
- */
-void EventLoop::drainPendingWrites(void)
-{
-	std::map<int, Connection>::iterator	it;
-	long								deadline = nowMs() + SHUTDOWN_DRAIN_MS;
-
-	for (it = _clients.begin(); it != _clients.end(); ++it)
-		it->second.set_keep_alive(false);
-	while (true)
-	{
-		std::vector<struct pollfd>	pending;
-		std::vector<int>			finished;
-		long						remaining = deadline - nowMs();
-
-		if (remaining <= 0)
-			return ;
-		for (it = _clients.begin(); it != _clients.end(); ++it)
-		{
-			struct pollfd	pfd;
-
-			if (!it->second.has_data_to_send())
-				continue ;
-			pfd.fd = it->first;
-			pfd.events = POLLOUT;
-			pfd.revents = 0;
-			pending.push_back(pfd);
-		}
-		if (pending.empty())
-			return ;
-		if (poll(&pending[0], pending.size(),
-				static_cast<int>(remaining)) <= 0)
-			return ;
-		for (size_t i = 0; i < pending.size(); ++i)
-		{
-			if (pending[i].revents == 0)
-				continue ;
-			if (handleSend(pending[i].fd) == false)
-				finished.push_back(pending[i].fd);
-		}
-		for (size_t i = 0; i < finished.size(); ++i)
-			dropClient(finished[i]);
-	}
-}
-
-/**
- * @brief Stops the server without cutting off the work it already accepted.
+ * @brief Enters the shutdown drain once, the moment g_running goes false.
  * The listening sockets close first, so nothing new is taken while the rest is
  * being finished. The CGI children go next: a script has no response to lose,
  * and leaving one running would only hold the shutdown for as long as it felt
- * like writing, so each is killed and reaped on the spot and its client is left
- * with nothing rather than with a half-written body. What is left is the
- * responses already serialised, which drainPendingWrites has a bounded window
- * to deliver, and cleanup() then releases whatever that window did not reach.
+ * like writing, so each is killed and reaped on the spot and its client is
+ * left with nothing rather than with a half-written body.
+ *
+ * What is left is the responses already serialised. Every connection is
+ * marked closing, which is both the truth and what keeps the drain from
+ * growing new work: handleSend only re-arms a connection for reading and
+ * answers a pipelined request when the connection is persistent, and a
+ * request answered here could start a CGI the server is in the middle of
+ * shutting down. Marked closed, the same handleSend writes what is pending
+ * and reports the connection finished, which run()'s own POLLOUT branch
+ * already treats as "drop the client" - the drain needs no poll() of its
+ * own, only run()'s existing one aimed at a smaller, already-armed _fds: a
+ * connection with nothing left to send is disabled here rather than polled
+ * for more input, and cleanup() closes whatever the drain does not reach.
+ *
+ * Returns the absolute deadline, in milliseconds, the drain must finish by:
+ * now plus the drain window when there is something to flush, or now itself
+ * when there is nothing pending, so run() stops waiting at once instead of
+ * sitting out the full window for no reason.
  */
-void EventLoop::gracefulShutdown(void)
+long EventLoop::beginShutdownDrain(void)
 {
+	std::map<int, Connection>::iterator	it;
+	bool									pending = false;
+
 	Logger::info("Shutting down, no longer accepting connections.");
 	closeListeners();
 	while (!_cgi.empty())
 		releaseCgi(_cgi.begin()->first);
-	drainPendingWrites();
-	cleanup();
-	Logger::info("Server stopped.");
+	for (it = _clients.begin(); it != _clients.end(); ++it)
+	{
+		it->second.set_keep_alive(false);
+		if (it->second.has_data_to_send())
+		{
+			setPollEvents(it->first, POLLOUT);
+			pending = true;
+		}
+		else
+			disablePollFd(it->first);
+	}
+	return (pending ? nowMs() + SHUTDOWN_DRAIN_MS : nowMs());
 }
 
+/**
+ * @brief Serves requests until asked to stop, then drains what is already in
+ * flight through this same loop instead of a second one.
+ * drainDeadline stays 0 while serving normally, which both distinguishes
+ * "not draining yet" from "draining, deadline already passed" and doubles as
+ * the flag that beginShutdownDrain() has not run yet. The instant g_running
+ * goes false the drain begins, once, and every following pass through the
+ * loop polls the same _fds beginShutdownDrain() rearmed for POLLOUT-only,
+ * with the wait clamped to whatever is left of the drain window rather than
+ * the normal pollTimeout(). Nothing about the poll() call or the dispatch
+ * below it changes: listeners and CGI pipes are already disabled by then, so
+ * the existing per-fd branches simply never match during a drain, and the
+ * existing POLLOUT branch (handleSend returning false once a closing
+ * connection has nothing left to send) is the entire drain logic.
+ */
 void EventLoop::run(void)
 {
+	long	drainDeadline = 0;
+
 	if (_sckt.empty())
 		throw std::runtime_error("EventLoop: no sockets initialized");
 	for (size_t i = 0; i < _sckt.size(); i++)
@@ -1084,9 +1068,21 @@ void EventLoop::run(void)
 		s_listening.revents = 0;
 		_fds.push_back(s_listening);
 	}
-	while (g_running)
+	while (true)
 	{
-		int ready = poll(_fds.data(), _fds.size(), pollTimeout());
+		int	waitMs;
+
+		if (!g_running)
+		{
+			if (drainDeadline == 0)
+				drainDeadline = beginShutdownDrain();
+			if (nowMs() >= drainDeadline)
+				break ;
+			waitMs = static_cast<int>(drainDeadline - nowMs());
+		}
+		else
+			waitMs = pollTimeout();
+		int ready = poll(_fds.data(), _fds.size(), waitMs);
 		if (ready == -1)
 		{
 			if (errno == EINTR)
@@ -1125,7 +1121,8 @@ void EventLoop::run(void)
 		_sessions.sweep();
 		compactPollFds();
 	}
-	gracefulShutdown();
+	cleanup();
+	Logger::info("Server stopped.");
 }
 
 /*

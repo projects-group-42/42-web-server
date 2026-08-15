@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   EventLoop.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 19:22:12 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 22:45:30 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/14 17:20:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,6 +38,7 @@ class EventLoop
 		SessionStore							_sessions;
 		std::map<int, CgiProcess*>				_cgi;
 		std::map<int, int>						_pipeToClient;
+		double									_idleTimeout;
 
 		EventLoop(const EventLoop &copy);
 		EventLoop&	operator=(const EventLoop &other);
@@ -56,6 +57,13 @@ class EventLoop
 		void	addPollFd(int fd, short events);
 		void	disablePollFd(int fd);
 		void	compactPollFds(void);
+		void	dropClient(int fd);
+		void	releasePipeFd(int fd);
+		void	releaseCgi(int clientFd);
+		void	closeListeners(void);
+		void	drainPendingWrites(void);
+		void	gracefulShutdown(void);
+		void	cleanup(void);
 		std::string	cgiInterpreterFor(const HttpRequest &request,
 					const ServerConfig &config) const;
 		void	startCgi(int fd, const std::string &interpreter,
@@ -66,6 +74,7 @@ class EventLoop
 		void	unregisterCgiPipes(int clientFd);
 		void	timeoutCgi(int clientFd);
 		void	checkCgiTimeouts(void);
+		void	timeoutClient(int fd);
 		void	closeIdleConnections(void);
 		int		cgiPollTimeout(void);
 		int		pollTimeout(void);
@@ -81,6 +90,9 @@ class EventLoop
 
 		void	setupSockets(void);
 		void	run(void);
+		void	setIdleTimeout(double seconds);
+		double	getIdleTimeout(void) const;
+		static void	setupSignals(void);
 		static void	requestStop(int signal);
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;

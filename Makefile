@@ -163,6 +163,54 @@ HOST_SELECTION_TEST_SRC	= tests/host_selection_test.cpp \
 						  src/utils/Utils.cpp
 HOST_SELECTION_TEST_BIN	= test_host_selection
 
+SIGPIPE_TEST_SRC	= tests/sigpipe_test.cpp \
+					  src/http/SessionStore.cpp \
+					  src/server/EventLoop.cpp \
+					  src/server/Router.cpp \
+					  src/network/Socket.cpp \
+					  src/network/Connection.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/RequestParser.cpp \
+					  src/http/ResponseBuilder.cpp \
+					  src/cgi/CgiHandler.cpp \
+					  src/cgi/CgiPipes.cpp \
+					  src/cgi/CgiProcess.cpp \
+					  src/config/ServerConfig.cpp \
+					  src/utils/Logger.cpp \
+					  src/utils/Utils.cpp
+SIGPIPE_TEST_BIN	= test_sigpipe
+
+SHUTDOWN_TEST_SRC	= tests/shutdown_test.cpp \
+					  src/http/SessionStore.cpp \
+					  src/server/EventLoop.cpp \
+					  src/server/Router.cpp \
+					  src/network/Socket.cpp \
+					  src/network/Connection.cpp \
+					  src/handlers/IRequestHandler.cpp \
+					  src/handlers/StaticFileHandler.cpp \
+					  src/http/HttpRequest.cpp \
+					  src/http/HttpResponse.cpp \
+					  src/http/MimeType.cpp \
+					  src/http/MultipartParser.cpp \
+					  src/http/RequestParser.cpp \
+					  src/http/ResponseBuilder.cpp \
+					  src/cgi/CgiHandler.cpp \
+					  src/cgi/CgiPipes.cpp \
+					  src/cgi/CgiProcess.cpp \
+					  src/config/Lexer.cpp \
+					  src/config/ConfigAST.cpp \
+					  src/config/ConfigParser.cpp \
+					  src/config/ConfigLoader.cpp \
+					  src/config/ServerConfig.cpp \
+					  src/utils/Logger.cpp \
+					  src/utils/Utils.cpp
+SHUTDOWN_TEST_BIN	= test_shutdown
+
 ERROR_PAGE_TEST_SRC	= tests/error_page_test.cpp \
 					  src/handlers/IRequestHandler.cpp \
 					  src/handlers/StaticFileHandler.cpp \
@@ -194,6 +242,9 @@ NGINX_COMPARE_TEST_SRC	= tests/nginx_compare_test.cpp \
 						  src/utils/Logger.cpp \
 						  src/utils/Utils.cpp
 NGINX_COMPARE_TEST_BIN	= test_nginx_compare
+TIMEOUT_TEST_SRC	= tests/timeout_test.cpp \
+					  $(filter-out src/main.cpp, $(SRC))
+TIMEOUT_TEST_BIN	= test_timeout
 
 CXX			= c++
 CXXFLAGS	= -std=c++98 -Wall -Wextra -Werror -I include
@@ -214,7 +265,7 @@ $(OBJ_DIR)/%.o : %.cpp
 val: $(NAME)
 	valgrind $(VFLAGS) ./$(NAME)
 
-test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN) $(NGINX_COMPARE_TEST_BIN)
+test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN) $(CONFIG_LOADER_TEST_BIN) $(CGI_TEST_BIN) $(CGI_PROCESS_TEST_BIN) $(CGI_SUITE_TEST_BIN) $(MULTIPART_TEST_BIN) $(UPLOAD_SUITE_TEST_BIN) $(REQUEST_PARSER_TEST_BIN) $(ROUTER_TEST_BIN) $(AUTOINDEX_TEST_BIN) $(HOST_SELECTION_TEST_BIN) $(ERROR_PAGE_TEST_BIN) $(TIMEOUT_TEST_BIN) $(SIGPIPE_TEST_BIN) $(SHUTDOWN_TEST_BIN) $(NGINX_COMPARE_TEST_BIN)
 	./$(TEST_BIN)
 	./$(LEXER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
@@ -231,6 +282,9 @@ test: $(TEST_BIN) $(LEXER_TEST_BIN) $(PARSER_TEST_BIN) $(SERVER_CONFIG_TEST_BIN)
 	./$(HOST_SELECTION_TEST_BIN)
 	./$(ERROR_PAGE_TEST_BIN)
 	./$(NGINX_COMPARE_TEST_BIN)
+	./$(TIMEOUT_TEST_BIN)
+	./$(SIGPIPE_TEST_BIN)
+	./$(SHUTDOWN_TEST_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -280,6 +334,15 @@ $(ERROR_PAGE_TEST_BIN): $(ERROR_PAGE_TEST_SRC)
 $(NGINX_COMPARE_TEST_BIN): $(NGINX_COMPARE_TEST_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(TIMEOUT_TEST_BIN): $(TIMEOUT_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(SIGPIPE_TEST_BIN): $(SIGPIPE_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(SHUTDOWN_TEST_BIN): $(SHUTDOWN_TEST_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 clean:
 	rm -rf $(OBJ_DIR)
 
@@ -301,6 +364,9 @@ fclean: clean
 	rm -f $(HOST_SELECTION_TEST_BIN)
 	rm -f $(ERROR_PAGE_TEST_BIN)
 	rm -f $(NGINX_COMPARE_TEST_BIN)
+	rm -f $(TIMEOUT_TEST_BIN)
+	rm -f $(SIGPIPE_TEST_BIN)
+	rm -f $(SHUTDOWN_TEST_BIN)
 
 re: fclean all
 

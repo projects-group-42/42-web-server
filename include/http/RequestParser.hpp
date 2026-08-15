@@ -72,6 +72,7 @@ class RequestParser
 		bool prs_headers(void);
 		bool prs_body(void);
 		const HttpRequest& getRequest(void) const;
+		void		swapRequestBody(std::string &body);
 		std::string percent_decoding(std::string str);
 		bool prs_chunked_size(void);
 		bool prs_chunked_data(void);

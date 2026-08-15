@@ -48,6 +48,7 @@ class HttpResponse
 		void				setHeaders(const std::string &key, const std::string &value);
 		void				addHeader(const std::string &key, const std::string &value);
 		void				setBody(const std::string &body);
+		void				swapBody(std::string &body);
 };
 
 #endif

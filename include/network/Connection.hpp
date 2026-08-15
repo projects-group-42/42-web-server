@@ -23,6 +23,7 @@ class Connection
 	private:
 		int				_client_fd;
 		std::string		_write_buffer;
+		size_t			_write_sent;
 		std::string		_remote_addr;
 		std::string		_session_id;
 		time_t			_time;
@@ -42,6 +43,8 @@ class Connection
 		ssize_t				send_data(void);
 		bool				has_data_to_send(void) const;
 		void				set_write_buffer(const std::string &data);
+		void				swap_write_buffer(std::string &data);
+		void				swapRequestBody(std::string &body);
 		void				reset_write_buffer(void);
 		void				set_keep_alive(bool keep_alive);
 		void				setMaxBodySize(long maxBodySize);

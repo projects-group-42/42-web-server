@@ -273,14 +273,33 @@ void CgiProcess::stopWriting(void)
 /*
  * Reaps the child once its output is drained and returns its exit status, or
  * -1 when it was already reaped, waitpid failed, or it did not exit normally.
+ *
+ * Called once both pipe directions have finished, which almost always means
+ * the child has already exited: closing its own end of both pipes (whether by
+ * exiting or by explicitly calling close()) is what let onReadable/onWritable
+ * reach that state in the first place, so waitpid is tried first with
+ * WNOHANG rather than assumed to succeed at once. A child that closed its
+ * pipes without exiting is no longer honouring the CGI contract the moment
+ * the server considers the exchange finished, and is killed outright rather
+ * than waited on: a blocking wait() here would otherwise be able to stall the
+ * entire single-threaded event loop, with nothing bounding how long that
+ * child keeps running. SIGKILL cannot be caught or blocked, so the wait that
+ * follows it returns essentially at once.
  */
 int CgiProcess::reap(void)
 {
 	int	status;
+	int	result;
 
 	if (_reaped)
 		return (-1);
-	if (waitpid(_pid, &status, 0) == -1)
+	result = waitpid(_pid, &status, WNOHANG);
+	if (result == 0)
+	{
+		::kill(_pid, SIGKILL);
+		result = waitpid(_pid, &status, 0);
+	}
+	if (result <= 0)
 	{
 		_reaped = true;
 		return (-1);

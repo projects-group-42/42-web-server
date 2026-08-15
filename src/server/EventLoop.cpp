@@ -346,7 +346,8 @@ std::string EventLoop::buildError(const Connection &conn,
 	if (!_configs.empty())
 	{
 		const ServerConfig	&config = getServerConfigForRequest(
-									conn.getLocalPort(), conn.getRequest());
+									conn.getLocalHost(), conn.getLocalPort(),
+									conn.getRequest());
 
 		if (!Router::loadErrorPage(config, config.root, status, body,
 				contentType))
@@ -434,7 +435,8 @@ void EventLoop::handleRequest(int fd)
 	Connection			&conn = _clients[fd];
 	ResponseBuilder		builder;
 	const ServerConfig	&chosenConfig = getServerConfigForRequest(
-								conn.getLocalPort(), conn.getRequest());
+								conn.getLocalHost(), conn.getLocalPort(),
+								conn.getRequest());
 
 	conn.set_keep_alive(wantsKeepAlive(conn.getRequest()));
 	builder.setKeepAlive(conn.get_keep_alive());
@@ -1142,31 +1144,54 @@ std::string EventLoop::cleanHostHeader(const std::string &rawHost) const
 }
 
 /*
- * Picks the server block that serves a request. Only blocks listening on the
- * port the request arrived on are considered; the one declaring the requested
- * Host as a server_name wins, and the first block on that port is the default
- * when no name matches.
+ * Picks the server block that serves a request.
+ *
+ * Blocks are considered in two tiers, matched against the local interface the
+ * connection was actually accepted on rather than the port alone: first the
+ * blocks whose listen directive names that exact address, and only when none
+ * exists the blocks bound to every interface ("0.0.0.0", a bare "listen
+ * <port>;"). A connection accepted on a socket bound to one specific address
+ * (site1's 127.0.0.1:8081 versus site2's 127.0.0.2:8081 in conf/default.conf)
+ * is therefore only ever answered by that address's own blocks, never by a
+ * different interface's block that happens to share the port. Within
+ * whichever tier applies, the one declaring the requested Host as a
+ * server_name wins, and the first block in that tier is the default when no
+ * name matches — this is also how several blocks deliberately sharing one
+ * exact address:port (virtual hosting, e.g. conf/multiplename.conf) have
+ * always been told apart, and that behaviour is unchanged here.
+ *
+ * clientHost empty or matching no block at all (only possible if getsockname()
+ * failed) falls back to every block on the port, ignoring host, so the answer
+ * degrades to the previous port-only behaviour rather than losing the request.
  */
-const ServerConfig &EventLoop::getServerConfigForRequest(int clientPort,
+const ServerConfig &EventLoop::getServerConfigForRequest(
+		const std::string &clientHost, int clientPort,
 		const HttpRequest &request) const
 {
 	std::string			hostHeader = cleanHostHeader(
 							request.getHeaderValue("Host"));
 	const ServerConfig	*defaultServer = NULL;
 
-	for (size_t i = 0; i < _configs.size(); ++i)
+	for (int tier = 0; tier < 3; ++tier)
 	{
-		if (_configs[i].port != clientPort)
-			continue;
-		if (defaultServer == NULL)
-			defaultServer = &_configs[i];
-		for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
+		for (size_t i = 0; i < _configs.size(); ++i)
 		{
-			if (_configs[i].serverNames[j] == hostHeader)
-				return (_configs[i]);
+			if (_configs[i].port != clientPort)
+				continue;
+			if (tier == 0 && _configs[i].host != clientHost)
+				continue;
+			if (tier == 1 && _configs[i].host != "0.0.0.0")
+				continue;
+			if (defaultServer == NULL)
+				defaultServer = &_configs[i];
+			for (size_t j = 0; j < _configs[i].serverNames.size(); ++j)
+			{
+				if (_configs[i].serverNames[j] == hostHeader)
+					return (_configs[i]);
+			}
 		}
+		if (defaultServer != NULL)
+			return (*defaultServer);
 	}
-	if (defaultServer != NULL)
-		return (*defaultServer);
 	return (_configs[0]);
 }

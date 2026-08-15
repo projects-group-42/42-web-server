@@ -98,7 +98,7 @@ class EventLoop
 		std::string
 				cleanHostHeader(const std::string& rawHost) const;
 		const ServerConfig&
-				getServerConfigForRequest(int clientPort,
-				const HttpRequest& request) const;
+				getServerConfigForRequest(const std::string& clientHost,
+				int clientPort, const HttpRequest& request) const;
 };
 #endif

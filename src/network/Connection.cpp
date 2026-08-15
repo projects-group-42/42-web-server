@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <sstream>
 
 Connection::Connection(void) : _client_fd(-1), _write_sent(0), _time(time(NULL)), _parser(), _keep_alive(false), _timed_out(false)
 {
@@ -304,4 +305,29 @@ int Connection::getLocalPort(void) const
 	if (getsockname(_client_fd, (struct sockaddr *)&address, &len) == -1)
 		return (0);
 	return (ntohs(address.sin_port));
+}
+
+/*
+ * Returns the local IPv4 address this connection was accepted on, formatted
+ * as a dotted quad, so the request can be matched against the server block
+ * whose listen directive names this specific interface instead of one bound
+ * to a different address on the same port. Returns an empty string when the
+ * socket cannot be queried. inet_ntoa() is avoided for the same reason
+ * EventLoop's addressToString() avoids it: it is not one of the functions the
+ * subject authorises.
+ */
+std::string Connection::getLocalHost(void) const
+{
+	struct sockaddr_in	address;
+	socklen_t			len = sizeof(address);
+
+	if (getsockname(_client_fd, (struct sockaddr *)&address, &len) == -1)
+		return ("");
+
+	unsigned long		host = ntohl(address.sin_addr.s_addr);
+	std::ostringstream	oss;
+
+	oss << ((host >> 24) & 0xFF) << "." << ((host >> 16) & 0xFF) << "."
+		<< ((host >> 8) & 0xFF) << "." << (host & 0xFF);
+	return (oss.str());
 }

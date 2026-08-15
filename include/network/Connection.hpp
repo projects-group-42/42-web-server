@@ -59,6 +59,7 @@ class Connection
 		int					get_error_code(void) const;
 		const HttpRequest&	getRequest(void) const;
 		int					getLocalPort(void) const;
+		std::string			getLocalHost(void) const;
 		const std::string	&getRemoteAddr(void) const;
 		void				set_session_id(const std::string &id);
 		const std::string	&get_session_id(void) const;

@@ -61,8 +61,7 @@ class EventLoop
 		void	releasePipeFd(int fd);
 		void	releaseCgi(int clientFd);
 		void	closeListeners(void);
-		void	drainPendingWrites(void);
-		void	gracefulShutdown(void);
+		long	beginShutdownDrain(void);
 		void	cleanup(void);
 		std::string	cgiInterpreterFor(const HttpRequest &request,
 					const ServerConfig &config) const;

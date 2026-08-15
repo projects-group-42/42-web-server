@@ -108,3 +108,13 @@ void	HttpResponse::setBody(const std::string &body)
 {
 	_body = body;
 }
+
+/*
+ * Exchanges the body with the caller's string instead of copying it, so a body
+ * a CGI produced is moved into the response rather than held twice while it is
+ * turned into an answer.
+ */
+void	HttpResponse::swapBody(std::string &body)
+{
+	_body.swap(body);
+}

@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/20 17:25:50 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/07/19 15:11:15 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,12 +65,14 @@ class RequestParser
 		void reset(void);
 		void setMaxBodySize(long maxBodySize);
 		t_psr_state	get_psr_state(void) const;
+		bool		hasBufferedData(void) const;
 		int			get_error_code(void) const;
 		std::string str_extract(std::string str_find, int nbr);
 		bool prs_method(void);
 		bool prs_headers(void);
 		bool prs_body(void);
 		const HttpRequest& getRequest(void) const;
+		void		swapRequestBody(std::string &body);
 		std::string percent_decoding(std::string str);
 		bool prs_chunked_size(void);
 		bool prs_chunked_data(void);

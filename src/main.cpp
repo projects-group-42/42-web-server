@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/31 17:46:15 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/14 16:42:57 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/01 22:21:59 by jucoelho         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,6 +24,7 @@ int main(int argc, char **argv)
 		Logger::error("usage: ./webserv [config_file]");
 		return (1);
 	}
+
 	EventLoop::setupSignals();
 	try
 	{

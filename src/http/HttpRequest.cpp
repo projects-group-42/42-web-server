@@ -108,6 +108,18 @@ void	HttpRequest::setBody(const std::string &body)
 	_body += body;
 }
 
+/*
+ * Exchanges the body with the caller's string instead of copying it. A body is
+ * the one part of a request that has no bound: a hundred-megabyte upload copied
+ * at each handoff between the parser, the request and the CGI child is three
+ * hundred megabytes for one client, which is what the CGI stress test runs the
+ * server out of memory on. Handing it over costs a pointer swap.
+ */
+void	HttpRequest::swapBody(std::string &body)
+{
+	_body.swap(body);
+}
+
 bool	HttpRequest::hasHeader(const std::string &key) const
 {
 	return (_headers.find(toLower(key)) != _headers.end());

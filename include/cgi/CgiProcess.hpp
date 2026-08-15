@@ -50,6 +50,8 @@ class CgiProcess
 		CgiProcess(int clientFd, const std::string &body);
 		~CgiProcess(void);
 
+		void				adoptBody(std::string &body);
+		void				swapOutput(std::string &out);
 		bool				start(const std::string &interpreter, const std::string &scriptPath, const std::vector<std::string> &env);
 		void				onReadable(void);
 		void				onWritable(void);

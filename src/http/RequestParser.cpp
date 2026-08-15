@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/11 22:21:02 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/07/19 16:24:41 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -181,6 +181,17 @@ t_psr_state RequestParser::get_psr_state(void) const
 	return (_psr_state);
 }
 
+/*
+ * Reports whether bytes are still waiting to be understood. A parser that has
+ * not left REQUEST_LINE holds bytes here only while the request line arrived
+ * split, which is what tells a connection stalled halfway through a request
+ * apart from one that has simply said nothing yet.
+ */
+bool RequestParser::hasBufferedData(void) const
+{
+	return (!_buffer.empty());
+}
+
 const HttpRequest& RequestParser::getRequest(void) const
 {
 	return (_request);
@@ -318,10 +329,28 @@ bool RequestParser::prs_body(void)
 	}
 	if (_content_length > _buffer.size())
 		return false;
-	_request.setBody(_buffer.substr(0, _content_length));
-	_buffer.erase(0, _content_length);
+	if (_content_length == _buffer.size())
+	{
+		_request.swapBody(_buffer);
+		_buffer.clear();
+	}
+	else
+	{
+		_request.setBody(_buffer.substr(0, _content_length));
+		_buffer.erase(0, _content_length);
+	}
 	_psr_state = COMPLETE;
 	return true;
+}
+
+/*
+ * Hands the body of the parsed request to body without copying it, leaving the
+ * request with an empty one. Only called once the request has been answered as
+ * far as its body is concerned, so nothing reads it afterwards.
+ */
+void RequestParser::swapRequestBody(std::string &body)
+{
+	_request.swapBody(body);
 }
 
 /*

@@ -13,6 +13,7 @@
 #include "cgi/CgiProcess.hpp"
 #include <unistd.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <cstring>
 #include <sys/wait.h>
@@ -27,6 +28,26 @@
 static bool setNonBlocking(int fd)
 {
 	return (fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
+}
+
+/*
+ * Anchors a path to the current working directory when it is relative, and
+ * returns it unchanged when it is already absolute. The child chdir()s into the
+ * directory holding the script before exec'ing, so an interpreter written
+ * relative to the server's working directory ("eval_tests/cgi_tester") no
+ * longer resolves from there: execve() fails, the child exits non-zero, and
+ * every CGI run is answered 502. Resolving it here, in the parent, keeps the
+ * path valid across the chdir.
+ */
+static std::string absolutePath(const std::string &path)
+{
+	char	cwd[PATH_MAX];
+
+	if (!path.empty() && path[0] == '/')
+		return (path);
+	if (getcwd(cwd, sizeof(cwd)) == NULL)
+		return (path);
+	return (std::string(cwd) + "/" + path);
 }
 
 /*
@@ -76,9 +97,7 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 	std::string				script = scriptPath;
 	std::string				scriptFilename;
 	std::string				pathTranslated;
-	std::string				interpreterPath = interpreter;
 	std::string::size_type	slash = scriptPath.find_last_of('/');
-	char					cwd[4096];
 
 	signal(SIGPIPE, SIG_DFL);
 	pipes.closeParentEnds();
@@ -87,15 +106,6 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 	if (dup2(pipes.outputWriteFd(), STDOUT_FILENO) == -1)
 		_exit(1);
 	pipes.closeChildEnds();
-	
-	// Convert interpreter path to absolute before chdir so it remains resolvable
-	if (interpreter[0] != '/')
-	{
-		if (getcwd(cwd, sizeof(cwd)) == NULL)
-			_exit(1);
-		interpreterPath = std::string(cwd) + "/" + interpreter;
-	}
-	
 	if (slash != std::string::npos)
 	{
 		if (chdir(scriptPath.substr(0, slash).c_str()) == -1)
@@ -103,10 +113,10 @@ static void runChild(CgiPipes &pipes, const std::string &interpreter, const std:
 		script = scriptPath.substr(slash + 1);
 		rebaseScriptEnv(envp, script, scriptFilename, pathTranslated);
 	}
-	argv[0] = const_cast<char *>(interpreterPath.c_str());
+	argv[0] = const_cast<char *>(interpreter.c_str());
 	argv[1] = const_cast<char *>(script.c_str());
 	argv[2] = NULL;
-	execve(interpreterPath.c_str(), argv, envp);
+	execve(interpreter.c_str(), argv, envp);
 	_exit(1);
 }
 
@@ -122,6 +132,28 @@ CgiProcess::~CgiProcess(void)
 }
 
 /*
+ * Takes over body as the payload to feed the child, leaving the caller's string
+ * empty. Called instead of copying it in through the constructor when the
+ * caller has no further use for it, so an upload on its way to a script exists
+ * once rather than twice.
+ */
+void CgiProcess::adoptBody(std::string &body)
+{
+	_body.swap(body);
+}
+
+/*
+ * Hands the collected output to out, leaving this process with none. The event
+ * loop turns the output into a response by consuming it, so taking it over here
+ * keeps a large CGI body from being held by the process and the response at the
+ * same time.
+ */
+void CgiProcess::swapOutput(std::string &out)
+{
+	_output.swap(out);
+}
+
+/*
  * Creates the pipes and forks the CGI child. In the parent it closes the child
  * pipe ends, sets the parent ends non-blocking, and marks which directions are
  * still active: reading is always on, writing only when there is a body (an
@@ -131,6 +163,7 @@ CgiProcess::~CgiProcess(void)
 bool CgiProcess::start(const std::string &interpreter, const std::string &scriptPath, const std::vector<std::string> &env)
 {
 	std::vector<char *>	envp;
+	std::string			interpreterPath = absolutePath(interpreter);
 
 	for (size_t i = 0; i < env.size(); ++i)
 		envp.push_back(const_cast<char *>(env[i].c_str()));
@@ -141,7 +174,7 @@ bool CgiProcess::start(const std::string &interpreter, const std::string &script
 	if (_pid == -1)
 		return (false);
 	if (_pid == 0)
-		runChild(_pipes, interpreter, scriptPath, &envp[0]);
+		runChild(_pipes, interpreterPath, scriptPath, &envp[0]);
 	_reaped = false;
 	_pipes.closeChildEnds();
 	setNonBlocking(_pipes.outputReadFd());
@@ -199,11 +232,18 @@ void CgiProcess::onWritable(void)
 /*
  * Closes the child's stdin and stops the writing direction. Called when the
  * body is fully sent or when the child has closed its read end.
+ *
+ * The body is released here rather than at destruction: nothing reads it once
+ * the child's stdin is closed, and holding it until the run ends means a large
+ * upload and the equally large output the script echoes back are both resident
+ * for the rest of the run.
  */
 void CgiProcess::stopWriting(void)
 {
 	_pipes.closeBodyWrite();
 	_writing = false;
+	std::string().swap(_body);
+	_sent = 0;
 }
 
 /*

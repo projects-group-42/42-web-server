@@ -6,7 +6,7 @@
 /*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/05 12:21:14 by jucoelho          #+#    #+#             */
-/*   Updated: 2026/08/01 22:43:48 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/08/10 00:00:00 by galves-a         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,11 +15,11 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
-Connection::Connection(void) : _client_fd(-1), _time(time(NULL)), _parser(), _keep_alive(false)
+Connection::Connection(void) : _client_fd(-1), _write_sent(0), _time(time(NULL)), _parser(), _keep_alive(false), _timed_out(false)
 {
 }
 
-Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL)), _parser(), _keep_alive(false)
+Connection::Connection(int client_fd) : _client_fd(client_fd), _write_sent(0), _time(time(NULL)), _parser(), _keep_alive(false), _timed_out(false)
 {
 }
 
@@ -30,19 +30,21 @@ Connection::Connection(int client_fd) : _client_fd(client_fd), _time(time(NULL))
  * address is only ever read at accept time.
  */
 Connection::Connection(int client_fd, const std::string &remote_addr)
-	: _client_fd(client_fd), _remote_addr(remote_addr), _time(time(NULL)),
-	  _parser(), _keep_alive(false)
+	: _client_fd(client_fd), _write_sent(0), _remote_addr(remote_addr),
+	  _time(time(NULL)), _parser(), _keep_alive(false), _timed_out(false)
 {
 }
 
 Connection::Connection(const Connection &copy)
 	: _client_fd(copy._client_fd),
 	  _write_buffer(copy._write_buffer),
+	  _write_sent(copy._write_sent),
 	  _remote_addr(copy._remote_addr),
 	  _session_id(copy._session_id),
 	  _time(copy._time),
 	  _parser(copy._parser),
-	  _keep_alive(copy._keep_alive)
+	  _keep_alive(copy._keep_alive),
+	  _timed_out(copy._timed_out)
 {
 	const_cast<Connection&>(copy)._client_fd = -1;
 }
@@ -56,11 +58,13 @@ Connection &Connection::operator=(const Connection &other)
 		_client_fd = other._client_fd;
 		const_cast<Connection&>(other)._client_fd = -1;
 		_write_buffer = other._write_buffer;
+		_write_sent = other._write_sent;
 		_remote_addr = other._remote_addr;
 		_session_id = other._session_id;
 		_time = other._time;
 		_parser = other._parser;
 		_keep_alive = other._keep_alive;
+		_timed_out = other._timed_out;
 	}
 	return (*this);
 }
@@ -93,18 +97,26 @@ ssize_t Connection::receive_data(void)
 }
 
 /*
- * Writes one ready chunk of the pending response and drops what left. As in
- * receive_data, the result of send() is returned untouched and errno is never
- * consulted: EventLoop::handleSend decides on the value alone, and anything
- * but a positive count drops the client.
+ * Writes one ready chunk of the pending response. As in receive_data, the
+ * result of send() is returned untouched and errno is never consulted:
+ * EventLoop::handleSend decides on the value alone, and anything but a positive
+ * count drops the client.
+ *
+ * What has gone out is tracked as an offset rather than erased from the front
+ * of the buffer. Erasing shifts everything still pending down by the bytes just
+ * written, which costs a copy of the whole remainder on every send: a response
+ * of a hundred megabytes leaving in socket-sized pieces is quadratic that way,
+ * and the connection spends its time memmoving instead of writing.
  */
 ssize_t Connection::send_data(void)
 {
-	ssize_t	sent = send(_client_fd, _write_buffer.data(),
-						_write_buffer.size(), 0);
+	ssize_t	sent = send(_client_fd, _write_buffer.data() + _write_sent,
+						_write_buffer.size() - _write_sent, 0);
 	if (sent > 0)
 	{
-		_write_buffer.erase(0, sent);
+		_write_sent += static_cast<size_t>(sent);
+		if (_write_sent >= _write_buffer.size())
+			reset_write_buffer();
 		_time = time(NULL);
 	}
 	return (sent);
@@ -112,17 +124,45 @@ ssize_t Connection::send_data(void)
 
 bool	Connection::has_data_to_send(void) const
 {
-	return (!_write_buffer.empty());
+	return (_write_sent < _write_buffer.size());
 }
 
 void	Connection::set_write_buffer(const std::string &data)
 {
 	_write_buffer = data;
+	_write_sent = 0;
 }
 
+/*
+ * Takes over data as the pending response instead of copying it. A response
+ * carrying a large CGI body is built into a string of its own, and copying that
+ * string in doubles the memory the answer costs for as long as it is being
+ * written out.
+ */
+void	Connection::swap_write_buffer(std::string &data)
+{
+	_write_buffer.swap(data);
+	_write_sent = 0;
+}
+
+/*
+ * Hands the body of the request being answered to body without copying it.
+ */
+void	Connection::swapRequestBody(std::string &body)
+{
+	_parser.swapRequestBody(body);
+}
+
+/*
+ * Drops the pending response and gives its memory back. clear() alone would
+ * keep the capacity, so a connection that once answered with a large CGI body
+ * would hold that much for as long as it stays alive, and a kept-alive client
+ * running the same request again pays for both at once.
+ */
 void	Connection::reset_write_buffer(void)
 {
-	_write_buffer.clear();
+	std::string().swap(_write_buffer);
+	_write_sent = 0;
 }
 
 /*
@@ -160,11 +200,57 @@ void	Connection::reset_for_next_request(void)
 {
 	_parser.reset();
 	_time = time(NULL);
+	_timed_out = false;
 }
 
 double Connection::last_activity(void) const
 {
 	return (difftime(time(NULL), _time));
+}
+
+/*
+ * Reports whether the peer has been silent for at least timeout seconds. Both
+ * ends of the comparison come from time(), whose resolution is one second, so
+ * a connection is dropped between timeout and timeout plus one second after
+ * its last byte rather than exactly on the mark.
+ */
+bool Connection::is_idle(double timeout) const
+{
+	return (last_activity() >= timeout);
+}
+
+/*
+ * Reports whether a request is halfway in. A parser that has moved past
+ * REQUEST_LINE has already read part of one, and a parser still on
+ * REQUEST_LINE holds buffered bytes only when the request line itself arrived
+ * split. Neither is true of a connection that has said nothing since it was
+ * accepted, or of one waiting between two requests, and a request that is
+ * COMPLETE or in ERROR is answered by the normal path instead.
+ */
+bool Connection::has_partial_request(void) const
+{
+	t_psr_state	state = _parser.get_psr_state();
+
+	if (state == COMPLETE || state == ERROR)
+		return (false);
+	return (state != REQUEST_LINE || _parser.hasBufferedData());
+}
+
+/*
+ * Marks the connection as having already been answered for running out of
+ * time. The timestamp is refreshed so the response that was just queued gets a
+ * full window to leave, and the flag stops the sweep from queueing a second
+ * one: a peer that does not read the first is closed on the next expiry.
+ */
+void Connection::mark_timed_out(void)
+{
+	_timed_out = true;
+	_time = time(NULL);
+}
+
+bool Connection::timed_out(void) const
+{
+	return (_timed_out);
 }
 
 t_psr_state Connection::get_psr_state(void) const

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiHandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: jucoelho <jucoelho@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dajesus- <dajesus-@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/08 00:00:00 by dajesus-          #+#    #+#             */
-/*   Updated: 2026/08/14 17:56:51 by jucoelho         ###   ########.fr       */
+/*   Updated: 2026/07/08 00:00:00 by dajesus-         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -169,10 +169,15 @@ bool CgiHandler::isCgiRequest(const std::string &uri) const
 
 /*
  * Validates the script resolved from the URI and writes the resolved path into
- * scriptPath on success. The path must stay inside the CGI root, the target
- * must be a regular file and readable (if it exists). Missing scripts are
- * handed to the interpreter which will exit non-zero, resulting in a 502.
- * Sets the response status code and returns false when the request is refused.
+ * scriptPath on success. The path must stay inside the CGI root, and whatever
+ * sits there must be a regular file the server can read.
+ *
+ * A path with nothing on it is still handed to the interpreter rather than
+ * answered 404 here. The interpreter, not the server, decides what its script
+ * argument has to be: the scale's cgi_tester ignores it entirely and answers
+ * from the request body alone, so refusing the run on the server side turns a
+ * request it would have served into a 404. Sets the response status code and
+ * returns false when the request is refused.
  */
 bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 		HttpResponse &response) const
@@ -194,9 +199,10 @@ bool CgiHandler::validate(const std::string &uri, std::string &scriptPath,
 			return (false);
 		}
 		if (access(scriptPath.c_str(), R_OK) != 0)
-	{
-		response.setStatusCode(403);
-		return (false);
+		{
+			response.setStatusCode(403);
+			return (false);
+		}
 	}
 	return (true);
 }
@@ -392,8 +398,13 @@ static bool parseStatusValue(const std::string &value, int &status)
  * response untouched when the script produced no output, no header separator,
  * an empty header section, a line that is not a valid header, or a malformed
  * Status value, so the caller can answer 502 instead of serving the garbage.
+ *
+ * raw is consumed: on success its header block is dropped and what remains is
+ * moved into the response rather than copied out of it, which is the difference
+ * between holding a large CGI body once and holding it twice. Callers that
+ * still need their output afterwards go through parseCgiOutput instead.
  */
-bool CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) const
+bool CgiHandler::takeCgiOutput(std::string &raw, HttpResponse &response) const
 {
     std::string::size_type  sep = raw.find("\r\n\r\n");
     std::string::size_type  sepLen = 4;
@@ -442,6 +453,18 @@ bool CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) 
     response.setStatusCode(statusCode);
     for (size_t i = 0; i < parsed.size(); ++i)
         response.addHeader(parsed[i].first, parsed[i].second);
-    response.setBody(raw.substr(sep + sepLen));
+    raw.erase(0, sep + sepLen);
+    response.swapBody(raw);
     return (true);
+}
+
+/*
+ * parseCgiOutput on output the caller keeps: the input is copied so takeCgiOutput
+ * can consume it, and the caller's string is left as it was.
+ */
+bool CgiHandler::parseCgiOutput(const std::string &raw, HttpResponse &response) const
+{
+    std::string consumable(raw);
+
+    return (takeCgiOutput(consumable, response));
 }

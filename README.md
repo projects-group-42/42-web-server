@@ -109,6 +109,17 @@ server {
 ### Verificando com o navegador
 
 Com `./webserv conf/default.conf` rodando, abra <http://localhost:8080/>.
+```sh
+# url incorreto
+http://localhost:8080/rota-inexistente
+
+# listar diretório
+http://localhost:8080/assets/
+
+# redirecionamento
+http://localhost:8080/redirect-target
+
+```
 
 ### Verificando com curl
 
@@ -128,6 +139,10 @@ curl -i http://localhost:8080/rota-inexistente
 # método não permitido -> 405 + Allow
 curl -i -X PUT http://localhost:8080/
 
+# requisições desconhecidas (sem crash)
+curl -i -X OPTIONS http://localhost:8080/
+curl -i -X UNKNOWN http://localhost:8080/
+
 # corpo acima de client_max_body_size -> 413
 head -c 12000000 /dev/zero | tr '\0' 'a' > /tmp/big.txt
 curl -i -F "file=@/tmp/big.txt" http://localhost:8080/uploads
@@ -136,6 +151,10 @@ curl -i -F "file=@/tmp/big.txt" http://localhost:8080/uploads
 curl -i http://localhost:8080/cgi-bin/echo.py
 curl -i "http://localhost:8080/cgi-bin/query_echo.py?a=1"
 curl -i -X POST --data-binary 'ola' http://localhost:8080/cgi-bin/post_echo.py
+
+# CGI com erros (servidor não falha)
+curl -i http://localhost:8080/cgi-bin/error.py
+curl -i http://localhost:8080/cgi-bin/timeout.py
 
 # upload, download e remoção
 mkdir -p www/uploads

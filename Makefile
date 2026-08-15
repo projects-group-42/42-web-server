@@ -1,5 +1,4 @@
 NAME		= webserv
-SRC			= $(shell find src -name "*.cpp")
 
 SRC_FILES	= main.cpp \
 			  network/Socket.cpp \

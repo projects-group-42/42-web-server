@@ -645,6 +645,10 @@ std::string	EventLoop::cgiInterpreterFor(const HttpRequest &request,
  * the poll set, and parks the client fd (no interest) until the child
  * finishes. On validation or fork failure it queues the matching error
  * response instead.
+ *
+ * buildEnv is the last reader of the request body, so the body is handed to the
+ * child rather than copied into it: a large upload would otherwise be held both
+ * by the request and by the process for as long as the script runs.
  */
 void EventLoop::startCgi(int fd, const std::string &interpreter,
 		const ServerConfig &config)
@@ -676,8 +680,11 @@ void EventLoop::startCgi(int fd, const std::string &interpreter,
 	env.push_back("SESSION_ID=" + conn.get_session_id());
 	env.push_back("SESSION_VISITS=" + visits.str());
 
-	CgiProcess					*proc = new CgiProcess(fd, conn.getRequest().getBody());
+	CgiProcess					*proc = new CgiProcess(fd, "");
+	std::string					body;
 
+	conn.swapRequestBody(body);
+	proc->adoptBody(body);
 	if (!proc->start(interpreter, scriptPath, env))
 	{
 		delete proc;
@@ -739,6 +746,11 @@ void EventLoop::handleCgiIo(int fd, short revents)
  * Reaps the finished child, turns its collected output into an HTTP response,
  * arms the client for sending, and releases the process. Answers 502 when the
  * script did not exit cleanly or when its output is not a valid CGI response.
+ *
+ * The output is taken from the process and consumed into the response, and the
+ * serialised answer is handed to the connection rather than copied into it. A
+ * CGI returning a hundred megabytes is otherwise held three times over at the
+ * moment its answer is queued.
  */
 void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 {
@@ -747,13 +759,19 @@ void EventLoop::finishCgi(int clientFd, CgiProcess *proc)
 	HttpResponse	response;
 	int				status = proc->reap();
 
+	std::string	raw;
+
+	proc->swapOutput(raw);
 	builder.setKeepAlive(conn.get_keep_alive());
-	if (status == 0 && _cgiHandler.parseCgiOutput(proc->output(), response))
+	if (status == 0 && _cgiHandler.takeCgiOutput(raw, response))
 	{
 		if (response.getHeaderValue("set-cookie").empty())
 			response.setHeaders("set-cookie",
 					_sessions.cookieFor(conn.get_session_id()));
-		conn.set_write_buffer(builder.builder(conn.getRequest(), response));
+
+		std::string	answer = builder.builder(conn.getRequest(), response);
+
+		conn.swap_write_buffer(answer);
 	}
 	else
 		conn.set_write_buffer(buildError(conn, builder, 502));

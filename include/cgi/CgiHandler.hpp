@@ -47,6 +47,7 @@ class CgiHandler
 		std::vector<std::string>	buildEnv(const HttpRequest &request,
 							const std::string &scriptPath, int serverPort,
 							const std::string &remoteAddr) const;
+		bool				takeCgiOutput(std::string &raw, HttpResponse &response) const;
 		bool				parseCgiOutput(const std::string &raw, HttpResponse &response) const;
 };
 

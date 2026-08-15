@@ -329,10 +329,28 @@ bool RequestParser::prs_body(void)
 	}
 	if (_content_length > _buffer.size())
 		return false;
-	_request.setBody(_buffer.substr(0, _content_length));
-	_buffer.erase(0, _content_length);
+	if (_content_length == _buffer.size())
+	{
+		_request.swapBody(_buffer);
+		_buffer.clear();
+	}
+	else
+	{
+		_request.setBody(_buffer.substr(0, _content_length));
+		_buffer.erase(0, _content_length);
+	}
 	_psr_state = COMPLETE;
 	return true;
+}
+
+/*
+ * Hands the body of the parsed request to body without copying it, leaving the
+ * request with an empty one. Only called once the request has been answered as
+ * far as its body is concerned, so nothing reads it afterwards.
+ */
+void RequestParser::swapRequestBody(std::string &body)
+{
+	_request.swapBody(body);
 }
 
 /*

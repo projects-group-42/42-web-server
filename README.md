@@ -1,4 +1,4 @@
-*Este projeto foi criado como parte da 42 por jucoelho, dajesus-, galves-a*
+*Este projeto foi criado como parte da 42 por jucoelho, dajesus-, galves-a.*
 
 # webserv
 
